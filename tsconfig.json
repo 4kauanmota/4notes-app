@@ -1,0 +1,11 @@
+{
+  // Os tsconfigs reais são gerados pelo Nuxt em .nuxt/ (npm install / nuxt prepare).
+  // O código do Electron tem o próprio tsconfig em electron/tsconfig.json.
+  "files": [],
+  "references": [
+    { "path": "./.nuxt/tsconfig.app.json" },
+    { "path": "./.nuxt/tsconfig.server.json" },
+    { "path": "./.nuxt/tsconfig.shared.json" },
+    { "path": "./.nuxt/tsconfig.node.json" }
+  ]
+}

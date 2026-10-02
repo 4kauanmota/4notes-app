@@ -1,0 +1,203 @@
+/*
+ * Design tokens do 4notes.
+ * Roxo = ações e estados ativos. Amarelo = destaques ("marca-texto", hoje, seleção).
+ * Os neutros puxam levemente para o roxo para a paleta parecer uma coisa só.
+ * O tema é aplicado com o atributo data-theme="light|dark" no <html>.
+ */
+:root {
+  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Roboto,
+    'Noto Sans', Ubuntu, Cantarell, sans-serif;
+  --font-display: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue',
+    Roboto, 'Noto Sans', sans-serif;
+  --font-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'SF Mono', Menlo, 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+
+  --purple-50: #f4f1ff;
+  --purple-100: #eae4ff;
+  --purple-200: #d6cbff;
+  --purple-300: #b8a6ff;
+  --purple-400: #9a80ff;
+  --purple-500: #7c5cfc;
+  --purple-600: #6842ee;
+  --purple-700: #5634cc;
+  --purple-800: #44299f;
+  --purple-900: #2f1f6b;
+
+  --yellow-100: #fff3c4;
+  --yellow-200: #ffe68a;
+  --yellow-300: #ffd84f;
+  --yellow-400: #ffcb2b;
+  --yellow-500: #f5b700;
+  --yellow-600: #d29a00;
+  --yellow-700: #a87700;
+  --yellow-800: #7a5600;
+
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 120ms;
+  --t-med: 200ms;
+  --t-slow: 320ms;
+
+  --titlebar-h: 40px;
+  --rail-w: 64px;
+}
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --chrome: #efedf5;
+  --titlebar-symbol: #3b3548;
+  --surface: #ffffff;
+  --surface-2: #f8f7fc;
+  --surface-3: #f1eff7;
+  --elevated: #ffffff;
+  --border: #e5e2ee;
+  --border-strong: #d3cedf;
+
+  --text: #1f1a2b;
+  --text-2: #5b5468;
+  --text-3: #8d869b;
+
+  --primary: #6842ee;
+  --primary-hover: #5634cc;
+  --primary-soft: rgba(124, 92, 252, 0.12);
+  --primary-soft-2: rgba(124, 92, 252, 0.2);
+  --primary-text: #5634cc;
+  --on-primary: #ffffff;
+
+  --accent: #ffcb2b;
+  --accent-strong: #f5b700;
+  --accent-soft: rgba(255, 203, 43, 0.24);
+  --accent-text: #7a5600;
+  --on-accent: #2b2100;
+
+  --hover: rgba(40, 20, 90, 0.055);
+  --active: rgba(104, 66, 238, 0.1);
+  --danger: #d93644;
+  --danger-soft: rgba(217, 54, 68, 0.1);
+  --success: #2f9e62;
+  --success-soft: rgba(47, 158, 98, 0.12);
+
+  --selection: rgba(255, 203, 43, 0.4);
+  /* Marca-texto (==texto==): verde, para não confundir com a seleção (amarela) */
+  --mark: rgba(52, 211, 113, 0.32);
+  --scrim: rgba(24, 16, 40, 0.28);
+  --shadow-sm: 0 1px 2px rgba(31, 26, 43, 0.06);
+  --shadow-md: 0 6px 18px rgba(31, 26, 43, 0.08), 0 1px 3px rgba(31, 26, 43, 0.06);
+  --shadow-lg: 0 22px 56px rgba(31, 26, 43, 0.18), 0 3px 10px rgba(31, 26, 43, 0.08);
+  --focus-ring: 0 0 0 3px rgba(124, 92, 252, 0.32);
+
+  /* Paleta comum (categorias, nós do mapa e cor do texto) — ver lib/colors.ts */
+  --cat-purple: #7c5cfc;
+  --cat-yellow: #e0a800;
+  --cat-blue: #3b7ef0;
+  --cat-green: #22a06b;
+  --cat-red: #e5484d;
+  --cat-orange: #ee7a2c;
+  --cat-teal: #0f9f9f;
+  --cat-pink: #db4f95;
+  --cat-gray: #8d869b;
+
+  /* Código (blocos ```): cores do realce de sintaxe */
+  --code-keyword: #7c3aed;
+  --code-string: #15803d;
+  --code-number: #c2410c;
+  --code-comment: #8d869b;
+  --code-function: #2563eb;
+  --code-type: #b45309;
+  --code-property: #0f766e;
+  --code-tag: #be185d;
+  --code-meta: #9333ea;
+  --code-special: #db2777;
+  --code-definition: #1f1a2b;
+  --code-punctuation: #5b5468;
+
+  --graph-bg: #fbfaff;
+  --graph-grid: rgba(91, 84, 104, 0.1);
+  --graph-node: #7c5cfc;
+  --graph-edge: rgba(91, 84, 104, 0.3);
+  --graph-edge-active: #7c5cfc;
+  --graph-label: #3b3548;
+  --graph-selected: #f5b700;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --chrome: #121016;
+  --titlebar-symbol: #d9d4e4;
+  --surface: #19171f;
+  --surface-2: #16141b;
+  --surface-3: #221f2a;
+  --elevated: #23202b;
+  --border: #2c2836;
+  --border-strong: #3a3546;
+
+  --text: #ece9f3;
+  --text-2: #a9a2b8;
+  --text-3: #736c83;
+
+  --primary: #8e72ff;
+  --primary-hover: #a08aff;
+  --primary-soft: rgba(142, 114, 255, 0.16);
+  --primary-soft-2: rgba(142, 114, 255, 0.26);
+  --primary-text: #b5a3ff;
+  --on-primary: #ffffff;
+
+  --accent: #ffd34d;
+  --accent-strong: #ffcb2b;
+  --accent-soft: rgba(255, 211, 77, 0.14);
+  --accent-text: #ffd86a;
+  --on-accent: #2b2100;
+
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(142, 114, 255, 0.16);
+  --danger: #ff5c6a;
+  --danger-soft: rgba(255, 92, 106, 0.12);
+  --success: #3dd68c;
+  --success-soft: rgba(61, 214, 140, 0.12);
+
+  --selection: rgba(255, 211, 77, 0.26);
+  --mark: rgba(74, 222, 128, 0.24);
+  --scrim: rgba(6, 4, 12, 0.56);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 22px rgba(0, 0, 0, 0.32), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.55), 0 3px 12px rgba(0, 0, 0, 0.35);
+  --focus-ring: 0 0 0 3px rgba(142, 114, 255, 0.4);
+
+  --code-keyword: #c4a7ff;
+  --code-string: #86efac;
+  --code-number: #fdba74;
+  --code-comment: #7c7590;
+  --code-function: #93c5fd;
+  --code-type: #fcd34d;
+  --code-property: #5eead4;
+  --code-tag: #f9a8d4;
+  --code-meta: #d8b4fe;
+  --code-special: #f472b6;
+  --code-definition: #ece9f3;
+  --code-punctuation: #a9a2b8;
+
+  --cat-purple: #a08aff;
+  --cat-yellow: #ffd34d;
+  --cat-blue: #60a5fa;
+  --cat-green: #3dd68c;
+  --cat-red: #ff6b76;
+  --cat-orange: #ff9a52;
+  --cat-teal: #2dd4bf;
+  --cat-pink: #f472b6;
+  --cat-gray: #9b95a8;
+
+  --graph-bg: #15131a;
+  --graph-grid: rgba(169, 162, 184, 0.08);
+  --graph-node: #9a80ff;
+  --graph-edge: rgba(169, 162, 184, 0.24);
+  --graph-edge-active: #a08aff;
+  --graph-label: #d9d4e4;
+  --graph-selected: #ffd34d;
+}

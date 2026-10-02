@@ -1,0 +1,25 @@
+# Dependências
+node_modules
+
+# Saídas do Nuxt (dist é um atalho criado pelo `nuxt generate`)
+dist
+.nuxt
+.output
+.data
+.nitro
+.cache
+
+# Saídas do Electron
+dist-electron
+release
+
+# Logs e ambiente
+*.log
+.env
+.env.*
+!.env.example
+
+# Sistema
+.DS_Store
+Thumbs.db
+.idea

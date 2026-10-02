@@ -1,0 +1,58 @@
+# Configuração do instalador (electron-builder) — https://www.electron.build
+#
+#   npm run dist:win   → release/<versão>/4notes-Setup-<versão>.exe  (instalador do Windows)
+#   npm run dist       → instalador para o sistema atual
+#
+# O app instalado contém apenas:
+#   dist-electron/   processo principal + preload (compilados pelo esbuild)
+#   .output/public/  interface gerada pelo `nuxt generate`
+# Nenhuma pasta node_modules é necessária (tudo já foi empacotado).
+
+appId: com.kauan.fournotes
+productName: 4notes
+copyright: Copyright © 2026 Kauan
+
+directories:
+  output: release/${version}
+  buildResources: build
+
+files:
+  - dist-electron/**/*
+  - .output/public/**/*
+  - package.json
+  - '!**/*.map'
+
+asar: true
+publish: null
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: 4notes-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false # instalador com telas (escolher pasta, atalhos…)
+  perMachine: false # instala só para o seu usuário (não pede administrador)
+  allowToChangeInstallationDirectory: true
+  # Atalho na área de trabalho: você escolhe na tela "Atalhos" (build/installer.nsh)
+  createDesktopShortcut: false
+  include: build/installer.nsh
+  createStartMenuShortcut: true
+  shortcutName: 4notes
+  uninstallDisplayName: 4notes
+  deleteAppDataOnUninstall: false # desinstalar NUNCA apaga suas notas
+  installerLanguages: [pt_BR]
+  language: '1046'
+
+mac:
+  target: dmg
+  category: public.app-category.productivity
+  icon: build/icon.png
+
+linux:
+  target: AppImage
+  category: Office
+  icon: build/icon.png
+  artifactName: 4notes-${version}.${ext}
