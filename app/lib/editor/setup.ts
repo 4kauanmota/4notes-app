@@ -1,7 +1,7 @@
 /**
  * Monta o editor de Markdown (CodeMirror 6) usado nas duas áreas de notas.
- * O arquivo .md salvo é texto Markdown comum; as marcações de formatação ficam
- * escondidas (ver formatting.ts).
+ * O arquivo .md salvo é texto Markdown comum; as marcações nunca aparecem
+ * (ver formatting.ts, hidden-markup.ts, markdown-preview.ts e code-blocks.ts).
  */
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
@@ -21,7 +21,8 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import { codeBlockPreview } from './code-blocks'
-import { formattingKeymap, hiddenTagEditing, livePreview } from './formatting'
+import { contextMenuTracking, formattingKeymap, livePreview } from './formatting'
+import { hiddenMarkupEditing } from './hidden-markup'
 import { editorHost, type EditorHost } from './host'
 import { imagePreview } from './images'
 import { codeLanguages } from './languages'
@@ -30,6 +31,7 @@ import { markdownPreview } from './markdown-preview'
 import { noteMentions } from './mentions'
 import { pasteHandling } from './paste'
 import { codeHighlight, editorTheme, markdownHighlight } from './theme'
+import { titleFirstLine } from './title-line'
 
 export interface CursorInfo {
   line: number
@@ -99,6 +101,8 @@ const markdownLines = ViewPlugin.fromClass(
             if (node.name !== 'FencedCode' && node.name !== 'Blockquote' && node.name !== 'HorizontalRule') return
             const first = doc.lineAt(node.from).number
             const last = doc.lineAt(node.to).number
+            // Cerca ainda sem fechamento (enquanto você digita ```): não pinta o resto da nota como código
+            if (node.name === 'FencedCode' && (node.node.getChildren('CodeMark').length < 2 || first === last)) return false
             for (let n = first; n <= last; n++) {
               const pos = doc.line(n).from
               if (node.name === 'FencedCode') {
@@ -153,7 +157,7 @@ function urlClicks(openUrl?: (url: string) => void): Extension {
       const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
       if (pos === null) return false
       for (let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(view.state).resolveInner(pos, 1); node; node = node.parent) {
-        const urlNode = node.name === 'URL' ? node : node.name === 'Link' ? node.getChild('URL') : null
+        const urlNode = node.name === 'URL' ? node : node.name === 'Link' || node.name === 'Autolink' ? node.getChild('URL') : null
         if (!urlNode) continue
         let url = view.state.sliceDoc(urlNode.from, urlNode.to).replace(/^<|>$/g, '')
         if (/^www\./i.test(url)) url = `https://${url}`
@@ -167,6 +171,16 @@ function urlClicks(openUrl?: (url: string) => void): Extension {
   })
 }
 
+/** Texto mostrado na nota vazia (com cara de título quando a primeira linha é o título). */
+function placeholderFor(options: EditorOptions): Extension {
+  const text = options.placeholder ?? ''
+  if (!options.host?.titleFirstLine || !text) return placeholderExtension(text)
+  const element = document.createElement('span')
+  element.className = 'cm-title-placeholder'
+  element.textContent = text
+  return placeholderExtension(element)
+}
+
 export function buildExtensions(callbacks: EditorCallbacks, options: EditorOptions): Extension[] {
   return [
     history(),
@@ -175,28 +189,33 @@ export function buildExtensions(callbacks: EditorCallbacks, options: EditorOptio
     indentOnInput(),
     closeBrackets(),
     EditorView.lineWrapping,
-    markdown({ base: markdownLanguage, addKeymap: true, codeLanguages }),
+    // Sem títulos "sublinhados" (Texto + linha "---"): "---" é sempre uma linha horizontal
+    markdown({ base: markdownLanguage, addKeymap: true, codeLanguages, extensions: [{ remove: ['SetextHeading'] }] }),
     syntaxHighlighting(markdownHighlight),
     syntaxHighlighting(codeHighlight),
     markdownLines,
     livePreview,
-    hiddenTagEditing,
+    // A prévia das linhas vem antes: as teclas dela (← no começo do texto, Backspace na
+    // marcação) têm a vez, e o cursor é ajustado por último
     markdownPreview,
+    hiddenMarkupEditing,
     listEditing,
     codeBlockPreview,
     imagePreview,
     pasteHandling,
     options.host ? editorHost.of(options.host) : [],
     options.host?.mentions ? noteMentions : [],
+    options.host?.titleFirstLine ? titleFirstLine : [],
     highlightSelectionMatches({ minSelectionLength: 2 }),
     search({ top: true }),
-    placeholderExtension(options.placeholder ?? ''),
+    placeholderFor(options),
     EditorView.contentAttributes.of({ spellcheck: 'true', autocapitalize: 'sentences', 'aria-label': 'Editor de texto' }),
     keymap.of([...formattingKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     phrases,
     editorTheme,
     modKeyTracker,
     urlClicks(callbacks.openUrl),
+    contextMenuTracking,
     EditorView.updateListener.of((update) => {
       if (update.docChanged) callbacks.onChange(update.state.doc.toString())
       if ((update.selectionSet || update.docChanged) && callbacks.onCursor) {

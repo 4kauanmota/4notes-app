@@ -1,13 +1,16 @@
 /**
- * Avisos de notas renomeadas (Notas e Mapa Mental).
+ * Avisos de notas que mudaram de lugar (Notas e Mapa Mental).
  *
- * As menções das tarefas guardam o caminho da nota; quando ela muda de nome no
- * app, o módulo dono da nota avisa aqui e o store de menções (stores/mentions.ts)
- * atualiza as tarefas. Os módulos só avisam — não sabem quem está ouvindo.
+ * As menções (nas tarefas e dentro das notas) guardam o caminho da nota; quando
+ * ela muda de nome ou de pasta no app, o módulo dono da nota avisa aqui e o store
+ * de menções (stores/mentions.ts) corrige tudo. Os módulos só avisam — não sabem
+ * quem está ouvindo.
  */
 export type NoteChange =
-  /** Nota rápida renomeada (o arquivo acompanha o título): "notes/A.md" → "notes/B.md". */
+  /** Nota das Notas renomeada ou movida de categoria: "notes/A.md" → "notes/Trabalho/B.md". */
   | { type: 'note-renamed'; from: string; to: string }
+  /** Categoria das Notas renomeada (a pasta dela): "notes/Trabalho" → "notes/Projetos". */
+  | { type: 'notes-folder-renamed'; from: string; to: string }
   /** Nota de um mapa renomeada: arquivos "Godot.md" → "Godot 4.md" dentro do mapa. */
   | { type: 'map-note-renamed'; map: string; from: string; to: string }
   /** Mapa renomeado (a pasta dele). */

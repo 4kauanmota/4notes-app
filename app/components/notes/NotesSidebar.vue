@@ -1,35 +1,218 @@
 <script setup lang="ts">
-/** Lista de todas as notas rápidas (para reabrir, buscar e excluir). */
-import { computed } from 'vue'
-import { separator, showContextMenu } from '~/composables/useContextMenu'
-import { useNow } from '~/composables/useNow'
-import { relativeTime } from '~/lib/dates'
-import { notePreview } from '~/lib/notes/title'
+/**
+ * Lista lateral das Notas: as categorias ficam no topo (cada uma com a imagem, a
+ * cor e as notas dela) e, embaixo, as notas sem categoria. Dentro de cada grupo
+ * as notas aparecem em pastas pelo título (lib/notes/title-tree.ts).
+ * Arraste uma aba (ou uma nota daqui) até uma categoria para colocá-la nela.
+ */
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import {
+  categorySubmenu,
+  handleCategoryChoice,
+  isNoteDrag,
+  NOTE_DRAG_TYPE,
+  requestDeleteCategory,
+  useCategoryDialog,
+} from '~/composables/useNoteCategories'
+import { paletteVar } from '~/lib/colors'
+import { nameKey } from '~/lib/files/filename'
+import { categoryImagePath, type NoteCategory } from '~/lib/notes/categories'
+import { deriveTitle } from '~/lib/notes/title'
+import { buildTitleTree, flattenTree, folderPathTo, type TitleTreeNode, type TreeRow } from '~/lib/notes/title-tree'
 import { modKeyLabel } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
 import { noteTitle, useNotesStore, type QuickNote } from '~/stores/notes'
 
-const emit = defineEmits<{ new: [] }>()
+const emit = defineEmits<{ new: [category: string | null, titlePrefix?: string] }>()
 const notes = useNotesStore()
 const app = useAppStore()
-const now = useNow()
+const categoryDialog = useCategoryDialog()
 const mod = modKeyLabel()
+const list = ref<HTMLElement>()
 
 const count = computed(() => notes.visibleNotes.value.length)
+const searching = computed(() => !!notes.state.search.trim())
 
-async function openMenu(note: QuickNote) {
-  const choice = await showContextMenu([
+// ── Grupos (categorias + sem categoria) e as pastas pelo título ─────────────
+
+type Row = TreeRow<QuickNote>
+
+const sectionKey = (category: NoteCategory | null) => (category ? `c:${nameKey(category.name)}` : 'root')
+
+/** Notas de cada grupo (já filtradas pela busca). */
+const notesBySection = computed(() => {
+  const map = new Map<string, QuickNote[]>()
+  for (const note of notes.filteredNotes.value) {
+    const key = sectionKey(notes.categoryOf(note))
+    const bucket = map.get(key)
+    if (bucket) bucket.push(note)
+    else map.set(key, [note])
+  }
+  return map
+})
+
+/** Pastas pelo título de cada grupo. */
+const trees = computed(() => {
+  const map = new Map<string, TitleTreeNode[]>()
+  for (const [key, group] of notesBySection.value) map.set(key, buildTitleTree(group.map((note) => ({ id: note.id, title: deriveTitle(note.content) }))))
+  return map
+})
+
+function rowsOf(category: NoteCategory | null): Row[] {
+  const key = sectionKey(category)
+  const byId = new Map((notesBySection.value.get(key) ?? []).map((note) => [note.id, note]))
+  return flattenTree(trees.value.get(key) ?? [], byId, (folder) => searching.value || notes.isFolderOpen(category?.name ?? null, folder))
+}
+
+const sections = computed(() =>
+  notes.state.categories
+    .map((category) => {
+      const total = notesBySection.value.get(sectionKey(category))?.length ?? 0
+      const collapsed = !searching.value && notes.isCategoryCollapsed(category.name)
+      return { category, key: sectionKey(category), total, collapsed, rows: collapsed ? [] : rowsOf(category) }
+    })
+    .filter((section) => !searching.value || section.total > 0),
+)
+const rootRows = computed(() => rowsOf(null))
+const nothingFound = computed(() => searching.value && !notes.filteredNotes.value.length)
+
+// A nota ativa fica à vista: as pastas (pelo título) até ela abrem sozinhas
+const activePlace = computed(() => {
+  const note = notes.activeNote.value
+  if (!note) return null
+  const category = notes.categoryOf(note)
+  const path = folderPathTo(trees.value.get(sectionKey(category)) ?? [], note.id)
+  return path ? { id: note.id, category: category?.name ?? null, path } : null
+})
+watch(
+  () => (activePlace.value ? `${activePlace.value.id}|${activePlace.value.category}|${activePlace.value.path.join('/')}` : ''),
+  async () => {
+    const place = activePlace.value
+    if (!place) return
+    for (const key of place.path) notes.setFolderOpen(place.category, key, true)
+    await nextTick()
+    list.value?.querySelector(`[data-note="${place.id}"]`)?.scrollIntoView({ block: 'nearest' })
+  },
+)
+
+// ── Ações ────────────────────────────────────────────────────────────────────
+
+function onRowClick(row: Row, category: NoteCategory | null) {
+  if (row.kind === 'note') {
+    if (row.note) notes.openNote(row.note.id)
+    return
+  }
+  if (row.note) {
+    notes.openNote(row.note.id)
+    if (!row.open) notes.setFolderOpen(category?.name ?? null, row.folderKey!, true)
+    return
+  }
+  toggleFolder(row, category)
+}
+
+function toggleFolder(row: Row, category: NoteCategory | null) {
+  if (!searching.value && row.folderKey) notes.setFolderOpen(category?.name ?? null, row.folderKey, !row.open)
+}
+
+function toggleCategory(category: NoteCategory) {
+  if (!searching.value) notes.setCategoryCollapsed(category.name, !notes.isCategoryCollapsed(category.name))
+}
+
+function newNoteIn(category: NoteCategory | null) {
+  if (category) notes.setCategoryCollapsed(category.name, false)
+  emit('new', category?.name ?? null)
+}
+
+/** + de uma pasta pelo título: a nota nova começa com o título da pasta ("4notes …") e fica junto das outras. */
+function newNoteInFolder(row: Row, category: NoteCategory | null) {
+  if (!row.titlePath) return
+  if (row.folderKey) notes.setFolderOpen(category?.name ?? null, row.folderKey, true)
+  emit('new', category?.name ?? null, row.titlePath)
+}
+
+function noteMenuItems(note: QuickNote): MenuItemSpec[] {
+  return [
     { id: 'open', label: 'Abrir' },
+    categorySubmenu(note),
     { id: 'duplicate', label: 'Duplicar' },
     { id: 'reveal', label: 'Mostrar no Explorador', enabled: !!note.path },
     separator,
     { id: 'delete', label: 'Excluir (enviar para a Lixeira)', danger: true },
-  ])
+  ]
+}
+
+function runNoteChoice(choice: string | null, note: QuickNote) {
+  if (handleCategoryChoice(choice, note)) return
   if (choice === 'open') notes.openNote(note.id)
   if (choice === 'duplicate') notes.duplicateNote(note.id)
   if (choice === 'reveal') notes.revealNote(note.id)
   if (choice === 'delete') void notes.deleteNote(note.id)
 }
+
+async function noteMenu(note: QuickNote) {
+  runNoteChoice(await showContextMenu(noteMenuItems(note)), note)
+}
+
+async function categoryMenu(category: NoteCategory) {
+  const collapsed = notes.isCategoryCollapsed(category.name)
+  const choice = await showContextMenu([
+    { id: 'new', label: 'Nova nota nesta categoria' },
+    { id: 'edit', label: 'Editar categoria…' },
+    { id: 'toggle', label: collapsed ? 'Expandir' : 'Recolher' },
+    { id: 'reveal', label: 'Mostrar no Explorador' },
+    separator,
+    { id: 'delete', label: 'Excluir categoria…', danger: true },
+  ])
+  if (choice === 'new') newNoteIn(category)
+  if (choice === 'edit') categoryDialog.openEdit(category.name)
+  if (choice === 'toggle') toggleCategory(category)
+  if (choice === 'reveal') notes.revealCategory(category.name)
+  if (choice === 'delete') void requestDeleteCategory(category.name)
+}
+
+async function folderMenu(row: Row, category: NoteCategory | null) {
+  const choice = await showContextMenu([
+    { id: 'new-in-folder', label: 'Nova nota nesta pasta' },
+    { id: 'toggle', label: row.open ? 'Recolher pasta' : 'Expandir pasta', enabled: !searching.value },
+    ...(row.note ? [separator, { id: 'note', label: `Nota “${noteTitle(row.note)}”`, submenu: noteMenuItems(row.note) }] : []),
+  ])
+  if (choice === 'new-in-folder') newNoteInFolder(row, category)
+  else if (choice === 'toggle') toggleFolder(row, category)
+  else if (row.note) runNoteChoice(choice, row.note)
+}
+
+function rowMenu(row: Row, category: NoteCategory | null) {
+  if (row.kind === 'folder') void folderMenu(row, category)
+  else if (row.note) void noteMenu(row.note)
+}
+
+// ── Arrastar notas para as categorias ───────────────────────────────────────
+
+const dropZone = ref<string | null>(null)
+
+function onDragOver(event: DragEvent, zone: string) {
+  if (!isNoteDrag(event)) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  dropZone.value = zone
+}
+
+function onDragLeave(event: DragEvent, zone: string) {
+  const target = event.currentTarget as HTMLElement
+  if (dropZone.value === zone && !target.contains(event.relatedTarget as Node | null)) dropZone.value = null
+}
+
+function onDrop(event: DragEvent, category: NoteCategory | null) {
+  dropZone.value = null
+  const id = event.dataTransfer?.getData(NOTE_DRAG_TYPE)
+  if (id) void notes.moveToCategory(id, category?.name ?? null)
+}
+
+// O arrastar pode começar numa aba e terminar (ou ser cancelado) em qualquer lugar
+const clearDrop = () => (dropZone.value = null)
+onMounted(() => window.addEventListener('dragend', clearDrop, true))
+onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
 </script>
 
 <template>
@@ -43,45 +226,100 @@ async function openMenu(note: QuickNote) {
             <AppIcon name="x" :size="13" />
           </button>
         </label>
-        <button class="icon-btn" :data-tip="`Nova nota (${mod}+N)`" aria-label="Nova nota" @click="emit('new')">
+        <button class="icon-btn" :data-tip="`Nova nota (${mod}+N)`" aria-label="Nova nota" @click="emit('new', null)">
           <AppIcon name="plus" />
         </button>
       </div>
 
-      <div class="sidebar-list">
-        <TransitionGroup name="note-row">
+      <div ref="list" class="sidebar-list">
+        <!-- Categorias (fixas no topo) -->
+        <div v-if="!searching" class="section-head">
+          <span class="section-label">Categorias</span>
+          <button class="icon-btn sm" data-tip="Nova categoria" aria-label="Nova categoria" @click="categoryDialog.openCreate()">
+            <AppIcon name="plus" :size="15" />
+          </button>
+        </div>
+        <button v-if="!searching && !notes.state.categories.length" class="empty-cats" @click="categoryDialog.openCreate()">+ Criar uma categoria</button>
+
+        <section
+          v-for="section in sections"
+          :key="section.key"
+          class="category"
+          :class="{ 'drop-target': dropZone === section.key }"
+          :style="{ '--cat': paletteVar(section.category.color) }"
+          :data-category="section.category.name"
+          @dragover="onDragOver($event, section.key)"
+          @dragleave="onDragLeave($event, section.key)"
+          @drop.prevent="onDrop($event, section.category)"
+        >
           <div
-            v-for="note in notes.filteredNotes.value"
-            :key="note.id"
-            class="note-row"
-            :class="{ active: note.id === notes.state.activeId, open: notes.state.openIds.includes(note.id) }"
+            class="category-row"
             role="button"
             tabindex="0"
-            @click="notes.openNote(note.id)"
-            @keydown.enter="notes.openNote(note.id)"
-            @contextmenu.prevent="openMenu(note)"
+            :aria-expanded="!section.collapsed"
+            @click="toggleCategory(section.category)"
+            @keydown.enter="toggleCategory(section.category)"
+            @dblclick="categoryDialog.openEdit(section.category.name)"
+            @contextmenu.prevent="categoryMenu(section.category)"
           >
-            <div class="note-row-top">
-              <span class="note-row-title">{{ noteTitle(note) }}</span>
-              <span class="note-row-time">{{ note.path ? relativeTime(note.mtimeMs, now) : 'nova' }}</span>
-            </div>
-            <div class="note-row-preview">{{ notePreview(note.content) || 'Sem mais texto' }}</div>
-            <button
-              class="note-row-delete icon-btn sm danger"
-              data-tip="Excluir"
-              data-tip-pos="left"
-              aria-label="Excluir nota"
-              @click.stop="notes.deleteNote(note.id)"
-            >
-              <AppIcon name="trash" :size="14" />
-            </button>
+            <AppIcon name="chevron-right" :size="13" class="chevron" :class="{ open: !section.collapsed }" />
+            <CategoryAvatar
+              :name="section.category.name"
+              :color="section.category.color"
+              :image="categoryImagePath(section.category)"
+              :icon="section.category.icon"
+              :version="notes.state.imageVersion"
+            />
+            <span class="category-name">{{ section.category.name }}</span>
+            <span class="row-count">{{ section.total }}</span>
+            <span class="category-actions">
+              <span class="icon-btn sm" role="button" data-tip="Nova nota nesta categoria" aria-label="Nova nota nesta categoria" @click.stop="newNoteIn(section.category)">
+                <AppIcon name="plus" :size="14" />
+              </span>
+              <span class="icon-btn sm" role="button" data-tip="Mais opções" aria-label="Opções da categoria" @click.stop="categoryMenu(section.category)">
+                <AppIcon name="more" :size="14" />
+              </span>
+            </span>
           </div>
-        </TransitionGroup>
 
-        <div v-if="!notes.filteredNotes.value.length" class="sidebar-empty">
-          <template v-if="notes.state.search">Nada encontrado para “{{ notes.state.search }}”.</template>
-          <template v-else>Nenhuma nota ainda.<br />Crie uma com <kbd class="kbd">{{ mod }}</kbd> + <kbd class="kbd">N</kbd>.</template>
-        </div>
+          <div v-if="!section.collapsed" class="category-notes">
+            <NoteTreeRow
+              v-for="row in section.rows"
+              :key="row.key"
+              :row="row"
+              @activate="onRowClick(row, section.category)"
+              @toggle="toggleFolder(row, section.category)"
+              @menu="rowMenu(row, section.category)"
+              @new="newNoteInFolder(row, section.category)"
+            />
+            <div v-if="!section.rows.length" class="category-empty">Sem notas — arraste uma aba para cá</div>
+          </div>
+        </section>
+
+        <!-- Notas sem categoria -->
+        <section
+          class="loose"
+          :class="{ 'drop-target': dropZone === 'root' }"
+          @dragover="onDragOver($event, 'root')"
+          @dragleave="onDragLeave($event, 'root')"
+          @drop.prevent="onDrop($event, null)"
+        >
+          <div v-if="notes.state.categories.length && (rootRows.length || !searching)" class="section-head">
+            <span class="section-label">Notas</span>
+          </div>
+          <NoteTreeRow
+            v-for="row in rootRows"
+            :key="row.key"
+            :row="row"
+            @activate="onRowClick(row, null)"
+            @toggle="toggleFolder(row, null)"
+            @menu="rowMenu(row, null)"
+            @new="newNoteInFolder(row, null)"
+          />
+          <div v-if="dropZone === 'root' && !rootRows.length" class="category-empty">Solte aqui para tirar da categoria</div>
+          <div v-if="nothingFound" class="sidebar-empty">Nada encontrado para “{{ notes.state.search }}”.</div>
+          <div v-else-if="!count" class="sidebar-empty">Nenhuma nota ainda.<br />Crie uma com <kbd class="kbd">{{ mod }}</kbd> + <kbd class="kbd">N</kbd>.</div>
+        </section>
       </div>
 
       <footer class="sidebar-foot">
@@ -149,82 +387,134 @@ async function openMenu(note: QuickNote) {
 }
 .sidebar-list {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   overflow-y: auto;
-  padding: 4px 8px 12px;
+  padding: 2px 8px 12px;
 }
-.note-row {
-  position: relative;
-  display: block;
-  width: 100%;
-  margin-bottom: 2px;
-  padding: 9px 12px 10px;
+/* As notas sem categoria ocupam o resto da lista: soltar em qualquer lugar ali tira a categoria */
+.loose {
+  flex: 1 0 auto;
+  min-height: 56px;
   border-radius: var(--r-lg);
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+
+/* ── Cabeçalhos ── */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  margin-top: 6px;
+  padding: 0 4px 0 10px;
+}
+
+/* ── Categorias ── */
+.category {
+  margin-bottom: 2px;
+  border-radius: var(--r-lg);
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+.category.drop-target,
+.loose.drop-target {
+  background: color-mix(in srgb, var(--cat, var(--primary)) 10%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--cat, var(--primary)) 60%, transparent);
+}
+.category-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 6px 0 4px;
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
   transition: background var(--t-fast);
 }
-.note-row:hover {
+.category-row:hover {
   background: var(--hover);
 }
-.note-row.active {
-  background: var(--surface);
-  box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
-}
-.note-row.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 12px;
-  bottom: 12px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--accent-strong);
-}
-.note-row-top {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.note-row-title {
+.category-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
-  font-size: 13.5px;
-  color: var(--text);
 }
-.note-row-time {
-  flex: none;
-  font-size: 11.5px;
-  color: var(--text-3);
-  transition: opacity var(--t-fast);
+.category-actions {
+  display: none;
+  gap: 1px;
 }
-.note-row-preview {
-  margin-top: 2px;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--text-3);
+.category-row:hover .category-actions,
+.category-row:focus-within .category-actions {
+  display: flex;
 }
-.note-row-delete {
+.category-row:hover .row-count {
+  display: none;
+}
+.category-notes {
+  position: relative;
+  margin: 0 0 4px 13px;
+  padding-left: 6px;
+}
+/* Linha guia na cor da categoria */
+.category-notes::before {
+  content: '';
   position: absolute;
-  top: 7px;
-  right: 7px;
-  opacity: 0;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  transition: opacity var(--t-fast);
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--cat) 45%, transparent);
 }
-.note-row:hover .note-row-delete {
-  opacity: 1;
+.category-empty {
+  padding: 6px 10px 8px;
+  font-size: 12px;
+  color: var(--text-3);
 }
-.note-row:hover .note-row-time {
-  opacity: 0;
+.chevron {
+  flex: none;
+  color: var(--text-3);
+  transition: transform var(--t-fast) var(--ease-out);
+}
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.row-count {
+  flex: none;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 18px;
+  text-align: center;
+}
+
+.empty-cats {
+  width: 100%;
+  margin: 2px 0 4px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.empty-cats:hover {
+  color: var(--primary-text);
+  border-color: var(--primary);
 }
 .sidebar-empty {
   padding: 28px 12px;
@@ -253,23 +543,5 @@ async function openMenu(note: QuickNote) {
 }
 .foot-link:hover {
   text-decoration: underline;
-}
-
-.note-row-enter-active,
-.note-row-leave-active {
-  transition: opacity 200ms var(--ease-out), transform 220ms var(--ease-out);
-}
-.note-row-enter-from,
-.note-row-leave-to {
-  opacity: 0;
-  transform: translateX(-10px);
-}
-.note-row-leave-active {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-}
-.note-row-move {
-  transition: transform 260ms var(--ease-out);
 }
 </style>

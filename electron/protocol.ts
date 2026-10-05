@@ -105,10 +105,11 @@ export function registerAppProtocol(rendererRoot: string): void {
   })
 }
 
-const IMAGE_FILE = /\.(?:png|jpe?g|gif|webp|bmp|avif|svg)$/i
+const IMAGE_FILE = /\.(?:png|jpe?g|gif|webp|bmp|avif|svg|ico)$/i
 
 /**
- * workspace://files/<caminho> — imagens guardadas no workspace (attachments/).
+ * workspace://files/<caminho> — imagens guardadas no workspace (attachments/,
+ * imagens das categorias, ícones dos sites em links/icons/).
  * Só serve imagens, e só de dentro da pasta de dados atual.
  */
 export function registerWorkspaceProtocol(dataDir: () => string | null): void {

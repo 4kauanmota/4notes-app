@@ -15,23 +15,35 @@ export interface CodeEditRequest {
   apply(code: string): void
 }
 
-/** Nota que pode ser mencionada (ver mentions.ts). */
+/** Nota ou tarefa que pode ser mencionada (ver mentions.ts). */
 export interface MentionTarget {
-  /** Caminho no workspace ("notes/Ideias.md", "mindmap/Principal/Godot.md"). */
+  /**
+   * Caminho no workspace: "notes/Ideias.md", "mindmap/Principal/Godot.md" ou,
+   * para tarefas, "tasks/tasks.json#<id>".
+   */
   path: string
   title: string
-  /** De onde ela é: "Notas" ou "Mapa · Principal". */
+  /** De onde é: "Notas", "Notas · Trabalho", "Mapa · Principal", "Tarefa"… */
   where: string
 }
 
-/** Menções a outras notas (só nos editores em que o app liga o recurso). */
+/** Como está agora o que foi mencionado. */
+export interface MentionState {
+  title: string
+  /** Tarefa concluída. */
+  done?: boolean
+}
+
+/** Menções a notas e tarefas (só nos editores em que o app liga o recurso). */
 export interface MentionHost {
-  /** Notas para mencionar, filtradas pelo texto digitado depois do "@". */
+  /** Notas e tarefas para mencionar, filtradas pelo texto digitado depois do "@". */
   search(query: string): Promise<MentionTarget[]>
-  /** Título atual da nota mencionada; null se ela não existe mais. */
-  titleOf(path: string): string | null
-  /** Abre a nota mencionada. */
+  /** Título e estado atuais; null se não existe mais. */
+  describe(path: string): MentionState | null
+  /** Abre a nota ou a tarefa mencionada. */
   open(path: string): void
+  /** Muda sempre que títulos ou estados mudam (o editor redesenha os chips). */
+  revision(): string
 }
 
 export interface EditorHost {
@@ -49,10 +61,14 @@ export interface EditorHost {
   restoreImage(workspacePath: string): Promise<boolean>
   /** Abre o código em tela cheia. */
   openCode(request: CodeEditRequest): void
+  /** Escolher a linguagem de um bloco de código (null = cancelado). */
+  chooseLanguage?(current: string): Promise<string | null>
   /** Aviso rápido; `undo` mostra o botão "Desfazer". */
   notify(message: string, undo?: () => void): void
-  /** Menções a outras notas (@). Sem isso, links para notas aparecem como links comuns. */
+  /** Menções a notas e tarefas (@). Sem isso, links para notas aparecem como links comuns. */
   mentions?: MentionHost
+  /** A primeira linha de uma nota vazia já começa como título (# ). */
+  titleFirstLine?: boolean
 }
 
 export const editorHost = Facet.define<EditorHost, EditorHost | null>({

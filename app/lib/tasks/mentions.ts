@@ -55,6 +55,11 @@ export function renamedRef(ref: NoteRef, change: NoteChange): NoteRef | null {
     if (ref.kind !== 'note' || nameKey(ref.path) !== nameKey(change.from)) return null
     return { ...ref, path: change.to }
   }
+  if (change.type === 'notes-folder-renamed') {
+    const prefix = `${change.from}/`
+    if (ref.kind !== 'note' || !nameKey(ref.path).startsWith(nameKey(prefix))) return null
+    return { ...ref, path: `${change.to}/${ref.path.slice(prefix.length)}` }
+  }
   if (ref.kind !== 'map') return null
   if (change.type === 'map-renamed') {
     return nameKey(ref.map) === nameKey(change.from) ? { ...ref, map: change.to } : null

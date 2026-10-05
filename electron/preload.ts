@@ -52,11 +52,23 @@ const api: FourNotesApi = {
     exists: (path) => ipcRenderer.invoke(IPC.filesExists, path),
     trash: (path) => ipcRenderer.invoke(IPC.filesTrash, path),
     reveal: (path) => ipcRenderer.invoke(IPC.filesReveal, path),
+    mkdir: (dir) => ipcRenderer.invoke(IPC.filesMkdir, dir),
+  },
+  images: {
+    pick: () => ipcRenderer.invoke(IPC.imagesPick),
+    write: (path, data) => ipcRenderer.invoke(IPC.imagesWrite, path, data),
   },
   attachments: {
     saveImage: (data, mime) => ipcRenderer.invoke(IPC.attachmentsSaveImage, data, mime),
     removeImage: (path, exceptNote) => ipcRenderer.invoke(IPC.attachmentsRemoveImage, path, exceptNote),
     restoreImage: (path) => ipcRenderer.invoke(IPC.attachmentsRestoreImage, path),
+  },
+  links: {
+    fetchMeta: (url, withIcon) => ipcRenderer.invoke(IPC.linksFetchMeta, url, withIcon),
+    saveIcon: (host, dataUrl) => ipcRenderer.invoke(IPC.linksSaveIcon, host, dataUrl),
+    browsers: () => ipcRenderer.invoke(IPC.linksBrowsers),
+    readBrowser: (id) => ipcRenderer.invoke(IPC.linksReadBrowser, id),
+    pickBookmarksFile: () => ipcRenderer.invoke(IPC.linksPickFile),
   },
   window: {
     setTitleBarColors: (colors) => ipcRenderer.send(IPC.titleBarColors, colors),

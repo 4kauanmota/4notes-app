@@ -2,6 +2,7 @@
  * Colar e soltar no editor:
  *  - imagens (print da tela, arquivo de imagem) são salvas em attachments/ do
  *    workspace e entram na nota como ![](…);
+ *  - um endereço web colado sobre um texto selecionado transforma o texto em link;
  *  - código vira um bloco ```linguagem (Ctrl+Shift+V cola como texto puro).
  */
 import { syntaxTree } from '@codemirror/language'
@@ -10,6 +11,7 @@ import { EditorView } from '@codemirror/view'
 import { detectCode, normalizeCode } from './code-detect'
 import { relativeTo } from '../files/workspace-path'
 import { editorHost } from './host'
+import { normalizeLinkUrl, setLink } from './formatting'
 import { fenceFromVsCodeMode } from './languages'
 
 const EMPTY_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?$/
@@ -111,6 +113,14 @@ export const pasteHandling = EditorView.domEventHandlers({
     }
     const text = data.getData('text/plain')
     if (plain || !text || isInsideCode(view.state, view.state.selection.main.from)) return false
+    // Endereço colado sobre um texto selecionado (numa linha só): vira link
+    const { main } = view.state.selection
+    const url = /^\s*(?:https?:\/\/|mailto:|www\.)\S+\s*$/i.test(text) ? normalizeLinkUrl(text) : null
+    if (url && !main.empty && view.state.selection.ranges.length === 1 && view.state.doc.lineAt(main.from).number === view.state.doc.lineAt(main.to).number) {
+      event.preventDefault()
+      setLink(view, url)
+      return true
+    }
     const language = codeLanguage(text, data)
     if (language === null) return false
     event.preventDefault()

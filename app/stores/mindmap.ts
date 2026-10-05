@@ -220,8 +220,11 @@ async function readMapData(map: string): Promise<MapFile> {
   return emptyMapFile()
 }
 
+/** Ler os arquivos de um mapa e reescrever os mapas fechados (menções) nunca acontecem ao mesmo tempo. */
+const MAPS_KEY = '§maps'
+
 async function openMap(name: string): Promise<void> {
-  const [files, data] = await Promise.all([repo.listNotes(name), readMapData(name)])
+  const [files, data] = await queue.run(MAPS_KEY, () => Promise.all([repo.listNotes(name), readMapData(name)]))
   if (state.currentMap) layouts[state.currentMap] = state.layout
   state.currentMap = name
   state.notes = files.map(fromFile)
@@ -232,6 +235,35 @@ async function openMap(name: string): Promise<void> {
   state.panelExpanded = false
   state.search = ''
   persistUi()
+}
+
+type ContentRewrite = (content: string, dir: string) => string | null
+
+/** Reescreve o texto das notas do mapa aberto (usado para manter as menções em dia). */
+function rewriteContents(transform: ContentRewrite): void {
+  const dir = `${DATA_PATHS.mindmapDir}/${state.currentMap}`
+  for (const note of state.notes) {
+    const next = transform(note.content, dir)
+    if (next !== null && next !== note.content) updateContent(note.id, next)
+  }
+}
+
+/** Reescreve o texto de todas as notas de mapas: o aberto (na memória) e os outros (nos arquivos). */
+function rewriteAllMaps(transform: ContentRewrite): Promise<void> {
+  return queue.run(MAPS_KEY, async () => {
+    rewriteContents(transform)
+    for (const map of state.maps) {
+      if (map.name === state.currentMap) continue
+      const dir = `${DATA_PATHS.mindmapDir}/${map.name}`
+      const files = await repo.listNotes(map.name).catch(() => [] as FileEntry[])
+      for (const file of files) {
+        const content = file.content ?? ''
+        const next = transform(content, dir)
+        if (next === null || next === content) continue
+        await repo.write(map.name, file.name, next).catch((error) => console.warn('[4notes] Não foi possível atualizar menções em', file.path, error))
+      }
+    }
+  })
 }
 
 function syncMapCount(): void {
@@ -709,6 +741,8 @@ export function useMindmapStore() {
     closePanel,
     requestFocus,
     updateContent,
+    rewriteContents,
+    rewriteAllMaps,
     flushAll,
     createNote,
     renameNote,

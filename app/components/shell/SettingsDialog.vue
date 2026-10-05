@@ -33,14 +33,15 @@ async function runWorkspace(action: () => Promise<boolean>) {
 }
 
 const shortcuts = [
-  { keys: [mod, '1 / 2 / 3'], label: 'Ir para Notas / Tarefas / Mapa Mental' },
-  { keys: [mod, 'N'], label: 'Nova nota, tarefa ou nó (no módulo atual)' },
+  { keys: [mod, '1 / 2 / 3 / 4'], label: 'Ir para Notas / Tarefas / Mapa Mental / Links' },
+  { keys: [mod, 'N'], label: 'Nova nota, tarefa, nó ou link (no módulo atual)' },
   { keys: [mod, 'W'], label: 'Fechar a aba de nota atual' },
   { keys: [mod, 'Tab'], label: 'Próxima aba de nota' },
   { keys: [mod, 'Shift', 'T'], label: 'Reabrir a última aba fechada' },
   { keys: [mod, 'S'], label: 'Salvar agora (o salvamento já é automático)' },
   { keys: [mod, 'F'], label: 'Procurar dentro da nota' },
   { keys: [mod, 'B / I / U'], label: 'Negrito / itálico / sublinhado (selecione o texto para ver todas as opções)' },
+  { keys: [mod, 'K'], label: 'Transformar o texto selecionado em link' },
   { keys: [mod, 'Shift', 'V'], label: 'Colar sem formatação (código não vira bloco)' },
   { keys: [mod, 'Clique'], label: 'Abrir um endereço web' },
   { keys: ['Shift', 'Arrastar'], label: 'Conectar notas no mapa (soltar no vazio cria uma nota)' },
@@ -92,8 +93,9 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
           <li><code>notes/</code> notas rápidas (um .md por nota)</li>
           <li><code>tasks/tasks.json</code> tarefas e categorias</li>
           <li><code>mindmap/</code> mapas mentais — uma pasta por mapa, com as notas (.md) e o mapa.json (conexões e cores)</li>
+          <li><code>links/links.json</code> links salvos e pastas (ícones dos sites em <code>links/icons/</code>)</li>
           <li><code>attachments/</code> imagens coladas nas notas</li>
-          <li><code>.4notes/</code> abas abertas, posições do mapa e backups diários das tarefas</li>
+          <li><code>.4notes/</code> abas abertas, posições do mapa e backups diários das tarefas e dos links</li>
         </ul>
         <p class="hint">Para fazer backup, copie a pasta inteira. Os arquivos podem ser abertos e editados em qualquer editor de texto.</p>
       </section>

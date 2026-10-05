@@ -7,7 +7,7 @@ import { nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useShortcuts } from '~/composables/useShortcuts'
 import { desktop, hasDesktopApi } from '~/lib/platform'
-import { useAppStore } from '~/stores/app'
+import { isModuleId, useAppStore } from '~/stores/app'
 
 const app = useAppStore()
 const route = useRoute()
@@ -27,7 +27,7 @@ watch(
   () => route.path,
   (path) => {
     const module = path.split('/')[1]
-    if (module === 'notes' || module === 'tasks' || module === 'mindmap') app.rememberModule(module)
+    if (isModuleId(module)) app.rememberModule(module)
   },
 )
 
@@ -39,6 +39,7 @@ useShortcuts({
   'mod+1': go('/notes'),
   'mod+2': go('/tasks'),
   'mod+3': go('/mindmap'),
+  'mod+4': go('/links'),
   'mod+,': () => {
     if (app.state.phase === 'ready') app.openSettings()
   },
@@ -57,7 +58,7 @@ function reload() {
       <main class="app-main" :class="{ full: app.state.phase !== 'ready' }">
         <!-- As páginas ficam sempre montadas (ocultas até a pasta de dados carregar) -->
         <div v-show="app.state.phase === 'ready'" class="page-host">
-          <NuxtPage :keepalive="{ max: 3 }" />
+          <NuxtPage :keepalive="{ max: 4 }" />
         </div>
 
         <WelcomeScreen v-if="app.state.phase === 'setup'" />

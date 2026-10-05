@@ -10,12 +10,17 @@ export const DATA_PATHS = {
   mindmapDir: 'mindmap',
   /** Imagens coladas nas notas (Notas e Mapa Mental). */
   attachmentsDir: 'attachments',
+  /** Links salvos e as pastas deles. */
+  linksFile: 'links/links.json',
+  /** Ícones dos sites (um por site), mostrados ao lado de cada link. */
+  linkIconsDir: 'links/icons',
 
   /** Estado da interface (pode ser apagado sem perder dados). */
   metaDir: '.4notes',
   notesUiState: '.4notes/notes.json',
   mindmapUiState: '.4notes/mindmap.json',
   appUiState: '.4notes/app.json',
-  /** Cópias automáticas (tasks.json de cada dia da semana, conversões do mapa mental). */
+  linksUiState: '.4notes/links.json',
+  /** Cópias automáticas (tasks.json e links.json de cada dia da semana, conversões do mapa mental). */
   backupsDir: '.4notes/backups',
 } as const

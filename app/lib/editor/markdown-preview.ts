@@ -1,55 +1,52 @@
 /**
- * Prévia ao vivo do Markdown "de linha": títulos (#), citações (>), listas (-, 1.),
- * listas de tarefas (- [ ]), linhas horizontais (---) e links ([texto](endereço)).
+ * Prévia do Markdown "de linha": títulos (#), citações (>), listas (-, 1.),
+ * listas de tarefas (- [ ]) e linhas horizontais (---).
  *
- * - A marcação do começo da linha fica escondida e só aparece quando você entra
- *   nela pelo teclado (Home duas vezes, ← no começo do texto…) ou a seleciona pelo
- *   teclado. Clicar no texto nunca faz a linha "pular".
- * - Listas mostram um marcador (•) e listas de tarefas uma caixa clicável que grava
- *   [ ] / [x] no arquivo. Enter continua a lista; Backspace no começo do item tira
- *   um nível (ou transforma o item em texto comum). Tab/Shift+Tab e a numeração
- *   automática ficam em lists.ts.
- * - Links mostram só o texto; o endereço aparece quando o cursor encosta no link.
+ * - A marcação do começo da linha NUNCA aparece: títulos e citações só mudam o
+ *   desenho da linha, listas mostram um marcador (•, 1.) e listas de tarefas uma
+ *   caixa clicável que grava [ ] / [x] no arquivo. O cursor nunca fica antes da
+ *   marcação (Home vai para o começo do texto; ← no começo do texto vai para a
+ *   linha de cima).
+ * - Para criar, é só digitar o atalho do Markdown no começo da linha ("# ", "- ",
+ *   "1. ", "- [ ] ", "> ") ou usar a barra de formatação. Para tirar, Backspace no
+ *   começo do texto (um item aninhado primeiro sobe um nível).
+ * - Enter continua a lista; Tab/Shift+Tab e a numeração automática ficam em lists.ts.
+ * - Os links ficam em formatting.ts (são trechos com marcação escondida, como o negrito).
  */
 import { indentUnit, syntaxTree } from '@codemirror/language'
-import { EditorSelection, EditorState, Prec, StateField, type Extension, type Range } from '@codemirror/state'
-import { cursorLineBoundaryBackward, selectLineBoundaryBackward } from '@codemirror/commands'
+import { EditorSelection, EditorState, Prec, type Extension, type Line, type Range, type Text } from '@codemirror/state'
 import { Decoration, EditorView, keymap, ViewPlugin, WidgetType, type Command, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import { gravityCursor } from './hidden-markup'
 import { lineMarkerAt, type LineMarker, type LineMarkerKind } from './line-markers'
 import { outdentChanges } from './lists'
-import { isMentionUrl } from './mentions'
 
 export { lineMarkerAt, type LineMarker, type LineMarkerKind } from './line-markers'
 
-/** A marcação da linha fica escondida? (não está sendo editada nem selecionada pelo teclado) */
-function isHidden(marker: LineMarker, state: EditorState, focused: boolean): boolean {
-  if (!focused || state.field(pointerSelection, false)) return true
-  return !state.selection.ranges.some((range) => range.from < marker.to && range.to >= marker.from)
+// ── O cursor nunca fica antes da marcação escondida ─────────────────────────
+
+/** Onde o cursor pode ficar: dentro da marcação do começo da linha, vai para o começo do texto. */
+function clampToText(state: EditorState, pos: number): number {
+  const line = state.doc.lineAt(pos)
+  const marker = pos < line.from + 80 ? lineMarkerAt(state, line) : null
+  return marker && pos < marker.to ? marker.to : pos
 }
 
-// ── Seleção feita com o mouse ────────────────────────────────────────────────
-
-/** true quando a última seleção veio do mouse (aí a marcação da linha não aparece). */
-const pointerSelection = StateField.define<boolean>({
-  create: () => false,
-  update: (value, tr) => (tr.selection ? tr.isUserEvent('select.pointer') : value),
-})
-
-/** Clique antes de uma marcação escondida (ex.: na margem de um item) vai para o começo do texto. */
-const pointerToText = EditorState.transactionFilter.of((tr) => {
-  if (!tr.selection || !tr.isUserEvent('select.pointer')) return tr
-  const state = tr.startState
+/** Toda seleção (clique, setas, mudanças externas…) respeita o começo do texto da linha. */
+const keepCursorAfterMarkers = EditorState.transactionFilter.of((tr) => {
+  if (!tr.selection && !tr.docChanged) return tr
+  const state = tr.state
+  const { selection } = state
   let changed = false
-  const ranges = tr.selection.ranges.map((range) => {
-    if (!range.empty || range.head > state.doc.length) return range
-    const line = state.doc.lineAt(range.head)
-    if (range.head !== line.from) return range
-    const marker = lineMarkerAt(state, line)
-    if (!marker || marker.to === range.head) return range
+  const ranges = selection.ranges.map((range) => {
+    // Selecionar tudo (Ctrl+A) continua pegando tudo
+    if (!range.empty && range.from === 0 && range.to === state.doc.length) return range
+    const anchor = clampToText(state, range.anchor)
+    const head = clampToText(state, range.head)
+    if (anchor === range.anchor && head === range.head) return range
     changed = true
-    return EditorSelection.cursor(marker.to)
+    return anchor === head ? EditorSelection.cursor(head, 1) : EditorSelection.range(anchor, head)
   })
-  return changed ? [tr, { selection: EditorSelection.create(ranges, tr.selection.mainIndex), sequential: true }] : tr
+  return changed ? [tr, { selection: EditorSelection.create(ranges, selection.mainIndex), sequential: true }] : tr
 })
 
 // ── Widgets ──────────────────────────────────────────────────────────────────
@@ -103,20 +100,25 @@ class RuleWidget extends WidgetType {
 const hidden = Decoration.replace({})
 const listLine = (level: number) => Decoration.line({ class: 'cm-md-li', attributes: { style: `--li-level: ${level}` } })
 const taskDone = Decoration.mark({ class: 'cm-md-task-done' })
-const linkText = Decoration.mark({ class: 'cm-md-link' })
 const ruleWidget = Decoration.replace({ widget: new RuleWidget() })
+
+/** A linha é uma linha horizontal (---, ***, ___)? */
+function isRuleLine(state: EditorState, line: Line): boolean {
+  if (!/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line.text)) return false
+  const node = syntaxTree(state).resolveInner(line.from + line.text.search(/\S/), 1)
+  for (let n: typeof node | null = node; n; n = n.parent) if (n.name === 'HorizontalRule') return true
+  return false
+}
 
 // ── Decorações ───────────────────────────────────────────────────────────────
 
 function buildPreview(view: EditorView): { decorations: DecorationSet; atoms: DecorationSet } {
   const { state } = view
-  const focused = view.hasFocus
   const ranges: Range<Decoration>[] = []
   const atoms: Range<Decoration>[] = []
-  const touched = (from: number, to: number) => focused && state.selection.ranges.some((r) => r.from <= to && r.to >= from)
 
   for (const { from, to } of view.visibleRanges) {
-    // Marcações de começo de linha
+    // Marcações de começo de linha (sempre escondidas)
     for (let pos = from; pos <= to; ) {
       const line = state.doc.lineAt(pos)
       const marker = lineMarkerAt(state, line)
@@ -124,45 +126,27 @@ function buildPreview(view: EditorView): { decorations: DecorationSet; atoms: De
         const isList = marker.kind === 'bullet' || marker.kind === 'ordered' || marker.kind === 'task'
         if (isList) ranges.push(listLine(marker.level).range(line.from))
         if (marker.kind === 'task' && marker.checked && marker.to < line.to) ranges.push(taskDone.range(marker.to, line.to))
-        if (isHidden(marker, state, focused)) {
-          const deco = isList
-            ? Decoration.replace({ widget: new MarkerWidget(marker.kind, !!marker.checked, marker.label ?? '') })
-            : hidden
-          ranges.push(deco.range(marker.from, marker.to))
-          atoms.push(hidden.range(marker.from, marker.to))
-        }
+        const deco = isList ? Decoration.replace({ widget: new MarkerWidget(marker.kind, !!marker.checked, marker.label ?? '') }) : hidden
+        ranges.push(deco.range(marker.from, marker.to))
+        atoms.push(hidden.range(marker.from, marker.to))
       }
       pos = line.to + 1
     }
 
-    // Linhas horizontais e links
+    // Linhas horizontais
     syntaxTree(state).iterate({
       from,
       to,
       enter: (node) => {
         if (node.name === 'HorizontalRule') {
           const line = state.doc.lineAt(node.from)
-          if (!touched(line.from, line.to)) {
+          if (line.to > line.from) {
             ranges.push(ruleWidget.range(line.from, line.to))
             atoms.push(hidden.range(line.from, line.to))
           }
           return false
         }
-        if (node.name === 'Image' || node.name === 'FencedCode' || node.name === 'CodeBlock') return false
-        if (node.name !== 'Link') return
-        const marks = node.node.getChildren('LinkMark')
-        const url = node.node.getChild('URL')
-        if (marks.length < 3 || !url || marks[0]!.to >= marks[1]!.from) return false
-        // Menções a notas viram chips (mentions.ts)
-        if (isMentionUrl(state, state.sliceDoc(url.from, url.to))) return false
-        if (!touched(node.from, node.to)) {
-          ranges.push(
-            hidden.range(marks[0]!.from, marks[0]!.to),
-            linkText.range(marks[0]!.to, marks[1]!.from),
-            hidden.range(marks[1]!.from, node.to),
-          )
-        }
-        return false
+        if (node.name === 'FencedCode' || node.name === 'CodeBlock' || node.name === 'Paragraph') return false
       },
     })
   }
@@ -177,13 +161,7 @@ const previewPlugin = ViewPlugin.fromClass(
       ;({ decorations: this.decorations, atoms: this.atoms } = buildPreview(view))
     }
     update(update: ViewUpdate) {
-      if (
-        update.docChanged ||
-        update.selectionSet ||
-        update.viewportChanged ||
-        update.focusChanged ||
-        syntaxTree(update.startState) !== syntaxTree(update.state)
-      ) {
+      if (update.docChanged || update.viewportChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
         ;({ decorations: this.decorations, atoms: this.atoms } = buildPreview(update.view))
       }
     }
@@ -193,6 +171,38 @@ const previewPlugin = ViewPlugin.fromClass(
     provide: (plugin) => EditorView.atomicRanges.of((view) => view.plugin(plugin)?.atoms ?? Decoration.none),
   },
 )
+
+// ── Texto digitado encostado numa linha horizontal vai para uma linha própria ─
+
+const isComposing = (tr: { isUserEvent(event: string): boolean }) => tr.isUserEvent('input.type.compose')
+
+/** Uma inserção simples (sem quebra de linha) do usuário: onde e o quê. */
+export function singleInsertion(tr: { changes: { iterChanges(f: (fromA: number, toA: number, fromB: number, toB: number, inserted: Text) => void): void } }): { pos: number; text: string } | null {
+  let result: { pos: number; text: string } | null = null
+  let count = 0
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    count++
+    result = fromA === toA ? { pos: fromA, text: inserted.toString() } : null
+  })
+  const found = result as { pos: number; text: string } | null
+  return count === 1 && found && found.text && !found.text.includes('\n') ? found : null
+}
+
+const textBesideRule = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged || isComposing(tr) || !(tr.isUserEvent('input.type') || tr.isUserEvent('input.paste'))) return tr
+  const insertion = singleInsertion(tr)
+  if (!insertion) return tr
+  const line = tr.startState.doc.lineAt(insertion.pos)
+  if (!isRuleLine(tr.startState, line) || (insertion.pos !== line.from && insertion.pos !== line.to)) return tr
+  const atEnd = insertion.pos === line.to
+  const insert = atEnd ? `\n${insertion.text}` : `${insertion.text}\n`
+  return {
+    changes: { from: insertion.pos, insert },
+    selection: EditorSelection.cursor(insertion.pos + (atEnd ? insert.length : insertion.text.length)),
+    userEvent: 'input.type',
+    scrollIntoView: true,
+  }
+})
 
 // ── Interação ────────────────────────────────────────────────────────────────
 
@@ -217,7 +227,7 @@ const markerClicks = EditorView.domEventHandlers({
     if (target.closest('.cm-md-checkbox')) return toggleTaskAt(view, pos)
     // Clique no marcador (•, 1.): cursor no começo do texto do item
     const marker = lineMarkerAt(view.state, view.state.doc.lineAt(pos))
-    if (marker) view.dispatch({ selection: EditorSelection.cursor(marker.to), userEvent: 'select.pointer' })
+    if (marker) view.dispatch({ selection: EditorSelection.cursor(marker.to, 1), userEvent: 'select.pointer' })
     view.focus()
     return true
   },
@@ -227,7 +237,7 @@ const markerClicks = EditorView.domEventHandlers({
  * Backspace logo no começo do texto de uma linha com marcação escondida:
  * item aninhado sobe um nível; item, título ou citação viram texto comum.
  */
-const deleteLineMarker: Command = (view) => {
+export const deleteLineMarker: Command = (view) => {
   const { state } = view
   if (state.selection.ranges.length !== 1 || !state.selection.main.empty) return false
   const head = state.selection.main.head
@@ -249,18 +259,52 @@ const deleteLineMarker: Command = (view) => {
   return true
 }
 
-/** Home: primeiro vai para o começo do texto (depois do marcador); de novo, para o começo da linha. */
+/** Delete no fim de uma linha: a linha de baixo sobe sem a marcação dela (como juntar parágrafos no Word). */
+export const deleteIntoMarkedLine: Command = (view) => {
+  const { state } = view
+  if (state.selection.ranges.length !== 1 || !state.selection.main.empty) return false
+  const head = state.selection.main.head
+  const line = state.doc.lineAt(head)
+  if (head !== line.to || line.number >= state.doc.lines) return false
+  const marker = lineMarkerAt(state, state.doc.line(line.number + 1))
+  if (!marker) return false
+  view.dispatch({ changes: { from: line.to, to: marker.to }, userEvent: 'delete.forward', scrollIntoView: true })
+  return true
+}
+
+/** Home: vai para o começo do texto (nunca para antes da marcação escondida). */
 function smartHome(extend: boolean): Command {
   return (view) => {
     const { state } = view
     if (state.selection.ranges.length !== 1) return false
     const range = state.selection.main
     const marker = lineMarkerAt(state, state.doc.lineAt(range.head))
-    if (!marker || range.head <= marker.to) return extend ? selectLineBoundaryBackward(view) : cursorLineBoundaryBackward(view)
-    const target = view.moveToLineBoundary(EditorSelection.cursor(range.head), false).head
-    const head = target <= marker.to ? marker.to : target
+    const boundary = view.moveToLineBoundary(EditorSelection.cursor(range.head), false).head
+    const target = marker && boundary <= marker.to ? marker.to : boundary
+    if (extend) {
+      view.dispatch({ selection: EditorSelection.range(range.anchor, target), scrollIntoView: true, userEvent: 'select' })
+      return true
+    }
+    const cursor = gravityCursor(state, target) ?? EditorSelection.cursor(target, 1)
+    view.dispatch({ selection: EditorSelection.create([cursor]), scrollIntoView: true, userEvent: 'select' })
+    return true
+  }
+}
+
+/** ← no começo do texto de uma linha com marcação: vai para o fim da linha de cima. */
+export function leftOverMarker(extend: boolean): Command {
+  return (view) => {
+    const { state } = view
+    if (state.selection.ranges.length !== 1) return false
+    const range = state.selection.main
+    if (!extend && !range.empty) return false
+    const line = state.doc.lineAt(range.head)
+    const marker = lineMarkerAt(state, line)
+    if (!marker || range.head !== marker.to) return false
+    if (line.from === 0) return true
+    const target = line.from - 1
     view.dispatch({
-      selection: extend ? EditorSelection.range(range.anchor, head) : EditorSelection.cursor(head),
+      selection: extend ? EditorSelection.range(range.anchor, target) : EditorSelection.cursor(target, -1),
       scrollIntoView: true,
       userEvent: 'select',
     })
@@ -268,16 +312,18 @@ function smartHome(extend: boolean): Command {
   }
 }
 
-/** Prévia das marcações de linha (títulos, citações, listas, tarefas, linhas e links). */
+/** Prévia das marcações de linha (títulos, citações, listas, tarefas e linhas horizontais). */
 export const markdownPreview: Extension = [
-  pointerSelection,
-  pointerToText,
+  keepCursorAfterMarkers,
+  textBesideRule,
   previewPlugin,
   markerClicks,
   Prec.highest(
     keymap.of([
       { key: 'Backspace', run: deleteLineMarker },
+      { key: 'Delete', run: deleteIntoMarkedLine },
       { key: 'Home', run: smartHome(false), shift: smartHome(true) },
+      { key: 'ArrowLeft', run: leftOverMarker(false), shift: leftOverMarker(true) },
     ]),
   ),
 ]

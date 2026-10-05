@@ -1,10 +1,9 @@
 /**
  * Estado geral do aplicativo: inicialização, pasta de dados e coordenação dos módulos.
  *
- * Esta parte conhece os três módulos ao mesmo tempo só para tarefas de
+ * Esta parte conhece os quatro módulos ao mesmo tempo só para tarefas de
  * infraestrutura (carregar, salvar tudo antes de fechar, sincronizar ao voltar para
- * a janela). A única ligação entre os módulos são as menções a notas nas tarefas
- * (stores/mentions.ts).
+ * a janela). A única ligação entre os módulos são as menções (stores/mentions.ts).
  */
 import { reactive } from 'vue'
 import { errorCode, errorMessage, workspaceNameProblem, type BootstrapInfo, type DataDirStatus } from '#shared/ipc'
@@ -13,13 +12,17 @@ import { notifyError, showToast } from '~/composables/useToasts'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 import { createJsonWriter, readJsonFile } from '~/lib/storage/json-file'
 import { DATA_PATHS } from '~/lib/storage/paths'
-import { installMentionTracking } from './mentions'
+import { useLinksStore } from './links'
+import { flushMentionUpdates, installMentionTracking } from './mentions'
 import { useMindmapStore } from './mindmap'
 import { useNotesStore } from './notes'
 import { useTasksStore } from './tasks'
 
 export type AppPhase = 'booting' | 'no-desktop' | 'setup' | 'ready' | 'error'
-export type ModuleId = 'notes' | 'tasks' | 'mindmap'
+export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links'
+
+export const MODULES: readonly ModuleId[] = ['notes', 'tasks', 'mindmap', 'links']
+export const isModuleId = (value: unknown): value is ModuleId => typeof value === 'string' && (MODULES as readonly string[]).includes(value)
 
 const state = reactive({
   phase: 'booting' as AppPhase,
@@ -33,11 +36,12 @@ const state = reactive({
 const notes = useNotesStore()
 const tasks = useTasksStore()
 const mindmap = useMindmapStore()
+const links = useLinksStore()
 const appUiWriter = createJsonWriter(DATA_PATHS.appUiState)
 
 async function loadModules(): Promise<void> {
   installMentionTracking()
-  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), readLastModule()])
+  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), readLastModule()])
   const failure = results.find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined
   if (failure) throw failure.reason
 }
@@ -45,7 +49,7 @@ async function loadModules(): Promise<void> {
 async function readLastModule(): Promise<void> {
   const result = await readJsonFile(DATA_PATHS.appUiState)
   const value = result.status === 'ok' ? (result.data as { lastModule?: unknown })?.lastModule : null
-  if (value === 'notes' || value === 'tasks' || value === 'mindmap') state.lastModule = value
+  if (isModuleId(value)) state.lastModule = value
 }
 
 export function rememberModule(module: ModuleId): void {
@@ -56,7 +60,9 @@ export function rememberModule(module: ModuleId): void {
 
 /** Salva tudo que estiver pendente (chamado antes de fechar a janela). */
 export async function flushEverything(): Promise<void> {
-  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), appUiWriter.flush()])
+  // Primeiro as menções que ainda estavam para ser corrigidas (elas mexem nas notas)
+  await flushMentionUpdates().catch((error) => console.warn('[4notes] Falha ao atualizar menções:', error))
+  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), appUiWriter.flush()])
 }
 
 let focusTimer: ReturnType<typeof setTimeout> | null = null
@@ -67,6 +73,7 @@ function onWindowFocus(): void {
     void notes.refreshFromDisk()
     void tasks.refreshFromDisk()
     void mindmap.refreshFromDisk()
+    void links.refreshFromDisk()
   }, 200)
 }
 
@@ -146,7 +153,7 @@ export async function applyDataFolder(path: string, initial: boolean): Promise<b
     if (!info.hasData) {
       const choice = await choiceDialog({
         title: 'Pasta ainda sem dados do 4notes',
-        message: `O workspace “${workspaceName(info.path)}” vai começar vazio. Se preferir, copie para ele as notas, tarefas e mapas do workspace atual (nada é apagado do atual).`,
+        message: `O workspace “${workspaceName(info.path)}” vai começar vazio. Se preferir, copie para ele as notas, tarefas, mapas e links do workspace atual (nada é apagado do atual).`,
         icon: 'folder',
         buttons: [
           { id: 'cancel', label: 'Cancelar', variant: 'ghost' },

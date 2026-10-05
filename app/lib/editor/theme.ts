@@ -17,7 +17,9 @@ export const editorTheme = EditorView.theme({
   '.cm-scroller': {
     fontFamily: 'var(--font-ui)',
     lineHeight: '1.72',
-    overflow: 'auto',
+    // As linhas quebram (lineWrapping): nada rola para o lado
+    overflowY: 'auto',
+    overflowX: 'hidden',
     cursor: 'text',
   },
   // O texto ocupa a largura toda, com a mesma margem dos dois lados (--editor-padding-x)
@@ -34,6 +36,14 @@ export const editorTheme = EditorView.theme({
     backgroundColor: 'var(--selection) !important',
   },
   '.cm-placeholder': { color: 'var(--text-3)', fontStyle: 'normal' },
+  // Nota vazia nas Notas: a primeira linha é o título (ver title-line.ts)
+  '.cm-title-placeholder': {
+    fontSize: '1.75em',
+    fontWeight: '700',
+    lineHeight: '1.35',
+    fontFamily: 'var(--font-display)',
+    letterSpacing: '-0.01em',
+  },
   '.cm-activeLine': { backgroundColor: 'transparent' },
 
   // Linhas especiais do Markdown (ver markdownLines em setup.ts)
@@ -56,6 +66,7 @@ export const editorTheme = EditorView.theme({
   '.cm-md-hr': { color: 'var(--text-3)' },
   '.cm-md-rule': { display: 'inline-block', width: '100%', height: '0', borderTop: '1.5px solid var(--border-strong)', verticalAlign: 'middle' },
   '.cm-md-link': { color: 'var(--primary-text)', textDecoration: 'underline', textDecorationColor: 'var(--primary-soft-2)', textUnderlineOffset: '3px' },
+  '&.cm-mod-held .cm-md-link': { cursor: 'pointer', textDecorationColor: 'currentColor' },
 
   // Listas e tarefas (ver markdown-preview.ts): o marcador fica na margem e o texto quebrado alinha com o primeiro
   '.cm-md-li': {
@@ -111,7 +122,29 @@ export const editorTheme = EditorView.theme({
   },
   '.cm-codeblock-head-editing': { padding: '6px calc(var(--editor-padding-x, 28px) - 14px) 0' },
   '.cm-codeblock-head-editing .cm-codeblock-head': { backgroundColor: 'var(--surface-3)', borderRadius: '10px 10px 0 0' },
-  '.cm-codeblock-lang': { flex: '1', fontWeight: '600', letterSpacing: '0.01em' },
+  // Cartão aberto (editando o código): o rodapé fecha o cartão no lugar da cerca ```
+  '.cm-codeblock-foot-editing': { padding: '0 calc(var(--editor-padding-x, 28px) - 14px) 6px' },
+  '.cm-codeblock-foot': { height: '8px', backgroundColor: 'var(--surface-3)', borderRadius: '0 0 10px 10px' },
+  '.cm-codeblock-gap': { height: '6px', backgroundColor: 'var(--surface-3)' },
+  '.cm-codeblock-lang': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    height: '24px',
+    margin: '0 0 0 -6px',
+    padding: '0 6px',
+    border: 'none',
+    borderRadius: '6px',
+    background: 'transparent',
+    color: 'inherit',
+    font: 'inherit',
+    fontWeight: '600',
+    letterSpacing: '0.01em',
+    cursor: 'pointer',
+  },
+  '.cm-codeblock-lang:hover': { backgroundColor: 'var(--hover)', color: 'var(--text)' },
+  '.cm-codeblock-lang svg': { opacity: '0.7' },
+  '.cm-codeblock-spacer': { flex: '1' },
   '.cm-codeblock-actions': { display: 'flex', gap: '2px' },
   '.cm-codeblock-btn': {
     display: 'grid',
@@ -171,6 +204,8 @@ export const editorTheme = EditorView.theme({
     cursor: 'pointer',
   },
   '.cm-image-frame:hover .cm-image-remove': { opacity: '1' },
+  // Imagem selecionada (clique nela): contorno roxo
+  '.cm-image.selected img': { outline: '2.5px solid var(--primary)', outlineOffset: '2px' },
   '.cm-image-remove:hover': { color: 'var(--danger)' },
   '.cm-image-frame.broken': {
     lineHeight: '1.5',
@@ -271,6 +306,10 @@ export const editorTheme = EditorView.theme({
   '.cm-mention svg': { flex: 'none', opacity: '0.85' },
   '.cm-mention-title': { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   '.cm-mention.missing': { backgroundColor: 'var(--surface-3)', color: 'var(--text-3)', textDecoration: 'line-through' },
+  // Tarefas mencionadas: amarelo (a cor das Tarefas); concluída = riscada
+  '.cm-mention.task:not(.missing)': { backgroundColor: 'var(--accent-soft)', color: 'var(--accent-text)' },
+  '.cm-mention.task:not(.missing):hover': { backgroundColor: 'color-mix(in srgb, var(--accent) 34%, transparent)' },
+  '.cm-mention.task.done .cm-mention-title': { textDecoration: 'line-through', opacity: '0.75' },
 
   // Lista de notas aberta pelo "@"
   '.cm-tooltip.cm-tooltip-autocomplete.cm-mention-picker': { padding: '4px' },

@@ -1,0 +1,282 @@
+/**
+ * Links (processo principal): buscar o título e o ícone de um site, e ler os
+ * favoritos dos navegadores instalados (para importar).
+ *
+ * - O ícone de cada site é guardado no workspace, em links/icons/<site>.<ext>:
+ *   aparece mesmo sem internet e vai junto no backup.
+ * - A interface nunca recebe acesso livre à rede nem ao disco: ela pede "o título e
+ *   o ícone deste endereço" ou "os favoritos do navegador X" (da lista que este
+ *   arquivo mesmo encontrou).
+ */
+import { app, dialog, net, type BrowserWindow } from 'electron'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { countLinks, parseBookmarksHtml, parseChromiumBookmarks, type BookmarkFolder, type BrowserSource } from '../shared/bookmarks'
+import type { LinkMeta } from '../shared/ipc'
+import { declaredCharset, iconFileBase, iconUrls, parseHead, sniffImage, type IconFormat } from '../shared/link-meta'
+import { AppError, resolveInside } from './files'
+
+export const LINK_ICONS_DIR = 'links/icons'
+
+const USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome ?? '140.0.0.0'} Safari/537.36`
+const PAGE_LIMIT = 768 * 1024
+const ICON_LIMIT = 1024 * 1024
+
+interface Fetched {
+  url: string
+  contentType: string
+  body: Uint8Array
+}
+
+/** Busca um endereço (com limite de tempo e de tamanho). */
+async function fetchLimited(url: string, accept: string, limit: number, timeout: number): Promise<Fetched | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
+  try {
+    const response = await net.fetch(url, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: { 'User-Agent': USER_AGENT, Accept: accept, 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' },
+    })
+    if (!response.ok || !response.body) return null
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    while (total < limit) {
+      const { done, value } = await reader.read()
+      if (done || !value) break
+      chunks.push(value)
+      total += value.byteLength
+    }
+    void reader.cancel().catch(() => undefined)
+    const body = new Uint8Array(Math.min(total, limit))
+    let offset = 0
+    for (const chunk of chunks) {
+      const part = chunk.subarray(0, Math.min(chunk.byteLength, body.byteLength - offset))
+      body.set(part, offset)
+      offset += part.byteLength
+      if (offset >= body.byteLength) break
+    }
+    return { url: response.url || url, contentType: (response.headers.get('content-type') ?? '').toLowerCase(), body }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Texto da página no charset certo (cabeçalho HTTP, <meta charset> ou UTF-8). */
+function decodePage(page: Fetched): string {
+  const fromHeader = /charset=([\w-]+)/i.exec(page.contentType)?.[1]
+  const sample = new TextDecoder('latin1').decode(page.body.subarray(0, 4096))
+  const charset = fromHeader ?? declaredCharset(sample) ?? 'utf-8'
+  try {
+    return new TextDecoder(charset).decode(page.body)
+  } catch {
+    return new TextDecoder('utf-8').decode(page.body)
+  }
+}
+
+function decodeDataUrl(url: string): Uint8Array | null {
+  const match = /^data:([^;,]+)?(;base64)?,(.*)$/is.exec(url)
+  if (!match) return null
+  try {
+    return match[2] ? new Uint8Array(Buffer.from(match[3]!, 'base64')) : new TextEncoder().encode(decodeURIComponent(match[3]!))
+  } catch {
+    return null
+  }
+}
+
+/** Baixa o primeiro ícone que for mesmo uma imagem. */
+async function downloadIcon(urls: string[]): Promise<{ data: Uint8Array; format: IconFormat } | null> {
+  for (const url of urls) {
+    if (url.startsWith('data:')) {
+      const data = decodeDataUrl(url)
+      const format = data && data.byteLength <= ICON_LIMIT ? sniffImage(data) : null
+      if (data && format) return { data, format }
+      continue
+    }
+    const icon = await fetchLimited(url, 'image/avif,image/webp,image/svg+xml,image/*,*/*;q=0.8', ICON_LIMIT + 1, 6000)
+    if (!icon || !icon.body.byteLength || icon.body.byteLength > ICON_LIMIT) continue
+    const format = sniffImage(icon.body, icon.contentType)
+    if (format) return { data: icon.body, format }
+  }
+  return null
+}
+
+/** Grava o ícone do site em links/icons/ (troca o anterior, mesmo com outra extensão). */
+export async function writeIcon(root: string, host: string, data: Uint8Array, format: IconFormat): Promise<string> {
+  const base = iconFileBase(host)
+  const dir = resolveInside(root, LINK_ICONS_DIR)
+  await fs.mkdir(dir, { recursive: true })
+  const name = `${base}.${format}`
+  const tmp = path.join(dir, `.${name}.${process.pid}.tmp`)
+  await fs.writeFile(tmp, data)
+  await fs.rename(tmp, path.join(dir, name))
+  for (const entry of await fs.readdir(dir).catch(() => [] as string[])) {
+    if (entry !== name && entry.toLowerCase().startsWith(`${base}.`) && /^[a-z]+$/.test(entry.slice(base.length + 1))) {
+      await fs.rm(path.join(dir, entry), { force: true }).catch(() => undefined)
+    }
+  }
+  return name
+}
+
+/**
+ * Título e ícone de um endereço. O ícone é gravado em links/icons/ (se `withIcon`).
+ * Sem internet (ou site fora do ar), devolve o que conseguiu — nunca lança erro por isso.
+ */
+export async function fetchLinkMeta(root: string, rawUrl: unknown, withIcon: unknown): Promise<LinkMeta> {
+  if (typeof rawUrl !== 'string' || !/^https?:\/\//i.test(rawUrl.trim()) || rawUrl.length > 4096) throw new AppError('EINVAL', 'Endereço inválido.')
+  const url = rawUrl.trim()
+  let host: string
+  try {
+    host = new URL(url).hostname
+  } catch {
+    throw new AppError('EINVAL', 'Endereço inválido.')
+  }
+  const page = await fetchLimited(url, 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8', PAGE_LIMIT, 9000)
+  let title: string | null = null
+  let candidates: string[] = []
+  if (page && /html|xml/.test(page.contentType || 'text/html')) {
+    const head = parseHead(decodePage(page))
+    title = head.title
+    candidates = iconUrls(head, page.url)
+  } else {
+    candidates = iconUrls({ title: null, icons: [], base: null }, page?.url ?? url)
+  }
+  let icon: string | null = null
+  if (withIcon !== false) {
+    const found = await downloadIcon(candidates)
+    if (found) icon = await writeIcon(root, host, found.data, found.format).catch(() => null)
+  }
+  return { title, icon, reachable: !!page }
+}
+
+/** Ícone embutido num arquivo de favoritos (data:image/…): grava como o ícone do site. */
+export async function saveDataIcon(root: string, host: unknown, dataUrl: unknown): Promise<string | null> {
+  if (typeof host !== 'string' || !host.trim() || typeof dataUrl !== 'string' || dataUrl.length > 2_000_000) return null
+  const data = decodeDataUrl(dataUrl)
+  const format = data ? sniffImage(data) : null
+  return data && format ? writeIcon(root, host, data, format) : null
+}
+
+// ── Favoritos dos navegadores ────────────────────────────────────────────────
+
+interface BrowserDir {
+  name: string
+  /** Pasta "User Data" (com perfis) ou a pasta do perfil único (Opera). */
+  dir: string
+  profiles: boolean
+}
+
+function browserDirs(): BrowserDir[] {
+  const home = app.getPath('home')
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA ?? path.join(home, 'AppData', 'Local')
+    const roaming = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming')
+    return [
+      { name: 'Brave', dir: path.join(local, 'BraveSoftware', 'Brave-Browser', 'User Data'), profiles: true },
+      { name: 'Opera GX', dir: path.join(roaming, 'Opera Software', 'Opera GX Stable'), profiles: false },
+      { name: 'Opera', dir: path.join(roaming, 'Opera Software', 'Opera Stable'), profiles: false },
+      { name: 'Google Chrome', dir: path.join(local, 'Google', 'Chrome', 'User Data'), profiles: true },
+      { name: 'Microsoft Edge', dir: path.join(local, 'Microsoft', 'Edge', 'User Data'), profiles: true },
+      { name: 'Vivaldi', dir: path.join(local, 'Vivaldi', 'User Data'), profiles: true },
+      { name: 'Chromium', dir: path.join(local, 'Chromium', 'User Data'), profiles: true },
+    ]
+  }
+  if (process.platform === 'darwin') {
+    const support = path.join(home, 'Library', 'Application Support')
+    return [
+      { name: 'Brave', dir: path.join(support, 'BraveSoftware', 'Brave-Browser'), profiles: true },
+      { name: 'Opera GX', dir: path.join(support, 'com.operasoftware.OperaGX'), profiles: false },
+      { name: 'Opera', dir: path.join(support, 'com.operasoftware.Opera'), profiles: false },
+      { name: 'Google Chrome', dir: path.join(support, 'Google', 'Chrome'), profiles: true },
+      { name: 'Microsoft Edge', dir: path.join(support, 'Microsoft Edge'), profiles: true },
+      { name: 'Vivaldi', dir: path.join(support, 'Vivaldi'), profiles: true },
+    ]
+  }
+  const config = process.env.XDG_CONFIG_HOME ?? path.join(home, '.config')
+  return [
+    { name: 'Brave', dir: path.join(config, 'BraveSoftware', 'Brave-Browser'), profiles: true },
+    { name: 'Opera', dir: path.join(config, 'opera'), profiles: false },
+    { name: 'Google Chrome', dir: path.join(config, 'google-chrome'), profiles: true },
+    { name: 'Microsoft Edge', dir: path.join(config, 'microsoft-edge'), profiles: true },
+    { name: 'Vivaldi', dir: path.join(config, 'vivaldi'), profiles: true },
+    { name: 'Chromium', dir: path.join(config, 'chromium'), profiles: true },
+  ]
+}
+
+async function readJson(file: string): Promise<unknown> {
+  try {
+    return JSON.parse(await fs.readFile(file, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
+
+/** Perfis de um navegador com perfis: [pasta, nome]. */
+async function profilesOf(dir: string): Promise<[string, string | null][]> {
+  const state = await readJson(path.join(dir, 'Local State'))
+  const cache = isObject(state) && isObject(state.profile) && isObject(state.profile.info_cache) ? state.profile.info_cache : null
+  if (cache) {
+    return Object.entries(cache).map(([folder, info]) => [folder, isObject(info) && typeof info.name === 'string' && info.name.trim() ? info.name.trim() : folder])
+  }
+  const entries = await fs.readdir(dir).catch(() => [] as string[])
+  return entries.filter((name) => name === 'Default' || /^Profile \d+$/.test(name)).map((name) => [name, null])
+}
+
+/** Arquivos de favoritos encontrados na última busca (a interface só conhece os ids). */
+const sourceFiles = new Map<string, string>()
+
+/** Navegadores (e perfis) com favoritos neste computador. */
+export async function findBrowserSources(): Promise<BrowserSource[]> {
+  sourceFiles.clear()
+  const sources: BrowserSource[] = []
+  for (const browser of browserDirs()) {
+    const candidates: [string, string | null][] = browser.profiles
+      ? (await profilesOf(browser.dir)).map(([folder, name]) => [path.join(browser.dir, folder, 'Bookmarks'), name])
+      : [
+          [path.join(browser.dir, 'Bookmarks'), null],
+          [path.join(browser.dir, 'Default', 'Bookmarks'), null],
+        ]
+    for (const [file, profile] of candidates) {
+      const roots = parseChromiumBookmarks(await readJson(file))
+      const count = countLinks(roots)
+      if (!count) continue
+      const id = `b${sourceFiles.size + 1}`
+      sourceFiles.set(id, file)
+      sources.push({ id, browser: browser.name, profile, count })
+      if (!browser.profiles) break // Opera: um arquivo só
+    }
+  }
+  return sources
+}
+
+/** Favoritos de um dos navegadores encontrados por findBrowserSources. */
+export async function readBrowserBookmarks(id: unknown): Promise<BookmarkFolder[]> {
+  const file = typeof id === 'string' ? sourceFiles.get(id) : undefined
+  if (!file) throw new AppError('ENOENT', 'Navegador não encontrado. Abra a importação de novo.')
+  const raw = await readJson(file)
+  if (raw === null) throw new AppError('EIO', 'Não foi possível ler os favoritos desse navegador.')
+  return parseChromiumBookmarks(raw)
+}
+
+/** Escolhe um arquivo HTML de favoritos (exportado por qualquer navegador) e o lê. null = cancelado. */
+export async function pickBookmarksFile(win: BrowserWindow | null): Promise<BookmarkFolder[] | null> {
+  const options: Electron.OpenDialogOptions = {
+    title: 'Arquivo de favoritos exportado pelo navegador',
+    buttonLabel: 'Importar',
+    properties: ['openFile'],
+    filters: [{ name: 'Favoritos (HTML)', extensions: ['html', 'htm'] }],
+  }
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+  const file = result.canceled ? undefined : result.filePaths[0]
+  if (!file) return null
+  const stat = await fs.stat(file)
+  if (stat.size > 50 * 1024 * 1024) throw new AppError('EFBIG', 'O arquivo é grande demais (máximo de 50 MB).')
+  const roots = parseBookmarksHtml(await fs.readFile(file, 'utf8'))
+  if (!countLinks(roots)) throw new AppError('EINVAL', 'Nenhum link encontrado nesse arquivo. Escolha o arquivo HTML exportado pelo navegador.')
+  return roots
+}

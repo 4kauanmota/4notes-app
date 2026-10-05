@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Barra lateral de navegação entre os três módulos + tema + configurações. */
+/** Barra lateral de navegação entre os módulos + tema + configurações. */
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTheme } from '~/composables/useTheme'
@@ -19,6 +19,7 @@ const items = computed(() => [
   { to: '/notes', label: 'Notas', icon: 'notes', key: '1', badge: 0 },
   { to: '/tasks', label: 'Tarefas', icon: 'tasks', key: '2', badge: dueCount.value },
   { to: '/mindmap', label: 'Mapa', icon: 'graph', key: '3', badge: 0 },
+  { to: '/links', label: 'Links', icon: 'link', key: '4', badge: 0 },
 ])
 
 const activeIndex = computed(() => items.value.findIndex((item) => route.path.startsWith(item.to)))

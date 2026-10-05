@@ -10,6 +10,7 @@
  */
 import { redo, selectAll, undo } from '@codemirror/commands'
 import { EditorView } from '@codemirror/view'
+import { linkAtContextMenu, removeLink, selectLinkAt } from '~/lib/editor/formatting'
 import { nextTick, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
 import type { TextMenuRequest } from '#shared/ipc'
 import { openMenu, separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
@@ -254,6 +255,17 @@ async function onTextMenu(request: TextMenuRequest): Promise<void> {
     if (items.length) items.push(separator)
     items.push({ id: 'open-link', label: 'Abrir link no navegador' })
   }
+  // Link no editor (o texto dele, com o endereço escondido)
+  const editorLink = linkAtContextMenu()
+  if (editorLink) {
+    if (items.length) items.push(separator)
+    items.push(
+      { id: 'link-open', label: 'Abrir link no navegador', enabled: /^(https?:|mailto:)/i.test(editorLink.link.url ?? '') },
+      { id: 'link-copy', label: 'Copiar endereço do link' },
+      { id: 'link-edit', label: 'Editar link…' },
+      { id: 'link-remove', label: 'Remover link' },
+    )
+  }
   if (!items.length) return
 
   // O editor de texto (CodeMirror) tem o próprio desfazer/refazer
@@ -265,6 +277,17 @@ async function onTextMenu(request: TextMenuRequest): Promise<void> {
   if (choice.startsWith('replace:')) return api.menu.runTextAction('replace', choice.slice('replace:'.length))
   if (choice === 'learn') return api.menu.runTextAction('learn', request.misspelledWord)
   if (choice === 'open-link' && request.linkURL) return void api.shell.openExternal(request.linkURL)
+  if (editorLink && choice.startsWith('link-')) {
+    const { view, link } = editorLink
+    const url = link.url ?? ''
+    if (choice === 'link-open') return void api.shell.openExternal(url)
+    if (choice === 'link-copy') return void navigator.clipboard.writeText(url)
+    view.focus()
+    if (!selectLinkAt(view, link.openTo)) return
+    if (choice === 'link-remove') removeLink(view)
+    else view.dom.dispatchEvent(new CustomEvent('fournotes:edit-link'))
+    return
+  }
   if (editor && (choice === 'undo' || choice === 'redo' || choice === 'selectAll')) {
     const command = choice === 'undo' ? undo : choice === 'redo' ? redo : selectAll
     command(editor)

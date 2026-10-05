@@ -10,23 +10,31 @@
  *   arquivo); colar código cria um bloco de código, que pode ser aberto em tela
  *   cheia (CodeFullscreen).
  */
-import { EditorState } from '@codemirror/state'
+import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { EditorView, type ViewUpdate } from '@codemirror/view'
-import { onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { errorMessage, workspaceFileUrl } from '#shared/ipc'
+import { showContextMenu, separator, type MenuItemSpec } from '~/composables/useContextMenu'
+import { promptDialog } from '~/composables/useDialog'
 import { notifyError, showToast } from '~/composables/useToasts'
 import type { PaletteColor } from '~/lib/colors'
 import {
   activeFormats,
   clearColor,
   clearFormatting,
-  insertLink,
+  normalizeLinkUrl,
+  removeLink,
+  setLink,
   toggleFormat,
   toggleLineFormat,
+  type ActiveFormats,
   type InlineFormat,
   type LineFormat,
 } from '~/lib/editor/formatting'
+import { languageLabel } from '~/lib/editor/languages'
+import { stripImages } from '~/lib/editor/markup'
 import type { CodeEditRequest, EditorHost, MentionHost } from '~/lib/editor/host'
+import { refreshMentions } from '~/lib/editor/mentions'
 import { buildExtensions, minimalChange, type CursorInfo } from '~/lib/editor/setup'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 
@@ -39,8 +47,10 @@ const props = defineProps<{
   assetBase?: string
   /** Arquivo da nota no workspace ("notes/Ideias.md"); null enquanto ela não foi salva. */
   notePath?: string | null
-  /** Liga as menções a outras notas (@). */
+  /** Liga as menções a notas e tarefas (@). */
   mentions?: MentionHost
+  /** A primeira linha de uma nota vazia já começa como título (Notas). */
+  titleFirstLine?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -64,7 +74,10 @@ const toolbar = reactive({
   x: 0,
   y: 0,
   below: false,
-  active: { formats: new Set<InlineFormat>(), color: null as string | null },
+  active: { formats: new Set<InlineFormat>(), color: null, link: null } as ActiveFormats,
+  /** Editando o endereço de um link: a barra fica aberta mesmo com o foco no campo. */
+  linkMode: false,
+  linkInitial: '',
 })
 let selectingWithMouse = false
 let frame = 0
@@ -72,8 +85,15 @@ let frame = 0
 function placeToolbar(): void {
   frame = 0
   const selection = view?.state.selection.main
-  if (!view || !host.value || !selection || selection.empty || !view.hasFocus || selectingWithMouse) {
+  if (!view || !host.value || !selection || selection.empty || (!view.hasFocus && !toolbar.linkMode) || selectingWithMouse) {
     toolbar.visible = false
+    toolbar.linkMode = false
+    return
+  }
+  // Só imagens selecionadas (clique numa imagem): sem barra de formatação
+  if (!stripImages(view.state.sliceDoc(selection.from, selection.to)).trim()) {
+    toolbar.visible = false
+    toolbar.linkMode = false
     return
   }
   const start = view.coordsAtPos(selection.from, 1)
@@ -110,6 +130,7 @@ function onMouseDown(event: MouseEvent): void {
   if (event.button !== 0 || !(event.target as HTMLElement).closest('.cm-content')) return
   selectingWithMouse = true
   toolbar.visible = false
+  toolbar.linkMode = false
   window.addEventListener('mouseup', onMouseUp, { once: true })
 }
 
@@ -128,6 +149,94 @@ function run(command: (view: EditorView) => boolean): void {
 const applyInline = (format: InlineFormat) => run((v) => toggleFormat(v, format))
 const applyColor = (color: PaletteColor | null) => run((v) => (color ? toggleFormat(v, 'color', color) : clearColor(v)))
 const applyLine = (format: LineFormat) => run((v) => toggleLineFormat(v, format))
+
+// ── Links (o endereço é editado na própria barra) ───────────────────────────
+
+/** Abre o campo do endereço: com o link atual ou, se houver, um endereço copiado. */
+async function openLink(): Promise<void> {
+  if (!view || view.state.selection.main.empty) return
+  const current = activeFormats(view.state).link
+  let initial = current ?? ''
+  if (!current) {
+    const copied = await navigator.clipboard?.readText?.().catch(() => '')
+    if (copied && /^\s*(?:https?:\/\/|mailto:|www\.)\S+\s*$/i.test(copied)) initial = copied.trim()
+  }
+  toolbar.linkInitial = initial
+  toolbar.linkMode = true
+  scheduleToolbar()
+}
+
+function closeLink(): void {
+  toolbar.linkMode = false
+  view?.focus()
+  scheduleToolbar()
+}
+
+function applyLink(url: string): void {
+  toolbar.linkMode = false
+  run((v) => setLink(v, normalizeLinkUrl(url) ?? url.trim()))
+}
+
+function unlink(): void {
+  toolbar.linkMode = false
+  run(removeLink)
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && !toolbar.linkMode) toolbar.visible = false
+  // Ctrl+K: link na seleção
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === 'KeyK' && view?.hasFocus) {
+    event.preventDefault()
+    void openLink()
+  }
+}
+
+// ── Linguagem dos blocos de código ──────────────────────────────────────────
+
+const LANGUAGES = [
+  ['', 'Texto simples'],
+  ['js', 'JavaScript'],
+  ['ts', 'TypeScript'],
+  ['vue', 'Vue'],
+  ['html', 'HTML'],
+  ['css', 'CSS'],
+  ['json', 'JSON'],
+  ['gdscript', 'GDScript'],
+  ['python', 'Python'],
+  ['csharp', 'C#'],
+  ['cpp', 'C++'],
+  ['java', 'Java'],
+  ['bash', 'Shell'],
+  ['sql', 'SQL'],
+  ['yaml', 'YAML'],
+  ['markdown', 'Markdown'],
+] as const
+
+async function chooseLanguage(current: string): Promise<string | null> {
+  const label = languageLabel(current)
+  const known = LANGUAGES.some(([, name]) => name === label)
+  const items: MenuItemSpec[] = [
+    ...LANGUAGES.map(([id, name]) => ({
+      id: `lang:${id}`,
+      label: name,
+      type: 'radio' as const,
+      checked: id === '' ? !current.trim() : name === label,
+    })),
+    separator,
+    { id: 'other', label: known || !current.trim() ? 'Outra…' : `Outra (${label})…`, type: 'radio', checked: !known && !!current.trim() },
+  ]
+  const choice = await showContextMenu(items)
+  if (!choice) return null
+  if (choice.startsWith('lang:')) return choice.slice(5)
+  const typed = await promptDialog({
+    title: 'Linguagem do bloco',
+    label: 'Nome ou extensão (ex.: rust, go, php)',
+    value: current.trim(),
+    confirmLabel: 'Usar',
+    icon: 'code',
+  })
+  return typed === null ? null : typed
+}
 
 // ── Ligação com o app (imagens, código em tela cheia, avisos) ─────────────────
 
@@ -175,10 +284,12 @@ const appHost: EditorHost = {
     toolbar.visible = false
     codeRequest.value = request
   },
+  chooseLanguage,
   notify: (message, undo) => {
     showToast({ message, icon: 'check', action: undo ? { label: 'Desfazer', run: undo } : undefined })
   },
   mentions: props.mentions,
+  titleFirstLine: props.titleFirstLine,
 }
 
 function closeCode(): void {
@@ -188,9 +299,20 @@ function closeCode(): void {
 
 // ── Ciclo de vida ───────────────────────────────────────────────────────────
 
+/**
+ * Ao abrir uma nota, o cursor fica depois da marcação da primeira linha ("# " de um
+ * título), que continua escondida — ou dentro do código, se a nota começa com um bloco.
+ */
+function initialCursor(doc: string): number {
+  const fence = /^ {0,3}(`{3,}|~{3,})[^\n]*\n/.exec(doc)
+  if (fence && doc.includes(`\n${fence[1]}`, fence[0].length - 1)) return fence[0].length
+  return /^(?:#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+\[[ xX]\][ \t]+|[-*+][ \t]+|\d{1,9}[.)][ \t]+)/.exec(doc)?.[0].length ?? 0
+}
+
 function createState(doc: string): EditorState {
   return EditorState.create({
     doc,
+    selection: EditorSelection.cursor(initialCursor(doc)),
     extensions: buildExtensions(
       {
         onChange: (value) => {
@@ -214,9 +336,13 @@ function emitCursor(): void {
   emit('cursor', { line: line.number, col: head - line.from + 1, selected: 0 })
 }
 
+/** "Editar link…" no menu do clique direito (ContextMenuHost): abre o campo do endereço. */
+const onEditLinkRequest = () => void openLink()
+
 onMounted(() => {
   view = new EditorView({ state: createState(props.modelValue), parent: editorParent.value! })
   view.scrollDOM.addEventListener('scroll', scheduleToolbar, { passive: true })
+  view.dom.addEventListener('fournotes:edit-link', onEditLinkRequest)
   emitCursor()
   if (props.autofocus) requestAnimationFrame(() => view?.focus())
 })
@@ -225,6 +351,7 @@ onBeforeUnmount(() => {
   if (frame) cancelAnimationFrame(frame)
   window.removeEventListener('mouseup', onMouseUp)
   view?.scrollDOM.removeEventListener('scroll', scheduleToolbar)
+  view?.dom.removeEventListener('fournotes:edit-link', onEditLinkRequest)
   view?.destroy()
   view = null
 })
@@ -246,11 +373,13 @@ watch(
     if (cache.size > 40) cache.delete(cache.keys().next().value!)
     emitCursor()
     toolbar.visible = false
+    toolbar.linkMode = false
     if (props.autofocus) view.focus()
   },
 )
 
-// O conteúdo mudou por fora (arquivo editado em outro programa…)
+// O conteúdo mudou por fora (arquivo editado em outro programa, menção corrigida…):
+// essa mudança não entra no Desfazer
 watch(
   () => props.modelValue,
   (value) => {
@@ -259,12 +388,16 @@ watch(
     if (value === current) return
     applyingExternal = true
     try {
-      view.dispatch({ changes: minimalChange(current, value) })
+      view.dispatch({ changes: minimalChange(current, value), annotations: Transaction.addToHistory.of(false) })
     } finally {
       applyingExternal = false
     }
   },
 )
+
+// Um título ou estado mencionado mudou (tarefa concluída, nota renomeada…): redesenha os chips
+const mentionsRevision = computed(() => props.mentions?.revision() ?? '')
+watch(mentionsRevision, () => view?.dispatch({ effects: refreshMentions.of(null) }))
 
 defineExpose({
   focus: () => view?.focus(),
@@ -282,7 +415,7 @@ defineExpose({
     ref="host"
     class="markdown-editor"
     @mousedown.capture="onMouseDown"
-    @keydown.esc="toolbar.visible = false"
+    @keydown="onKeydown"
     @contextmenu="toolbar.visible = false"
   >
     <div ref="editorParent" class="editor-parent" />
@@ -292,10 +425,15 @@ defineExpose({
       :y="toolbar.y"
       :below="toolbar.below"
       :active="toolbar.active"
+      :link-mode="toolbar.linkMode"
+      :link-initial="toolbar.linkInitial"
       @inline="applyInline"
       @color="applyColor"
       @line="applyLine"
-      @link="run(insertLink)"
+      @open-link="openLink"
+      @link="applyLink"
+      @unlink="unlink"
+      @close-link="closeLink"
       @clear="run(clearFormatting)"
     />
     <CodeFullscreen v-if="codeRequest" :request="codeRequest" @close="closeCode" />

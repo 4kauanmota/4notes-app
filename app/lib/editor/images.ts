@@ -3,19 +3,20 @@
  *
  * - As imagens ficam em <workspace>/attachments/ (ver paste.ts) e o caminho na nota
  *   é relativo à pasta da nota, então o .md também funciona em outros editores.
- * - Fora da edição, a linha da imagem mostra a própria imagem; com o cursor na
- *   linha, aparece o texto Markdown (e a imagem continua logo abaixo).
+ * - No editor aparece só a imagem — o texto Markdown dela nunca aparece. Clicar na
+ *   imagem a seleciona (Backspace/Delete tira da nota, Ctrl+C copia); o que for
+ *   digitado logo antes ou depois de uma imagem sozinha na linha vai para uma linha própria.
  * - O botão Remover tira a imagem da nota e apaga o arquivo (vai para a Lixeira),
  *   a menos que outra nota use a mesma imagem. Desfazer (no aviso ou Ctrl+Z) devolve tudo.
  */
 import { undo } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
-import { StateField, type EditorState, type Extension, type Range } from '@codemirror/state'
+import { EditorSelection, EditorState, StateField, type Extension, type Range } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { iconSvg } from '../icons'
-import { focusChanged, focusTracking, isFocused } from './focus'
 import { resolveFromNote } from '../files/workspace-path'
 import { editorHost } from './host'
+import { singleInsertion } from './markdown-preview'
 
 interface ImageRef {
   from: number
@@ -73,16 +74,24 @@ class ImageWidget extends WidgetType {
     readonly path: string | null,
     readonly url: string | null,
     readonly alt: string,
+    /** A imagem está selecionada (contorno em volta). */
+    readonly selected: boolean,
   ) {
     super()
   }
   override eq(other: ImageWidget): boolean {
-    return other.src === this.src && other.url === this.url && other.alt === this.alt
+    return other.src === this.src && other.url === this.url && other.alt === this.alt && other.selected === this.selected
+  }
+  /** Só a seleção mudou: atualiza o contorno sem recarregar a imagem. */
+  override updateDOM(dom: HTMLElement, _view: EditorView, from: WidgetType): boolean {
+    if (!(from instanceof ImageWidget) || from.src !== this.src || from.url !== this.url || from.alt !== this.alt) return false
+    dom.classList.toggle('selected', this.selected)
+    return true
   }
   toDOM(view: EditorView): HTMLElement {
     // Espaçamento por padding no elemento de fora (margens atrapalham a medição do editor)
     const wrap = document.createElement('div')
-    wrap.className = 'cm-image'
+    wrap.className = this.selected ? 'cm-image selected' : 'cm-image'
     wrap.dataset.src = this.src
     const frame = document.createElement('div')
     frame.className = 'cm-image-frame'
@@ -137,31 +146,58 @@ function imagePath(state: EditorState, src: string): string | null {
   return host ? resolveFromNote(host.assetBase(), src) : null
 }
 
-function buildDecorations(state: EditorState): DecorationSet {
-  const focused = isFocused(state)
+const hidden = Decoration.replace({})
+
+function buildDecorations(state: EditorState): { decorations: DecorationSet; atoms: DecorationSet } {
   const ranges: Range<Decoration>[] = []
+  const atoms: Range<Decoration>[] = []
   const host = state.facet(editorHost)
   for (const image of findImages(state)) {
     const path = imagePath(state, image.src)
-    const widget = new ImageWidget(image.src, path, host && path ? host.imageUrl(path) : null, image.alt)
-    const editing = focused && state.selection.ranges.some((range) => range.from <= image.lineTo && range.to >= image.lineFrom)
-    if (image.alone && !editing) {
+    const selected = state.selection.ranges.some((range) => !range.empty && range.from <= image.from && range.to >= image.to)
+    const widget = new ImageWidget(image.src, path, host && path ? host.imageUrl(path) : null, image.alt, selected)
+    if (image.alone) {
       ranges.push(Decoration.replace({ widget, block: true }).range(image.lineFrom, image.lineTo))
+      atoms.push(hidden.range(image.lineFrom, image.lineTo))
       continue
     }
-    if (!editing) ranges.push(Decoration.replace({}).range(image.from, image.to))
+    // Imagem no meio do texto: o Markdown dela some e a imagem aparece logo abaixo da linha
+    ranges.push(hidden.range(image.from, image.to))
+    atoms.push(hidden.range(image.from, image.to))
     ranges.push(Decoration.widget({ widget, block: true, side: 1 }).range(image.lineTo))
   }
-  return Decoration.set(ranges, true)
+  return { decorations: Decoration.set(ranges, true), atoms: Decoration.set(atoms, true) }
 }
 
-const imageField = StateField.define<DecorationSet>({
+const imageField = StateField.define<{ decorations: DecorationSet; atoms: DecorationSet }>({
   create: (state) => buildDecorations(state),
-  update(decorations, tr) {
-    const changed = tr.docChanged || tr.selection || focusChanged(tr.effects) || syntaxTree(tr.state) !== syntaxTree(tr.startState)
-    return changed ? buildDecorations(tr.state) : decorations
+  update(value, tr) {
+    const changed = tr.docChanged || tr.selection || syntaxTree(tr.state) !== syntaxTree(tr.startState)
+    return changed ? buildDecorations(tr.state) : value
   },
-  provide: (field) => EditorView.decorations.from(field),
+  provide: (field) => [
+    EditorView.decorations.from(field, (value) => value.decorations),
+    EditorView.atomicRanges.of((view) => view.state.field(field).atoms),
+  ],
+})
+
+/** Texto digitado encostado numa imagem sozinha na linha vai para uma linha própria (antes ou depois dela). */
+const textBesideImage = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged || tr.isUserEvent('input.type.compose') || !(tr.isUserEvent('input.type') || tr.isUserEvent('input.paste'))) return tr
+  const insertion = singleInsertion(tr)
+  if (!insertion) return tr
+  const line = tr.startState.doc.lineAt(insertion.pos)
+  if (insertion.pos !== line.from && insertion.pos !== line.to) return tr
+  const image = findImages(tr.startState).find((item) => item.lineFrom === line.from && item.alone)
+  if (!image) return tr
+  const atEnd = insertion.pos === line.to
+  const insert = atEnd ? `\n${insertion.text}` : `${insertion.text}\n`
+  return {
+    changes: { from: insertion.pos, insert },
+    selection: EditorSelection.cursor(insertion.pos + (atEnd ? insert.length : insertion.text.length)),
+    userEvent: 'input.type',
+    scrollIntoView: true,
+  }
 })
 
 /** Imagem do widget (pela linha em que ele está e pelo endereço). */
@@ -200,11 +236,11 @@ const imageEvents = EditorView.domEventHandlers({
       }
       return true
     }
-    // Clique na imagem: seleciona o texto dela (mostra o Markdown)
-    view.dispatch({ selection: { anchor: image.to, head: image.from }, userEvent: 'select.pointer' })
+    // Clique na imagem: seleciona a imagem (Backspace/Delete tira da nota, Ctrl+C copia)
+    view.dispatch({ selection: EditorSelection.range(image.alone ? image.lineTo : image.to, image.alone ? image.lineFrom : image.from), userEvent: 'select' })
     view.focus()
     return true
   },
 })
 
-export const imagePreview: Extension = [focusTracking, imageField, imageEvents]
+export const imagePreview: Extension = [imageField, textBesideImage, imageEvents]

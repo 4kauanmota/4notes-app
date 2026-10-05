@@ -4,9 +4,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MarkdownEditor from '~/components/editor/MarkdownEditor.vue'
 import { confirmDialog } from '~/composables/useDialog'
 import { separator, showContextMenu } from '~/composables/useContextMenu'
+import type { MentionHost } from '~/lib/editor/host'
 import { paletteVar, type PaletteColor } from '~/lib/colors'
 import { countWords } from '~/lib/notes/title'
 import { DATA_PATHS } from '~/lib/storage/paths'
+import { describeMention, mentionRevision, openMentionPath, searchMentions } from '~/stores/mentions'
 import { useMindmapStore } from '~/stores/mindmap'
 
 const emit = defineEmits<{ newLinked: [] }>()
@@ -17,6 +19,16 @@ const colorOpen = ref(false)
 const colorWrap = ref<HTMLElement>()
 
 const note = computed(() => mindmap.selectedNote.value!)
+const noteDir = computed(() => `${DATA_PATHS.mindmapDir}/${mindmap.state.currentMap}`)
+const notePath = computed(() => `${noteDir.value}/${note.value.id}`)
+
+/** Menções (@) a notas (das Notas e dos mapas) e a tarefas — stores/mentions.ts. */
+const mentions: MentionHost = {
+  search: (query) => searchMentions(query, notePath.value),
+  describe: describeMention,
+  open: openMentionPath,
+  revision: () => mentionRevision.value,
+}
 const neighbors = computed(() => mindmap.neighbors(note.value.id))
 const color = computed(() => mindmap.noteColor(note.value.id))
 const words = computed(() => countWords(note.value.content))
@@ -158,9 +170,10 @@ defineExpose({ focusEditor: () => editor.value?.focusEnd(), focusTitle: () => do
         ref="editor"
         :doc-key="note.key"
         :model-value="note.content"
-        :asset-base="`${DATA_PATHS.mindmapDir}/${mindmap.state.currentMap}`"
-        :note-path="`${DATA_PATHS.mindmapDir}/${mindmap.state.currentMap}/${note.id}`"
-        placeholder="Escreva aqui…"
+        :asset-base="noteDir"
+        :note-path="notePath"
+        :mentions="mentions"
+        placeholder="Escreva aqui… (@ menciona notas e tarefas)"
         @update:model-value="(value) => mindmap.updateContent(note.id, value)"
       />
     </div>

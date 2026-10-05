@@ -5,23 +5,33 @@ import MarkdownEditor from '~/components/editor/MarkdownEditor.vue'
 import { useShortcuts } from '~/composables/useShortcuts'
 import type { MentionHost } from '~/lib/editor/host'
 import type { CursorInfo } from '~/lib/editor/setup'
-import { DATA_PATHS } from '~/lib/storage/paths'
-import { openMentionPath, searchNoteMentions, titleOfMentionPath } from '~/stores/mentions'
+import { describeMention, mentionRevision, openMentionPath, searchMentions } from '~/stores/mentions'
 import { useNotesStore } from '~/stores/notes'
 
 const notes = useNotesStore()
 const editor = ref<InstanceType<typeof MarkdownEditor>>()
 const cursor = ref<CursorInfo>({ line: 1, col: 1, selected: 0 })
 
-/** Menções (@) a outras notas — das Notas e do Mapa Mental (stores/mentions.ts). */
+/** Menções (@) a notas (das Notas e do Mapa Mental) e a tarefas — stores/mentions.ts. */
 const mentions: MentionHost = {
-  search: (query) => searchNoteMentions(query, notes.activeNote.value?.path ?? null),
-  titleOf: titleOfMentionPath,
+  search: (query) => searchMentions(query, notes.activeNote.value?.path ?? null),
+  describe: describeMention,
   open: openMentionPath,
+  revision: () => mentionRevision.value,
 }
 
-function newNote() {
-  notes.createNote()
+/**
+ * Nota nova (na categoria `category`, se vier de uma categoria da lista lateral).
+ * `titlePrefix` (o + de uma pasta pelo título): a nota já começa com o título da
+ * pasta ("4notes ") e o cursor fica no fim, pronto para completar.
+ */
+function newNote(category: string | null = null, titlePrefix?: string) {
+  if (titlePrefix) {
+    notes.createNote(`# ${titlePrefix} `, category, { template: true })
+    void nextTick(() => editor.value?.focusEnd())
+    return
+  }
+  notes.createNote('', category)
   void nextTick(() => editor.value?.focus())
 }
 
@@ -34,8 +44,8 @@ function saveActive() {
 }
 
 useShortcuts({
-  'mod+n': newNote,
-  'mod+t': newNote,
+  'mod+n': () => newNote(),
+  'mod+t': () => newNote(),
   'mod+w': closeActive,
   'mod+s': saveActive,
   'mod+tab': () => notes.cycleTab(1),
@@ -53,17 +63,18 @@ useShortcuts({
   <div class="notes-page" :class="{ 'sidebar-open': notes.state.sidebarOpen }">
     <NotesSidebar @new="newNote" />
     <section class="notes-main">
-      <NotesTabs @new="newNote" />
+      <NotesTabs @new="newNote()" />
       <div class="notes-editor">
         <MarkdownEditor
           v-if="notes.activeNote.value"
           ref="editor"
           :doc-key="notes.activeNote.value.id"
           :model-value="notes.activeNote.value.content"
-          :asset-base="DATA_PATHS.notesDir"
+          :asset-base="notes.activeNote.value.dir"
           :note-path="notes.activeNote.value.path"
           :mentions="mentions"
-          placeholder="Comece a escrever… a primeira linha vira o título (ex.: # Minha nota)"
+          title-first-line
+          placeholder="Título da nota"
           autofocus
           @update:model-value="(value) => notes.updateContent(notes.activeNote.value!.id, value)"
           @cursor="(info) => (cursor = info)"
@@ -72,6 +83,7 @@ useShortcuts({
       </div>
       <NotesStatusBar v-if="notes.activeNote.value" :note="notes.activeNote.value" :cursor="cursor" />
     </section>
+    <NoteCategoryDialog />
   </div>
 </template>
 

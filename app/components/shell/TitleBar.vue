@@ -11,12 +11,14 @@ import { noteTitle, useNotesStore } from '~/stores/notes'
 import { useMindmapStore } from '~/stores/mindmap'
 import { useTasksStore } from '~/stores/tasks'
 import { useAppStore } from '~/stores/app'
+import { useLinksStore } from '~/stores/links'
 
 const route = useRoute()
 const app = useAppStore()
 const notes = useNotesStore()
 const tasks = useTasksStore()
 const mindmap = useMindmapStore()
+const links = useLinksStore()
 
 const platform = computed(() => app.state.bootstrap?.platform ?? 'win32')
 const workspace = computed(() => (app.state.phase === 'ready' ? app.workspaceName() : ''))
@@ -41,12 +43,18 @@ const moduleLabel = computed(() => {
   if (route.path.startsWith('/notes')) return 'Notas'
   if (route.path.startsWith('/tasks')) return 'Tarefas'
   if (route.path.startsWith('/mindmap')) return 'Mapa Mental'
+  if (route.path.startsWith('/links')) return 'Links'
   return null
 })
 
 const context = computed(() => {
   if (!moduleLabel.value) return null
-  if (route.path.startsWith('/notes')) return notes.activeNote.value ? noteTitle(notes.activeNote.value) : null
+  if (route.path.startsWith('/notes')) {
+    const note = notes.activeNote.value
+    if (!note) return null
+    const category = notes.categoryOf(note)
+    return category ? `${category.name} / ${noteTitle(note)}` : noteTitle(note)
+  }
   if (route.path.startsWith('/mindmap')) {
     const note = mindmap.state.panelOpen ? mindmap.selectedNote.value?.title : null
     return note ? `${mindmap.state.currentMap} / ${note}` : mindmap.state.currentMap || null
@@ -58,6 +66,10 @@ const context = computed(() => {
     if (selection === 'done') return 'Concluídas'
     const id = selection.slice(4)
     return id === 'none' ? 'Sem categoria' : (tasks.categoryById.value.get(id)?.name ?? null)
+  }
+  if (route.path.startsWith('/links')) {
+    if (links.state.selection === 'none') return 'Sem pasta'
+    return links.selectedFolder.value?.name ?? null
   }
   return null
 })

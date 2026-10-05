@@ -1,11 +1,15 @@
 <script setup lang="ts">
 /**
- * Abas das notas abertas (como no Bloco de Notas do Windows 11). Arraste para reordenar.
+ * Abas das notas abertas (como no Bloco de Notas do Windows 11). Arraste para reordenar
+ * — ou até uma categoria da lista lateral, para colocar a nota nela.
+ * A aba de uma nota com categoria é marcada com a cor da categoria.
  * Com muitas abas, a faixa rola na horizontal (roda do mouse ou barra fina no topo).
  */
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { choiceDialog } from '~/composables/useDialog'
 import { separator, showContextMenu } from '~/composables/useContextMenu'
+import { categorySubmenu, handleCategoryChoice, startNoteDrag } from '~/composables/useNoteCategories'
+import { paletteVar } from '~/lib/colors'
 import { modKeyLabel } from '~/lib/platform'
 import { noteTitle, useNotesStore, type QuickNote } from '~/stores/notes'
 
@@ -85,10 +89,16 @@ function onTrackDown(event: PointerEvent) {
 
 // ── Reordenar arrastando ────────────────────────────────────────────────────
 
-function onDragStart(index: number, event: DragEvent) {
+function onDragStart(index: number, note: QuickNote, event: DragEvent) {
   dragIndex.value = index
+  startNoteDrag(event, note.id)
   event.dataTransfer?.setData('text/plain', String(index))
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+/** Cor da categoria da nota (marca a aba), ou null. */
+function categoryColor(note: QuickNote): string | null {
+  const category = notes.categoryOf(note)
+  return category ? paletteVar(category.color) : null
 }
 
 function onDragOver(index: number, event: DragEvent) {
@@ -110,10 +120,14 @@ function onDragEnd() {
 
 // ── Fechar ──────────────────────────────────────────────────────────────────
 
-/** X da aba: pergunta se a nota deve ser guardada (só fecha a aba) ou apagada. */
+/**
+ * X da aba: numa nota sem categoria, pergunta se ela deve ser guardada (só fecha a
+ * aba) ou apagada. Nota com categoria é sempre guardada (apagar fica pela lixeira
+ * da lista lateral).
+ */
 async function requestClose(note: QuickNote) {
-  if (!note.path && !note.content.trim()) {
-    void notes.closeTab(note.id) // aba vazia que nunca foi salva: não há o que guardar
+  if (notes.isBlank(note) || notes.categoryOf(note)) {
+    void notes.closeTab(note.id) // nada a guardar (aba vazia) ou nota de categoria: fecha guardando
     return
   }
   const choice = await choiceDialog({
@@ -136,11 +150,13 @@ async function openMenu(note: QuickNote) {
     { id: 'close', label: 'Fechar aba' },
     { id: 'close-others', label: 'Fechar as outras abas', enabled: notes.state.openIds.length > 1 },
     separator,
+    categorySubmenu(note),
     { id: 'duplicate', label: 'Duplicar nota' },
     { id: 'reveal', label: 'Mostrar no Explorador', enabled: !!note.path },
     separator,
     { id: 'delete', label: 'Excluir nota', danger: true },
   ])
+  if (handleCategoryChoice(choice, note)) return
   if (choice === 'close') void notes.closeTab(note.id)
   if (choice === 'close-others') notes.closeOtherTabs(note.id)
   if (choice === 'duplicate') notes.duplicateNote(note.id)
@@ -173,16 +189,19 @@ async function openMenu(note: QuickNote) {
               active: note.id === notes.state.activeId,
               dragging: dragIndex === index,
               'drop-target': dropIndex === index && dragIndex !== index,
+              'has-category': !!categoryColor(note),
             }"
+            :style="categoryColor(note) ? { '--tab-cat': categoryColor(note)! } : undefined"
             :data-tab="note.id"
+            :data-category="notes.categoryOf(note)?.name"
             role="tab"
             :aria-selected="note.id === notes.state.activeId"
-            :title="noteTitle(note)"
+            :title="notes.categoryOf(note) ? `${noteTitle(note)} · ${notes.categoryOf(note)!.name}` : noteTitle(note)"
             draggable="true"
             @click="notes.activate(note.id)"
             @mousedown.middle.prevent="notes.closeTab(note.id)"
             @contextmenu.prevent="openMenu(note)"
-            @dragstart="onDragStart(index, $event)"
+            @dragstart="onDragStart(index, note, $event)"
             @dragover="onDragOver(index, $event)"
             @drop.prevent="onDrop(index)"
             @dragend="onDragEnd"
@@ -298,6 +317,25 @@ async function openMenu(note: QuickNote) {
   bottom: 0;
   height: 2.5px;
   background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+}
+/* Nota com categoria: o indicador usa a cor da categoria (nas abas inativas, mais discreto) */
+.tab.has-category::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--tab-cat);
+  opacity: 0.7;
+}
+.tab.has-category.active::before {
+  left: -1px;
+  right: -1px;
+  height: 2.5px;
+  border-radius: 0;
+  opacity: 1;
 }
 /* Separador discreto entre abas inativas */
 .tab:not(.active)::after {

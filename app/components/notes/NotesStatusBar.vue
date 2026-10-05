@@ -3,7 +3,7 @@
 import { computed } from 'vue'
 import { stripHtmlFormatting, stripImages } from '~/lib/editor/markup'
 import type { CursorInfo } from '~/lib/editor/setup'
-import { basename } from '~/lib/files/filename'
+import { DATA_PATHS } from '~/lib/storage/paths'
 import { countWords } from '~/lib/notes/title'
 import { useNotesStore, type QuickNote } from '~/stores/notes'
 
@@ -12,7 +12,8 @@ const notes = useNotesStore()
 
 const words = computed(() => countWords(props.note.content))
 const chars = computed(() => stripImages(stripHtmlFormatting(props.note.content)).length)
-const fileName = computed(() => (props.note.path ? basename(props.note.path) : 'não salvo ainda'))
+/** Arquivo dentro de notes/ ("Ideias.md" ou, numa categoria, "Trabalho/Ideias.md"). */
+const fileName = computed(() => (props.note.path ? props.note.path.slice(DATA_PATHS.notesDir.length + 1) : 'não salvo ainda'))
 
 const status = computed(() => {
   switch (props.note.status) {

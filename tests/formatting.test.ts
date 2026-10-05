@@ -157,11 +157,30 @@ describe('formatação inline', () => {
     expect(e.text).toBe(doc)
   })
 
-  it('sem seleção, insere as marcações com o cursor no meio', () => {
+  it('sem seleção, o formato fica guardado para o que for digitado (nada de "****" no texto)', () => {
     const e = editor('abc ', 4)
     toggleFormat(e.view, 'bold')
-    expect(e.text).toBe('abc ****')
-    expect(e.state.selection.main.head).toBe(6)
+    expect(e.text).toBe('abc ')
+    expect(activeFormats(e.state).formats.has('bold')).toBe(true)
+    e.type('x')
+    expect(e.text).toBe('abc **x**')
+    expect(e.state.selection.main.head).toBe(7) // dentro do negrito: o resto continua em negrito
+    e.type('y')
+    expect(e.text).toBe('abc **xy**')
+
+    // Ctrl+B de novo desliga antes de digitar
+    const off = editor('abc ', 4)
+    toggleFormat(off.view, 'bold')
+    toggleFormat(off.view, 'bold')
+    off.type('x')
+    expect(off.text).toBe('abc x')
+
+    // Dois formatos guardados
+    const two = editor('', 0)
+    toggleFormat(two.view, 'bold')
+    toggleFormat(two.view, 'underline')
+    two.type('o')
+    expect(two.text).toBe('**<u>o</u>**')
   })
 
   it('limpa toda a formatação', () => {

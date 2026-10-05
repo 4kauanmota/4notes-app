@@ -2,11 +2,12 @@
 /**
  * Barra de formatação que aparece sobre o texto selecionado (como no Notion).
  * Só mostra botões e avisa o que foi clicado — quem aplica é o MarkdownEditor.
- * O mousedown é cancelado para o editor não perder o foco nem a seleção.
+ * O mousedown é cancelado para o editor não perder o foco nem a seleção (menos no
+ * campo do endereço do link, que precisa do foco para receber o texto).
  */
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { PALETTE, PALETTE_LABELS, paletteVar, type PaletteColor } from '~/lib/colors'
-import type { InlineFormat, LineFormat } from '~/lib/editor/formatting'
+import type { ActiveFormats, InlineFormat, LineFormat } from '~/lib/editor/formatting'
 import { modKeyLabel } from '~/lib/platform'
 
 const props = defineProps<{
@@ -14,23 +15,63 @@ const props = defineProps<{
   y: number
   /** true = abaixo da seleção (quando não há espaço acima). */
   below: boolean
-  active: { formats: Set<InlineFormat>; color: string | null }
+  active: ActiveFormats
+  /** Editando o endereço do link (campo no lugar dos botões). */
+  linkMode: boolean
+  /** Endereço inicial do campo (o do link atual ou um copiado). */
+  linkInitial: string
 }>()
 
 const emit = defineEmits<{
   inline: [format: InlineFormat]
   color: [color: PaletteColor | null]
   line: [format: LineFormat]
-  link: []
+  'open-link': []
+  link: [url: string]
+  unlink: []
+  'close-link': []
   clear: []
 }>()
 
 const mod = modKeyLabel()
 const paletteOpen = ref(false)
+const linkInput = ref<HTMLInputElement>()
+const linkValue = ref('')
 watch(
   () => [props.x, props.y],
   () => (paletteOpen.value = false),
 )
+watch(
+  () => props.linkMode,
+  async (open) => {
+    if (!open) return
+    linkValue.value = props.linkInitial
+    await nextTick()
+    linkInput.value?.focus()
+    linkInput.value?.select()
+  },
+  { immediate: true },
+)
+
+function onMouseDown(event: MouseEvent) {
+  // Só o campo do link pode receber o foco; o resto não tira a seleção do editor
+  if (!(event.target as HTMLElement).closest('input')) event.preventDefault()
+}
+
+function submitLink() {
+  const url = linkValue.value.trim()
+  if (url) emit('link', url)
+  else if (props.active.link) emit('unlink')
+  else emit('close-link')
+}
+
+function onLinkKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('close-link')
+  }
+}
 
 const inlineButtons = computed(() => [
   { format: 'bold' as const, icon: 'bold', label: `Negrito (${mod}+B)` },
@@ -62,9 +103,30 @@ function pickColor(color: PaletteColor | null) {
     :style="{ left: `${x}px`, top: `${y}px` }"
     role="toolbar"
     aria-label="Formatação do texto"
-    @mousedown.prevent
+    @mousedown="onMouseDown"
   >
-    <div class="row">
+    <form v-if="linkMode" class="row link-row" @submit.prevent="submitLink">
+      <AppIcon name="link" :size="15" class="link-icon" />
+      <input
+        ref="linkInput"
+        v-model="linkValue"
+        class="link-input"
+        placeholder="Cole ou digite o endereço (https://…)"
+        spellcheck="false"
+        aria-label="Endereço do link"
+        @keydown="onLinkKeydown"
+      />
+      <button type="submit" class="fmt-btn" data-tip="Aplicar (Enter)" data-tip-pos="top" aria-label="Aplicar link">
+        <AppIcon name="check" :size="16" :stroke="2.2" />
+      </button>
+      <button v-if="active.link" type="button" class="fmt-btn" data-tip="Remover link" data-tip-pos="top" aria-label="Remover link" @click="emit('unlink')">
+        <AppIcon name="unlink" :size="16" :stroke="1.9" />
+      </button>
+      <button type="button" class="fmt-btn" data-tip="Cancelar (Esc)" data-tip-pos="top" aria-label="Cancelar" @click="emit('close-link')">
+        <AppIcon name="x" :size="15" :stroke="2" />
+      </button>
+    </form>
+    <div v-else class="row">
       <button
         v-for="item in inlineButtons"
         :key="item.format"
@@ -129,7 +191,15 @@ function pickColor(color: PaletteColor | null) {
       >
         <AppIcon name="code" :size="16" :stroke="2" />
       </button>
-      <button class="fmt-btn" data-format="link" data-tip="Link" data-tip-pos="top" aria-label="Link" @click="emit('link')">
+      <button
+        class="fmt-btn"
+        :class="{ on: !!active.link }"
+        data-format="link"
+        :data-tip="active.link ? `Link: ${active.link}` : `Link (${mod}+K)`"
+        data-tip-pos="top"
+        aria-label="Link"
+        @click="emit('open-link')"
+      >
         <AppIcon name="link" :size="16" :stroke="1.9" />
       </button>
       <button class="fmt-btn" data-format="clear" data-tip="Limpar formatação" data-tip-pos="top" aria-label="Limpar formatação" @click="emit('clear')">
@@ -137,7 +207,7 @@ function pickColor(color: PaletteColor | null) {
       </button>
     </div>
 
-    <div v-if="paletteOpen" class="palette" role="radiogroup" aria-label="Cor do texto">
+    <div v-if="paletteOpen && !linkMode" class="palette" role="radiogroup" aria-label="Cor do texto">
       <button class="swatch default" role="radio" :aria-checked="!active.color" data-tip="Cor padrão" data-tip-pos="top" aria-label="Cor padrão" @click="pickColor(null)">
         <span class="default-a">A</span>
       </button>
@@ -184,6 +254,30 @@ function pickColor(color: PaletteColor | null) {
   display: flex;
   align-items: center;
   gap: 1px;
+}
+.link-row {
+  gap: 4px;
+  padding-left: 8px;
+}
+.link-icon {
+  color: var(--primary-text);
+}
+.link-input {
+  width: 260px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  user-select: text;
+}
+.link-input:focus {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
 }
 .sep {
   width: 1px;

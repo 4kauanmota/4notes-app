@@ -12,6 +12,10 @@
  * simples (nada de Node.js nem de Vue).
  */
 
+import type { BookmarkFolder, BrowserSource } from './bookmarks'
+
+export type { BookmarkFolder, BookmarkLink, BookmarkNode, BrowserSource } from './bookmarks'
+
 export type ThemePreference = 'system' | 'light' | 'dark'
 
 export interface AppSettings {
@@ -65,7 +69,7 @@ export interface FolderInspection {
   path: string
   exists: boolean
   isEmpty: boolean
-  /** A pasta já contém dados do 4notes (notes/, tasks/, mindmap/ ou .4notes/). */
+  /** A pasta já contém dados do 4notes (notes/, tasks/, mindmap/, links/ ou .4notes/). */
   hasData: boolean
   writable: boolean
 }
@@ -102,6 +106,28 @@ export function workspaceFileUrl(relativePath: string): string {
 
 /** Resultado de apagar uma imagem: apagada, mantida (outra nota usa) ou já não existia. */
 export type RemoveImageResult = 'removed' | 'in-use' | 'missing'
+
+/** Imagem escolhida no seletor de arquivos do sistema (ex.: a imagem de uma categoria). */
+export interface PickedImage {
+  /** Nome original do arquivo (só para mostrar). */
+  name: string
+  /** Extensão em minúsculas, sem ponto ("png", "jpg"…). */
+  extension: string
+  data: Uint8Array
+}
+
+/** Extensões de imagem aceitas pelo seletor de imagens. */
+export const PICKABLE_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg'] as const
+
+/** Título e ícone de um site (módulo Links). */
+export interface LinkMeta {
+  /** Título da página (null = não foi possível ler). */
+  title: string | null
+  /** Arquivo do ícone em links/icons/ (null = sem ícone). */
+  icon: string | null
+  /** O site respondeu (false = sem internet ou fora do ar). */
+  reachable: boolean
+}
 
 /** Clique direito em texto (editor, campos): dados para montar o menu de copiar/colar e do corretor. */
 export interface TextMenuRequest {
@@ -158,6 +184,14 @@ export interface FourNotesApi {
     trash(path: string): Promise<void>
     /** Mostra o arquivo selecionado no Explorador de Arquivos. */
     reveal(path: string): Promise<void>
+    /** Cria a pasta (e as de cima, se faltarem). */
+    mkdir(dir: string): Promise<void>
+  }
+  images: {
+    /** Abre o seletor de arquivos do sistema para escolher uma imagem (até 10 MB). null = cancelado. */
+    pick(): Promise<PickedImage | null>
+    /** Grava uma imagem no workspace (caminho relativo com extensão de imagem), substituindo a anterior. */
+    write(path: string, data: Uint8Array): Promise<FileEntry>
   }
   attachments: {
     /** Grava uma imagem em attachments/ e devolve o caminho dela (ex.: "attachments/imagem-20261002-141503.png"). */
@@ -169,6 +203,18 @@ export interface FourNotesApi {
     removeImage(path: string, exceptNote: string | null): Promise<RemoveImageResult>
     /** Devolve uma imagem apagada nesta sessão (Desfazer). */
     restoreImage(path: string): Promise<boolean>
+  }
+  links: {
+    /** Busca o título e o ícone do site (o ícone vai para links/icons/ do workspace). */
+    fetchMeta(url: string, withIcon?: boolean): Promise<LinkMeta>
+    /** Grava um ícone embutido no arquivo de favoritos (data:image/…) como o ícone do site. */
+    saveIcon(host: string, dataUrl: string): Promise<string | null>
+    /** Navegadores (e perfis) com favoritos neste computador. */
+    browsers(): Promise<BrowserSource[]>
+    /** Favoritos de um navegador da lista acima. */
+    readBrowser(id: string): Promise<BookmarkFolder[]>
+    /** Escolhe e lê um arquivo HTML de favoritos (null = cancelado). */
+    pickBookmarksFile(): Promise<BookmarkFolder[] | null>
   }
   window: {
     setTitleBarColors(colors: TitleBarColors): void
@@ -204,9 +250,17 @@ export const IPC = {
   filesExists: 'files:exists',
   filesTrash: 'files:trash',
   filesReveal: 'files:reveal',
+  filesMkdir: 'files:mkdir',
+  imagesPick: 'images:pick',
+  imagesWrite: 'images:write',
   attachmentsSaveImage: 'attachments:save-image',
   attachmentsRemoveImage: 'attachments:remove-image',
   attachmentsRestoreImage: 'attachments:restore-image',
+  linksFetchMeta: 'links:fetch-meta',
+  linksSaveIcon: 'links:save-icon',
+  linksBrowsers: 'links:browsers',
+  linksReadBrowser: 'links:read-browser',
+  linksPickFile: 'links:pick-file',
   titleBarColors: 'window:title-bar-colors',
   openExternal: 'shell:open-external',
   textMenu: 'menu:text',

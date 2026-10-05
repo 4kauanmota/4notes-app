@@ -9,6 +9,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import {
   IPC,
+  PICKABLE_IMAGE_EXTENSIONS,
   type BootstrapInfo,
   type DataDirStatus,
   type ListOptions,
@@ -17,7 +18,23 @@ import {
 } from '../shared/ipc'
 import { getConfig, updateConfig } from './config'
 import { copyDataDir, createWorkspace, dataDirStatus, inspectFolder, prepareDataDir } from './data-dir'
-import { AppError, fileExists, listFiles, readFile, removeImage, renameFile, restoreImage, revealFile, saveImage, trashFile, writeFile } from './files'
+import {
+  AppError,
+  fileExists,
+  listFiles,
+  makeDir,
+  readFile,
+  readPickedImage,
+  removeImage,
+  renameFile,
+  restoreImage,
+  revealFile,
+  saveImage,
+  trashFile,
+  writeFile,
+  writeImage,
+} from './files'
+import { fetchLinkMeta, findBrowserSources, pickBookmarksFile, readBrowserBookmarks, saveDataIcon } from './links'
 import { APP_ORIGIN } from './protocol'
 import { setTitleBarColors } from './window'
 
@@ -139,9 +156,32 @@ export function registerIpc(context: IpcContext): void {
   handle(IPC.filesExists, (_event, file: string) => fileExists(requireDataDir(), file))
   handle(IPC.filesTrash, (_event, file: string) => trashFile(requireDataDir(), file))
   handle(IPC.filesReveal, (_event, file: string) => revealFile(requireDataDir(), file))
+  handle(IPC.filesMkdir, (_event, dir: string) => makeDir(requireDataDir(), assertString(dir, 'Caminho')))
+
+  // ── Imagens escolhidas pelo usuário (imagem das categorias) ──
+  handle(IPC.imagesPick, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      title: 'Escolha uma imagem',
+      buttonLabel: 'Usar imagem',
+      properties: ['openFile'],
+      filters: [{ name: 'Imagens', extensions: [...PICKABLE_IMAGE_EXTENSIONS] }],
+    }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    return result.canceled || !result.filePaths[0] ? null : readPickedImage(result.filePaths[0])
+  })
+  handle(IPC.imagesWrite, (_event, file: unknown, data: unknown) => writeImage(requireDataDir(), file, data))
+
   handle(IPC.attachmentsSaveImage, (_event, data: unknown, mime: unknown) => saveImage(requireDataDir(), data, mime))
   handle(IPC.attachmentsRemoveImage, (_event, file: unknown, exceptNote: unknown) => removeImage(requireDataDir(), file, exceptNote))
   handle(IPC.attachmentsRestoreImage, (_event, file: unknown) => restoreImage(requireDataDir(), file))
+
+  // ── Links: título e ícone dos sites, favoritos dos navegadores ──
+  handle(IPC.linksFetchMeta, (_event, url: unknown, withIcon: unknown) => fetchLinkMeta(requireDataDir(), url, withIcon))
+  handle(IPC.linksSaveIcon, (_event, host: unknown, dataUrl: unknown) => saveDataIcon(requireDataDir(), host, dataUrl))
+  handle(IPC.linksBrowsers, () => findBrowserSources())
+  handle(IPC.linksReadBrowser, (_event, id: unknown) => readBrowserBookmarks(id))
+  handle(IPC.linksPickFile, (event) => pickBookmarksFile(BrowserWindow.fromWebContents(event.sender)))
 
   // ── Sistema ──
   handle(IPC.openExternal, async (_event, url: string) => {

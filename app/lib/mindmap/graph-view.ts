@@ -7,6 +7,7 @@
  *   seta: soltar sobre outra nota cria a conexão; soltar no vazio pede uma nota
  *   nova ali, já conectada. Arrastar o fundo move a câmera.
  * - Clicar numa conexão seleciona; o "×" no meio dela (ou Delete) remove.
+ * - Com o mouse sobre uma nota, as setas que saem dela ficam com a cor dela.
  *
  * Esta classe não conhece Vue nem arquivos: recebe dados (GraphData) e cores
  * (GraphTheme) e avisa o que aconteceu por callbacks (GraphViewEvents).
@@ -93,6 +94,8 @@ interface Edge {
   appear: number
   alpha: number
   active: number
+  /** Cor do destaque: a da nota sob o mouse, quando a seta sai dela (null = cor padrão do destaque). */
+  tint: string | null
 }
 
 interface Camera {
@@ -145,7 +148,14 @@ export class GraphView {
   private nodeMap = new Map<string, Node>()
   private adjacency = new Map<string, Set<string>>()
   private camera: Camera = { x: 0, y: 0, k: 1 }
-  private tween: { from: { cx: number; cy: number; k: number }; to: { cx: number; cy: number; k: number }; start: number; duration: number } | null = null
+  private tween: {
+    from: { cx: number; cy: number; k: number }
+    to: { cx: number; cy: number; k: number }
+    start: number
+    duration: number
+    /** "inset" = ajuste por causa do painel (abrir/fechar); "view" = enquadrar, focar etc. */
+    kind: 'inset' | 'view'
+  } | null = null
   private hovered: Node | null = null
   private hoveredEdge: Edge | null = null
   private badgeHovered = false
@@ -250,6 +260,7 @@ export class GraphView {
         appear: old ? old.appear : created.length === nodes.length ? 1 : 0,
         alpha: old?.alpha ?? 1,
         active: old?.active ?? 0,
+        tint: old?.tint ?? null,
       }
     })
     this.placeNewNodes(created)
@@ -296,9 +307,11 @@ export class GraphView {
   setInsetRight(pixels: number, animate = true): void {
     const next = Math.max(0, pixels)
     if (next === this.insetRight) return
-    const center = this.viewCenter()
+    // Se a câmera ainda está indo para algum lugar, o centro que vale é o de destino
+    // (abrir e fechar o painel rápido não pode deixar o mapa deslocado)
+    const target = this.tween ? this.tween.to : { ...this.viewCenter(), k: this.camera.k }
     this.insetRight = next
-    if (this.width > 10 && this.fitted) this.moveCamera({ cx: center.cx, cy: center.cy, k: this.camera.k }, animate)
+    if (this.width > 10 && this.fitted) this.moveCamera({ cx: target.cx, cy: target.cy, k: target.k }, animate, 'inset')
   }
 
   /** Enquadra todos os nós na tela (usa as posições de destino, se estiverem animando). */
@@ -512,7 +525,7 @@ export class GraphView {
     this.camera.y = this.height / 2 - cy * k
   }
 
-  private moveCamera(to: { cx: number; cy: number; k: number }, animate: boolean): void {
+  private moveCamera(to: { cx: number; cy: number; k: number }, animate: boolean, kind: 'inset' | 'view' = 'view'): void {
     if (!animate) {
       this.tween = null
       this.setCenter(to.cx, to.cy, to.k)
@@ -520,7 +533,7 @@ export class GraphView {
       return
     }
     const { cx, cy } = this.viewCenter()
-    this.tween = { from: { cx, cy, k: this.camera.k }, to, start: performance.now(), duration: 560 }
+    this.tween = { from: { cx, cy, k: this.camera.k }, to, start: performance.now(), duration: 560, kind }
     this.events.viewChange?.()
     this.wake()
   }
@@ -647,6 +660,8 @@ export class GraphView {
 
     for (const edge of this.edges) {
       const activeTarget = (focus && (edge.source === focus || edge.target === focus)) || edge === this.hoveredEdge ? 1 : 0
+      // A seta que sai da nota sob o mouse fica com a cor dela (a cor continua enquanto o destaque some)
+      if (activeTarget) edge.tint = focus && edge.source === focus ? this.colorOf(focus) : null
       let alphaTarget = 1
       if (this.pointer?.action === 'link') alphaTarget = 1
       else if (focus) alphaTarget = activeTarget ? 1 : 0.08
@@ -752,7 +767,7 @@ export class GraphView {
       ctx.globalAlpha = Math.max(ctx.globalAlpha, 0.9)
       this.drawArrowLine(from, to, theme.selectedHalo, 7 / camera.k, 13 / camera.k)
     }
-    const color = selected ? theme.selected : edge.active > 0.5 ? theme.edgeActive : theme.edge
+    const color = selected ? theme.selected : edge.active > 0.5 ? (edge.tint ?? theme.edgeActive) : theme.edge
     this.drawArrowLine(from, to, color, (selected ? 2.4 : 1.2 + edge.active * 0.8) / camera.k, (selected ? 10 : 8) / camera.k)
   }
 
@@ -1040,6 +1055,9 @@ export class GraphView {
       action: 'none',
     }
     this.canvas.setPointerCapture(event.pointerId)
+    // Pegar o mapa interrompe a animação da câmera. Se ela só estava se ajustando ao
+    // painel (abrir/fechar), termina o ajuste na hora — senão o mapa ficaria deslocado.
+    if (this.tween?.kind === 'inset') this.setCenter(this.tween.to.cx, this.tween.to.cy, this.tween.to.k)
     this.tween = null
   }
 

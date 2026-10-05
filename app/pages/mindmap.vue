@@ -162,6 +162,12 @@ async function onBackgroundContextMenu(world: { x: number; y: number }) {
   if (choice === 'new') void newNote({ position: [Math.round(world.x), Math.round(world.y)] })
 }
 
+/** Clique no vazio: tira a seleção (da conexão e da nota) e fecha o painel da nota. */
+function onBackgroundClick() {
+  selectedEdge.value = null
+  if (mindmap.state.panelOpen) mindmap.closePanel()
+}
+
 function onBackgroundDblclick(world: { x: number; y: number }) {
   void newNote({ position: [Math.round(world.x), Math.round(world.y)] })
 }
@@ -240,7 +246,7 @@ useShortcuts(
       @edge-click="(id) => (selectedEdge = id)"
       @edge-context-menu="onEdgeContextMenu"
       @edge-remove="removeEdge"
-      @background-click="selectedEdge = null"
+      @background-click="onBackgroundClick"
       @background-dblclick="onBackgroundDblclick"
       @background-context-menu="onBackgroundContextMenu"
       @settled="mindmap.updateLayout"

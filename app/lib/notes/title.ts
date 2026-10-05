@@ -33,7 +33,8 @@ export function stripInlineMarkdown(line: string): string {
 const FENCE = /^\s*(```|~~~)/
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/
 
-function meaningfulLines(content: string): string[] {
+/** Linhas com texto (sem marcação), pulando frontmatter, código e linhas horizontais. `limit` = para depois de N linhas. */
+function meaningfulLines(content: string, limit = Infinity): string[] {
   const lines = content.split(/\r?\n/)
   const result: string[] = []
   let index = 0
@@ -43,7 +44,7 @@ function meaningfulLines(content: string): string[] {
     if (end > 0) index = end + 1
   }
   let inFence = false
-  for (; index < lines.length; index++) {
+  for (; index < lines.length && result.length < limit; index++) {
     const line = lines[index]!
     if (FENCE.test(line)) {
       inFence = !inFence
@@ -57,7 +58,7 @@ function meaningfulLines(content: string): string[] {
 }
 
 export function deriveTitle(content: string): string {
-  const first = meaningfulLines(content)[0] ?? ''
+  const first = meaningfulLines(content, 1)[0] ?? ''
   return Array.from(first).slice(0, 120).join('').trim()
 }
 

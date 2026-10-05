@@ -8,7 +8,7 @@
 import { shell } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { FileEntry, ListOptions, RemoveImageResult } from '../shared/ipc'
+import { PICKABLE_IMAGE_EXTENSIONS, type FileEntry, type ListOptions, type PickedImage, type RemoveImageResult } from '../shared/ipc'
 
 export class AppError extends Error {
   constructor(public code: string, message: string) {
@@ -133,21 +133,30 @@ export async function readFile(root: string, relativePath: string): Promise<stri
 export async function writeFile(root: string, relativePath: string, content: string): Promise<FileEntry> {
   if (typeof content !== 'string') throw new AppError('EINVAL', 'Conteúdo inválido.')
   const absolute = resolveInside(root, relativePath)
+  await writeAtomic(absolute, content)
+  return entryFor(root, absolute, false)
+}
+
+async function writeAtomic(absolute: string, data: string | Uint8Array): Promise<void> {
   const dir = path.dirname(absolute)
   await fs.mkdir(dir, { recursive: true })
   const tmp = path.join(dir, `.${path.basename(absolute)}.${process.pid}.${Date.now().toString(36)}.tmp`)
-  await fs.writeFile(tmp, content, 'utf8')
+  await fs.writeFile(tmp, data)
   try {
     await renameWithRetry(tmp, absolute)
   } catch {
     // Último recurso (ex.: arquivo travado por outro programa): grava diretamente.
     try {
-      await fs.writeFile(absolute, content, 'utf8')
+      await fs.writeFile(absolute, data)
     } finally {
       await fs.rm(tmp, { force: true })
     }
   }
-  return entryFor(root, absolute, false)
+}
+
+/** Cria uma pasta dentro da pasta de dados (e as de cima, se faltarem). */
+export async function makeDir(root: string, relativePath: string): Promise<void> {
+  await fs.mkdir(resolveInside(root, relativePath), { recursive: true })
 }
 
 async function sameFile(a: string, b: string): Promise<boolean> {
@@ -238,9 +247,31 @@ export async function saveImage(root: string, data: unknown, mime: unknown): Pro
   throw new AppError('EEXIST', 'Não foi possível criar um nome para a imagem.')
 }
 
-// ── Imagens removidas das notas ─────────────────────────────────────────────
+const IMAGE_FILE = /\.(?:png|jpe?g|gif|webp|bmp|avif|svg|ico)$/i
+const MAX_PICKED_IMAGE_BYTES = 10 * 1024 * 1024
 
-const IMAGE_FILE = /\.(?:png|jpe?g|gif|webp|bmp|avif|svg)$/i
+// ── Imagens escolhidas no seletor (ex.: imagem de uma categoria) ────────────
+
+/** Lê a imagem escolhida pelo usuário no seletor de arquivos do sistema. */
+export async function readPickedImage(absolute: string): Promise<PickedImage> {
+  const extension = path.extname(absolute).slice(1).toLowerCase()
+  if (!(PICKABLE_IMAGE_EXTENSIONS as readonly string[]).includes(extension)) throw new AppError('EINVAL', 'Escolha um arquivo de imagem.')
+  const stat = await fs.stat(absolute)
+  if (stat.size > MAX_PICKED_IMAGE_BYTES) throw new AppError('EFBIG', 'A imagem é grande demais (máximo de 10 MB).')
+  return { name: path.basename(absolute), extension, data: new Uint8Array(await fs.readFile(absolute)) }
+}
+
+/** Grava os bytes de uma imagem no workspace (substitui a anterior, com escrita atômica). */
+export async function writeImage(root: string, relativePath: unknown, data: unknown): Promise<FileEntry> {
+  if (typeof relativePath !== 'string' || !IMAGE_FILE.test(relativePath)) throw new AppError('EINVAL', 'Imagem inválida.')
+  if (!(data instanceof Uint8Array) || data.byteLength === 0) throw new AppError('EINVAL', 'Imagem vazia.')
+  if (data.byteLength > MAX_IMAGE_BYTES) throw new AppError('EFBIG', 'A imagem é grande demais (máximo de 40 MB).')
+  const absolute = resolveInside(root, relativePath)
+  await writeAtomic(absolute, data)
+  return entryFor(root, absolute, false)
+}
+
+// ── Imagens removidas das notas ─────────────────────────────────────────────
 /** Imagens apagadas nesta sessão, guardadas para o Desfazer conseguir devolvê-las. */
 const removedImages = new Map<string, Buffer>()
 const REMOVED_IMAGES_LIMIT = 200 * 1024 * 1024

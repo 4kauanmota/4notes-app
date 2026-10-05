@@ -5,6 +5,7 @@
  *   ├── notes/      notas rápidas (aba Notas) — arquivos .md
  *   ├── tasks/      tasks.json com tarefas e categorias (+ backups diários)
  *   ├── mindmap/    mapas mentais — uma pasta por mapa (notas .md + mapa.json)
+ *   ├── links/      links.json com os links salvos e as pastas (+ icons/, os ícones dos sites)
  *   ├── attachments/ imagens coladas nas notas
  *   └── .4notes/    estado da interface (abas abertas, posições do mapa). Pode ser apagada.
  *
@@ -14,7 +15,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { workspaceNameProblem, type DataDirStatus, type FolderInspection } from '../shared/ipc'
 
-export const DATA_FOLDERS = ['notes', 'tasks', 'mindmap', 'attachments', '.4notes'] as const
+export const DATA_FOLDERS = ['notes', 'tasks', 'mindmap', 'links', 'attachments', '.4notes'] as const
 
 async function isDirectory(target: string): Promise<boolean> {
   try {

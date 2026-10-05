@@ -1,6 +1,7 @@
 /**
  * Caminhos dentro do workspace (sempre com "/"), usados nos links das notas:
- * imagens (![](../attachments/x.png)) e menções a outras notas ([Ideias](Ideias.md)).
+ * imagens (![](../attachments/x.png)), menções a outras notas ([Ideias](Ideias.md))
+ * e a tarefas ([Estudar](../tasks/tasks.json#t_x1) — o "#" separa o id da tarefa).
  */
 
 /**
@@ -32,14 +33,38 @@ function normalizeSegments(parts: string[]): string[] | null {
   return out
 }
 
-/** Caminho relativo de uma pasta do workspace até um arquivo do workspace ("notes" → "../attachments/x.png"). */
+/** "tasks/tasks.json#t_x1" → ["tasks/tasks.json", "t_x1"]. */
+function splitFragment(value: string): [string, string | null] {
+  const index = value.indexOf('#')
+  return index < 0 ? [value, null] : [value.slice(0, index), value.slice(index + 1)]
+}
+
+/**
+ * Caminho relativo de uma pasta do workspace até um arquivo do workspace ("notes" → "../attachments/x.png").
+ * Um "#id" no fim do alvo é mantido ("tasks/tasks.json#t_x1" → "../tasks/tasks.json#t_x1").
+ */
 export function relativeTo(fromDir: string, target: string): string {
+  const [file, fragment] = splitFragment(target)
   const from = normalizeSegments(fromDir.split('/')) ?? []
-  const to = normalizeSegments(target.split('/')) ?? []
+  const to = normalizeSegments(file.split('/')) ?? []
   let common = 0
   while (common < from.length && common < to.length - 1 && from[common] === to[common]) common++
   const up = from.slice(common).map(() => '..')
-  return [...up, ...to.slice(common)].map((part) => (part === '..' ? part : encodePart(part))).join('/')
+  const path = [...up, ...to.slice(common)].map((part) => (part === '..' ? part : encodePart(part))).join('/')
+  return fragment === null ? path : `${path}#${encodePart(decodePart(fragment))}`
+}
+
+/**
+ * Arquivo do workspace citado num link de uma nota (`href` é relativo à pasta da nota),
+ * com o "#…" do fim separado. null = endereço externo, só "#âncora" ou caminho que sai do workspace.
+ */
+export function resolveLink(noteDir: string, href: string): { path: string; fragment: string | null } | null {
+  const clean = href.trim().replace(/^<|>$/g, '')
+  if (!clean || /^[a-z][\w+.-]*:/i.test(clean) || clean.startsWith('/')) return null
+  const [file, fragment] = splitFragment(clean)
+  if (!file) return null
+  const parts = normalizeSegments([...noteDir.split('/'), ...file.split('/').map(decodePart)])
+  return parts && parts.length ? { path: parts.join('/'), fragment: fragment === null ? null : decodePart(fragment) } : null
 }
 
 /**
@@ -47,8 +72,5 @@ export function relativeTo(fromDir: string, target: string): string {
  * `src` é relativo à pasta da nota). null = endereço externo ou caminho que sai do workspace.
  */
 export function resolveFromNote(noteDir: string, src: string): string | null {
-  const clean = src.trim().replace(/^<|>$/g, '')
-  if (!clean || /^[a-z][\w+.-]*:/i.test(clean) || clean.startsWith('/')) return null
-  const parts = normalizeSegments([...noteDir.split('/'), ...clean.split('/').map(decodePart)])
-  return parts && parts.length ? parts.join('/') : null
+  return resolveLink(noteDir, src)?.path ?? null
 }
