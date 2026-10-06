@@ -8,7 +8,7 @@
 import { shell } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { PICKABLE_IMAGE_EXTENSIONS, type FileEntry, type ListOptions, type PickedImage, type RemoveImageResult } from '../shared/ipc'
+import type { FileEntry, ListOptions } from '../shared/ipc'
 
 export class AppError extends Error {
   constructor(public code: string, message: string) {
@@ -27,7 +27,7 @@ function normalizeText(text: string): string {
   return (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).replace(/\r\n?/g, '\n')
 }
 
-function isErrno(error: unknown, ...codes: string[]): boolean {
+export function isErrno(error: unknown, ...codes: string[]): boolean {
   return !!error && typeof error === 'object' && codes.includes((error as NodeJS.ErrnoException).code ?? '')
 }
 
@@ -222,7 +222,29 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/avif': 'avif',
   'image/svg+xml': 'svg',
 }
-const MAX_IMAGE_BYTES = 40 * 1024 * 1024
+export const MAX_IMAGE_BYTES = 40 * 1024 * 1024
+
+/** Pasta das imagens do workspace (a biblioteca de imagens). */
+export const ATTACHMENTS_DIR = 'attachments'
+
+/**
+ * Grava uma imagem nova em attachments/ com um nome livre: "<base>.<ext>",
+ * "<base>-2.<ext>"… Devolve o caminho no workspace ("attachments/foto.png").
+ */
+export async function writeNewAttachment(root: string, base: string, extension: string, data: Uint8Array): Promise<string> {
+  const dir = resolveInside(root, ATTACHMENTS_DIR)
+  await fs.mkdir(dir, { recursive: true })
+  for (let attempt = 1; attempt < 1000; attempt++) {
+    const name = `${base}${attempt > 1 ? `-${attempt}` : ''}.${extension}`
+    try {
+      await fs.writeFile(path.join(dir, name), data, { flag: 'wx' })
+      return `${ATTACHMENTS_DIR}/${name}`
+    } catch (error) {
+      if (!isErrno(error, 'EEXIST')) throw error
+    }
+  }
+  throw new AppError('EEXIST', 'Não foi possível criar um nome para a imagem.')
+}
 
 /** Grava uma imagem colada em attachments/ com um nome único (imagem-AAAAMMDD-HHMMSS.png). */
 export async function saveImage(root: string, data: unknown, mime: unknown): Promise<string> {
@@ -233,104 +255,26 @@ export async function saveImage(root: string, data: unknown, mime: unknown): Pro
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  const dir = resolveInside(root, 'attachments')
-  await fs.mkdir(dir, { recursive: true })
-  for (let attempt = 1; attempt < 1000; attempt++) {
-    const name = `imagem-${stamp}${attempt > 1 ? `-${attempt}` : ''}.${extension}`
-    try {
-      await fs.writeFile(path.join(dir, name), data, { flag: 'wx' })
-      return `attachments/${name}`
-    } catch (error) {
-      if (!isErrno(error, 'EEXIST')) throw error
-    }
+  return writeNewAttachment(root, `imagem-${stamp}`, extension, data)
+}
+
+/** Arquivo de imagem (pelo nome). */
+export const IMAGE_FILE = /\.(?:png|jpe?g|gif|webp|bmp|avif|svg|ico)$/i
+
+/** Copia uma imagem do workspace para outro caminho dele (substitui o destino, com escrita atômica). */
+export async function copyImage(root: string, from: unknown, to: unknown): Promise<FileEntry> {
+  if (typeof from !== 'string' || !IMAGE_FILE.test(from) || typeof to !== 'string' || !IMAGE_FILE.test(to)) throw new AppError('EINVAL', 'Imagem inválida.')
+  const source = resolveInside(root, from)
+  const target = resolveInside(root, to)
+  if (source === target) return entryFor(root, target, false)
+  let data: Buffer
+  try {
+    data = await fs.readFile(source)
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) throw new AppError('ENOENT', 'A imagem não existe mais.')
+    throw error
   }
-  throw new AppError('EEXIST', 'Não foi possível criar um nome para a imagem.')
-}
-
-const IMAGE_FILE = /\.(?:png|jpe?g|gif|webp|bmp|avif|svg|ico)$/i
-const MAX_PICKED_IMAGE_BYTES = 10 * 1024 * 1024
-
-// ── Imagens escolhidas no seletor (ex.: imagem de uma categoria) ────────────
-
-/** Lê a imagem escolhida pelo usuário no seletor de arquivos do sistema. */
-export async function readPickedImage(absolute: string): Promise<PickedImage> {
-  const extension = path.extname(absolute).slice(1).toLowerCase()
-  if (!(PICKABLE_IMAGE_EXTENSIONS as readonly string[]).includes(extension)) throw new AppError('EINVAL', 'Escolha um arquivo de imagem.')
-  const stat = await fs.stat(absolute)
-  if (stat.size > MAX_PICKED_IMAGE_BYTES) throw new AppError('EFBIG', 'A imagem é grande demais (máximo de 10 MB).')
-  return { name: path.basename(absolute), extension, data: new Uint8Array(await fs.readFile(absolute)) }
-}
-
-/** Grava os bytes de uma imagem no workspace (substitui a anterior, com escrita atômica). */
-export async function writeImage(root: string, relativePath: unknown, data: unknown): Promise<FileEntry> {
-  if (typeof relativePath !== 'string' || !IMAGE_FILE.test(relativePath)) throw new AppError('EINVAL', 'Imagem inválida.')
-  if (!(data instanceof Uint8Array) || data.byteLength === 0) throw new AppError('EINVAL', 'Imagem vazia.')
   if (data.byteLength > MAX_IMAGE_BYTES) throw new AppError('EFBIG', 'A imagem é grande demais (máximo de 40 MB).')
-  const absolute = resolveInside(root, relativePath)
-  await writeAtomic(absolute, data)
-  return entryFor(root, absolute, false)
-}
-
-// ── Imagens removidas das notas ─────────────────────────────────────────────
-/** Imagens apagadas nesta sessão, guardadas para o Desfazer conseguir devolvê-las. */
-const removedImages = new Map<string, Buffer>()
-const REMOVED_IMAGES_LIMIT = 200 * 1024 * 1024
-
-function attachmentPath(root: string, relativePath: unknown): string {
-  if (typeof relativePath !== 'string' || !relativePath.startsWith('attachments/') || !IMAGE_FILE.test(relativePath)) {
-    throw new AppError('EINVAL', 'Imagem inválida.')
-  }
-  return resolveInside(root, relativePath)
-}
-
-function rememberRemoved(absolute: string, data: Buffer): void {
-  removedImages.delete(absolute)
-  removedImages.set(absolute, data)
-  let total = 0
-  for (const value of removedImages.values()) total += value.byteLength
-  // Passou do limite: esquece as mais antigas (a última sempre fica)
-  for (const [key, value] of removedImages) {
-    if (total <= REMOVED_IMAGES_LIMIT || key === absolute) break
-    removedImages.delete(key)
-    total -= value.byteLength
-  }
-}
-
-/** Alguma nota (.md em notes/ ou mindmap/), fora `exceptNote`, cita o arquivo `name`? */
-async function imageInUse(root: string, name: string, exceptNote: string | null): Promise<boolean> {
-  const needles = [...new Set([name, encodeURI(name), encodeURIComponent(name)])]
-  const except = exceptNote?.toLowerCase()
-  for (const dir of ['notes', 'mindmap']) {
-    for (const file of await listFiles(root, dir, { recursive: true, extensions: ['.md'], withContent: true })) {
-      if (file.path.toLowerCase() === except) continue
-      if (needles.some((needle) => file.content!.includes(needle))) return true
-    }
-  }
-  return false
-}
-
-/**
- * Apaga (vai para a Lixeira) uma imagem de attachments/ que foi removida de uma
- * nota — só se nenhuma outra nota usa a mesma imagem.
- * @param exceptNote nota de onde a imagem saiu (o arquivo dela ainda pode citar a imagem até ser salvo)
- */
-export async function removeImage(root: string, relativePath: unknown, exceptNote: unknown): Promise<RemoveImageResult> {
-  const absolute = attachmentPath(root, relativePath)
-  if (!(await exists(absolute))) return 'missing'
-  if (await imageInUse(root, path.basename(absolute), typeof exceptNote === 'string' ? exceptNote : null)) return 'in-use'
-  rememberRemoved(absolute, await fs.readFile(absolute))
-  await trashFile(root, relativePath as string)
-  return 'removed'
-}
-
-/** Devolve uma imagem apagada nesta sessão (Desfazer). false = não há o que devolver. */
-export async function restoreImage(root: string, relativePath: unknown): Promise<boolean> {
-  const absolute = attachmentPath(root, relativePath)
-  if (await exists(absolute)) return true
-  const data = removedImages.get(absolute)
-  if (!data) return false
-  await fs.mkdir(path.dirname(absolute), { recursive: true })
-  await fs.writeFile(absolute, data, { flag: 'wx' })
-  removedImages.delete(absolute)
-  return true
+  await writeAtomic(target, data)
+  return entryFor(root, target, false)
 }

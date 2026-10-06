@@ -1,5 +1,6 @@
 /**
- * Estado do módulo LINKS: links salvos, organizados em pastas.
+ * Estado do módulo LINKS: links salvos, organizados em categorias (no arquivo,
+ * "folders" — o nome antigo continua no links.json para não quebrar nada).
  *
  * Os dados ficam em links/links.json (lib/links/model.ts); os ícones dos sites, em
  * links/icons/ — buscados pelo processo principal (electron/links.ts) quando um link
@@ -151,7 +152,7 @@ const countByFolder = computed(() => {
 
 const selectedFolder = computed(() => (state.selection.startsWith('folder:') ? (folderById.value.get(state.selection.slice(7)) ?? null) : null))
 
-/** Links mostrados: os da pasta escolhida (ou todos), filtrados pela busca — a busca procura em todas as pastas. */
+/** Links mostrados: os da categoria escolhida (ou todos), filtrados pela busca — a busca procura em todas as categorias. */
 const visibleLinks = computed(() => {
   const query = state.search.trim()
   let list = state.links
@@ -337,7 +338,7 @@ function highlight(id: string): void {
   void nextTick(() => (state.highlight = id))
 }
 
-/** Abre a pasta do link e o destaca (ex.: "Mostrar" no aviso de link repetido). */
+/** Abre a categoria do link e o destaca (ex.: "Mostrar" no aviso de link repetido). */
 function reveal(id: string): void {
   const link = findLink(id)
   if (!link) return
@@ -346,7 +347,7 @@ function reveal(id: string): void {
   highlight(id)
 }
 
-/** Muda título, endereço e/ou pasta. Devolve uma mensagem de erro, ou null se deu certo. */
+/** Muda título, endereço e/ou categoria. Devolve uma mensagem de erro, ou null se deu certo. */
 function updateLink(id: string, patch: { title?: string; url?: string; folderId?: string | null }): string | null {
   const link = findLink(id)
   if (!link) return 'O link não existe mais.'
@@ -383,7 +384,7 @@ function moveLink(id: string, folderId: string | null, options: { undo?: boolean
   if (options.undo === false) return
   const folder = target ? folderById.value.get(target) : null
   showToast({
-    message: folder ? `“${link.title}” foi para ${folder.name}` : `“${link.title}” ficou sem pasta`,
+    message: folder ? `“${link.title}” foi para ${folder.name}` : `“${link.title}” ficou sem categoria`,
     icon: 'folder',
     action: { label: 'Desfazer', run: () => moveLink(id, previous, { undo: false }) },
   })
@@ -427,7 +428,7 @@ async function copyLink(id: string): Promise<void> {
   showToast({ message: 'Endereço copiado', icon: 'copy' })
 }
 
-// ── Ações: pastas ───────────────────────────────────────────────────────────
+// ── Ações: categorias ───────────────────────────────────────────────────────
 
 function folderProblem(name: string, exceptId?: string): string | null {
   return folderNameProblem(
@@ -436,7 +437,7 @@ function folderProblem(name: string, exceptId?: string): string | null {
   )
 }
 
-function addFolder(name: string, color: PaletteColor, icon: string | null): LinkFolder | null {
+function addFolder(name: string, color: PaletteColor, icon: string | null, image: string | null = null): LinkFolder | null {
   const problem = folderProblem(name)
   if (problem) {
     notifyError(problem)
@@ -446,7 +447,8 @@ function addFolder(name: string, color: PaletteColor, icon: string | null): Link
     id: folderIdFor(name, (id) => folderById.value.has(id)),
     name: name.trim(),
     color,
-    icon,
+    icon: image ? null : icon,
+    image,
     createdAt: new Date().toISOString(),
   }
   state.folders.push(folder)
@@ -454,7 +456,8 @@ function addFolder(name: string, color: PaletteColor, icon: string | null): Link
   return state.folders.at(-1)!
 }
 
-function updateFolder(id: string, patch: { name?: string; color?: PaletteColor; icon?: string | null }): boolean {
+/** Muda nome, cor, ícone e/ou foto (`image`: imagem da biblioteca; null = sem foto). */
+function updateFolder(id: string, patch: { name?: string; color?: PaletteColor; icon?: string | null; image?: string | null }): boolean {
   const folder = folderById.value.get(id)
   if (!folder) return false
   if (patch.name !== undefined) {
@@ -467,11 +470,27 @@ function updateFolder(id: string, patch: { name?: string; color?: PaletteColor; 
   }
   if (patch.color) folder.color = patch.color
   if (patch.icon !== undefined) folder.icon = patch.icon
+  if (patch.image !== undefined) folder.image = patch.image
+  // A foto tem prioridade: com foto, o ícone não fica guardado à toa
+  if (folder.image) folder.icon = null
   scheduleSave()
   return true
 }
 
-/** Exclui a pasta: os links dela ficam sem pasta (nenhum link é apagado). Com Desfazer. */
+/**
+ * Foto para uma categoria: a imagem escolhida na biblioteca, sempre de dentro de
+ * attachments/ (uma foto de categoria das Notas ganha uma cópia lá). null = erro.
+ */
+async function libraryImage(path: string): Promise<string | null> {
+  try {
+    return await repo.libraryImage(path)
+  } catch (error) {
+    notifyError(`Não foi possível usar a imagem: ${errorMessage(error)}`, error)
+    return null
+  }
+}
+
+/** Exclui a categoria: os links dela ficam sem categoria (nenhum link é apagado). Com Desfazer. */
 function deleteFolder(id: string): void {
   const index = state.folders.findIndex((folder) => folder.id === id)
   if (index < 0) return
@@ -481,7 +500,7 @@ function deleteFolder(id: string): void {
   if (state.selection === `folder:${id}`) state.selection = 'all'
   scheduleSave()
   showToast({
-    message: `Pasta “${folder!.name}” excluída`,
+    message: `Categoria “${folder!.name}” excluída`,
     icon: 'trash',
     action: {
       label: 'Desfazer',
@@ -500,9 +519,9 @@ async function requestDeleteFolder(id: string): Promise<boolean> {
   if (!folder) return false
   const count = countByFolder.value.get(id) ?? 0
   const ok = await confirmDialog({
-    title: `Excluir a pasta “${folder.name}”?`,
-    message: count ? `${count} ${count === 1 ? 'link fica' : 'links ficam'} sem pasta. Nenhum link é apagado.` : 'A pasta está vazia.',
-    confirmLabel: 'Excluir pasta',
+    title: `Excluir a categoria “${folder.name}”?`,
+    message: count ? `${count} ${count === 1 ? 'link fica' : 'links ficam'} sem categoria. Nenhum link é apagado.` : 'A categoria está vazia.',
+    confirmLabel: 'Excluir categoria',
     danger: true,
   })
   if (ok) deleteFolder(id)
@@ -611,6 +630,7 @@ export function useLinksStore() {
     deleteFolder,
     requestDeleteFolder,
     moveFolder,
+    libraryImage,
     importLinks,
     readBookmarks,
     browsers: () => repo.browsers(),

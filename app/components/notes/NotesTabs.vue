@@ -8,6 +8,7 @@
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { choiceDialog } from '~/composables/useDialog'
 import { separator, showContextMenu } from '~/composables/useContextMenu'
+import { exportSubmenu, handleExportChoice } from '~/composables/useNoteExport'
 import { categorySubmenu, handleCategoryChoice, startNoteDrag } from '~/composables/useNoteCategories'
 import { paletteVar } from '~/lib/colors'
 import { modKeyLabel } from '~/lib/platform'
@@ -152,11 +153,12 @@ async function openMenu(note: QuickNote) {
     separator,
     categorySubmenu(note),
     { id: 'duplicate', label: 'Duplicar nota' },
+    exportSubmenu(note),
     { id: 'reveal', label: 'Mostrar no Explorador', enabled: !!note.path },
     separator,
     { id: 'delete', label: 'Excluir nota', danger: true },
   ])
-  if (handleCategoryChoice(choice, note)) return
+  if (handleCategoryChoice(choice, note) || handleExportChoice(choice, note)) return
   if (choice === 'close') void notes.closeTab(note.id)
   if (choice === 'close-others') notes.closeOtherTabs(note.id)
   if (choice === 'duplicate') notes.duplicateNote(note.id)

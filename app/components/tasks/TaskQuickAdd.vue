@@ -90,6 +90,7 @@ defineExpose({ focus: () => input.value?.focus() })
 
 <template>
   <form class="quick-add" :class="{ flash }" @submit.prevent="submit">
+    <AppIcon name="tasks" :size="17" class="qa-icon" />
     <input
       ref="input"
       v-model="text"
@@ -126,7 +127,7 @@ defineExpose({ focus: () => input.value?.focus() })
   align-items: center;
   gap: 10px;
   height: 46px;
-  padding: 0 8px 0 16px;
+  padding: 0 8px 0 14px;
   border-radius: var(--r-lg);
   border: 1px solid var(--border);
   background: var(--surface-2);
@@ -140,6 +141,14 @@ defineExpose({ focus: () => input.value?.focus() })
 .quick-add.flash {
   transform: scale(0.99);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.qa-icon {
+  flex: none;
+  color: var(--text-3);
+  transition: color var(--t-fast);
+}
+.quick-add:focus-within .qa-icon {
+  color: var(--primary-text);
 }
 .qa-input {
   flex: 1;

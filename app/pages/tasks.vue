@@ -1,6 +1,10 @@
 <script setup lang="ts">
-/** Módulo TAREFAS: categorias à esquerda, lista no centro, painel de edição à direita. */
+/**
+ * Módulo TAREFAS: categorias à esquerda, lista no centro, painel de edição à direita.
+ * Clicar fora do painel (na lista, nas categorias…) fecha o painel.
+ */
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
+import TaskDrawer from '~/components/tasks/TaskDrawer.vue'
 import TaskQuickAdd from '~/components/tasks/TaskQuickAdd.vue'
 import { confirmDialog } from '~/composables/useDialog'
 import { registerShortcut, useShortcuts } from '~/composables/useShortcuts'
@@ -10,6 +14,7 @@ import { useTasksStore } from '~/stores/tasks'
 
 const tasks = useTasksStore()
 const quickAdd = ref<InstanceType<typeof TaskQuickAdd>>()
+const drawer = ref<InstanceType<typeof TaskDrawer>>()
 const categoryDialog = ref(false)
 
 const selection = computed(() => tasks.state.selection)
@@ -69,6 +74,28 @@ function newTask() {
 
 useShortcuts({ 'mod+n': newTask })
 
+// ── Clique fora do painel da tarefa fecha o painel (como no Mapa Mental) ─────
+
+/** O clique começou fora do painel (arrastar para selecionar texto do painel não conta). */
+let pressedOutside = false
+
+function onPagePointerDown(event: PointerEvent) {
+  pressedOutside = !!tasks.state.drawer && event.button === 0 && !drawer.value?.contains(event.target as Node | null)
+}
+
+function onPageClick(event: MouseEvent) {
+  const outside = pressedOutside
+  pressedOutside = false
+  // detail 0 = "clique" do teclado (Enter/Espaço num botão): não é clicar fora
+  if (!outside || event.detail === 0 || !tasks.state.drawer || drawer.value?.contains(event.target as Node | null) || drawer.value?.hasDraft()) return
+  const current = tasks.state.drawer
+  // O clique faz o que ele faz normalmente (concluir, trocar de categoria…). Se ele mesmo
+  // mexeu no painel (abriu outra tarefa, "Nova tarefa"), o painel fica; senão, fecha.
+  setTimeout(() => {
+    if (tasks.state.drawer === current) tasks.closeDrawer()
+  })
+}
+
 // Esc fecha o painel (também quando o foco está num campo)
 let disposeEscape: (() => void) | null = null
 const bindEscape = () => {
@@ -92,7 +119,7 @@ onUnmounted(unbindEscape)
 </script>
 
 <template>
-  <div class="tasks-page">
+  <div class="tasks-page" @pointerdown.capture="onPagePointerDown" @click.capture="onPageClick">
     <TasksSidebar />
     <section class="tasks-main" :class="{ 'drawer-open': !!tasks.state.drawer }">
       <div v-if="tasks.state.error" class="tasks-error">
@@ -196,7 +223,7 @@ onUnmounted(unbindEscape)
             </template>
           </div>
         </div>
-        <TaskDrawer />
+        <TaskDrawer ref="drawer" />
       </template>
     </section>
     <CategoryDialog :open="categoryDialog" :category="category" @close="categoryDialog = false" />

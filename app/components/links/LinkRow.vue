@@ -45,8 +45,8 @@ function open(event: MouseEvent) {
     <LinkIcon :url="link.url" :icon="links.iconPath(link)" :version="links.state.iconVersion" :loading="loading" />
     <span class="link-title">{{ link.title }}</span>
     <span class="link-host">{{ host }}</span>
-    <span v-if="folder" class="link-folder" :data-tip="`Pasta: ${folder.name}`">
-      <CategoryAvatar :name="folder.name" :color="folder.color" :icon="folder.icon" :size="16" />
+    <span v-if="folder" class="link-folder" :data-tip="`Categoria: ${folder.name}`">
+      <CategoryAvatar :name="folder.name" :color="folder.color" :icon="folder.icon" :image="folder.image" :size="16" />
       <span class="link-folder-name">{{ folder.name }}</span>
     </span>
     <span class="link-actions" @click.stop>

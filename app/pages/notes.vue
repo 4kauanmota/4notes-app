@@ -5,19 +5,20 @@ import MarkdownEditor from '~/components/editor/MarkdownEditor.vue'
 import { useShortcuts } from '~/composables/useShortcuts'
 import type { MentionHost } from '~/lib/editor/host'
 import type { CursorInfo } from '~/lib/editor/setup'
-import { describeMention, mentionRevision, openMentionPath, searchMentions } from '~/stores/mentions'
+import { describeMention, mentionRevision, openMentionPath, savedLinkIcon, searchMentions } from '~/stores/mentions'
 import { useNotesStore } from '~/stores/notes'
 
 const notes = useNotesStore()
 const editor = ref<InstanceType<typeof MarkdownEditor>>()
 const cursor = ref<CursorInfo>({ line: 1, col: 1, selected: 0 })
 
-/** Menções (@) a notas (das Notas e do Mapa Mental) e a tarefas — stores/mentions.ts. */
+/** Menções (@) a notas (das Notas e do Mapa Mental), tarefas e links salvos — stores/mentions.ts. */
 const mentions: MentionHost = {
   search: (query) => searchMentions(query, notes.activeNote.value?.path ?? null),
   describe: describeMention,
   open: openMentionPath,
   revision: () => mentionRevision.value,
+  linkIcon: savedLinkIcon,
 }
 
 /**
@@ -27,11 +28,11 @@ const mentions: MentionHost = {
  */
 function newNote(category: string | null = null, titlePrefix?: string) {
   if (titlePrefix) {
-    notes.createNote(`# ${titlePrefix} `, category, { template: true })
+    notes.createNote(`# ${titlePrefix} `, category, { template: true, autoCategory: true })
     void nextTick(() => editor.value?.focusEnd())
     return
   }
-  notes.createNote('', category)
+  notes.createNote('', category, { autoCategory: true })
   void nextTick(() => editor.value?.focus())
 }
 
@@ -71,7 +72,6 @@ useShortcuts({
           :doc-key="notes.activeNote.value.id"
           :model-value="notes.activeNote.value.content"
           :asset-base="notes.activeNote.value.dir"
-          :note-path="notes.activeNote.value.path"
           :mentions="mentions"
           title-first-line
           placeholder="Título da nota"

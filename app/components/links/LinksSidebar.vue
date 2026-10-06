@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
- * Lista lateral dos Links: busca, "Todos os links", "Sem pasta" e as pastas.
- * Arraste um link da lista até uma pasta para movê-lo (ou um link do navegador,
- * para salvá-lo nela); arraste as pastas para reordenar.
+ * Lista lateral dos Links: busca, "Todos os links", "Sem categoria" (só quando há
+ * links sem categoria — ou enquanto um link é arrastado, para soltar ali) e as
+ * categorias. Arraste um link da lista até uma categoria para movê-lo (ou um link
+ * do navegador, para salvá-lo nela); arraste as categorias para reordenar.
  */
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { separator, showContextMenu } from '~/composables/useContextMenu'
 import { showToast } from '~/composables/useToasts'
 import { droppedText, isExternalLinkDrag, isLinkDrag, LINK_DRAG_TYPE } from '~/lib/links/drag'
@@ -31,20 +32,38 @@ function choose(selection: LinkSelection) {
 }
 
 async function folderMenu(folder: LinkFolder) {
-  const choice = await showContextMenu([{ id: 'edit', label: 'Editar pasta…' }, separator, { id: 'delete', label: 'Excluir pasta…', danger: true }])
+  const choice = await showContextMenu([{ id: 'edit', label: 'Editar categoria…' }, separator, { id: 'delete', label: 'Excluir categoria…', danger: true }])
   if (choice === 'edit') emit('edit-folder', folder.id)
   if (choice === 'delete') void links.requestDeleteFolder(folder.id)
 }
 
-// ── Arrastar: links para as pastas, pastas para reordenar ───────────────────
+// ── Arrastar: links para as categorias, categorias para reordenar ───────────
 
 const dropZone = ref<string | null>(null)
 const dragFolder = ref<number | null>(null)
+/** Um link da lista está sendo arrastado ("Sem categoria" aparece para receber ele). */
+const draggingLink = ref(false)
+
+const showLoose = computed(() => loose.value > 0 || isActive('none') || draggingLink.value)
+
+// O arrastar começa numa linha da lista (que já marcou o tipo) e pode terminar em qualquer lugar
+const onAnyDragStart = (event: DragEvent) => (draggingLink.value = isLinkDrag(event))
+const onAnyDragEnd = () => (draggingLink.value = false)
+onMounted(() => {
+  document.addEventListener('dragstart', onAnyDragStart)
+  window.addEventListener('dragend', onAnyDragEnd, true)
+  window.addEventListener('drop', onAnyDragEnd, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('dragstart', onAnyDragStart)
+  window.removeEventListener('dragend', onAnyDragEnd, true)
+  window.removeEventListener('drop', onAnyDragEnd, true)
+})
 
 function onDragOver(event: DragEvent, zone: string) {
   const external = isExternalLinkDrag(event)
   if (!isLinkDrag(event) && !external && dragFolder.value === null) return
-  // Pastas só se reordenam entre pastas
+  // Categorias só se reordenam entre categorias
   if (dragFolder.value !== null && zone === 'none') return
   event.preventDefault()
   if (event.dataTransfer) event.dataTransfer.dropEffect = external ? 'copy' : 'move'
@@ -64,7 +83,7 @@ function onDrop(event: DragEvent, folderId: string | null, index = -1) {
   } else if (dragFolder.value !== null) {
     if (index >= 0) links.moveFolder(dragFolder.value, index)
   } else if (isExternalLinkDrag(event)) {
-    // Link vindo do navegador: salva direto nesta pasta
+    // Link vindo do navegador: salva direto nesta categoria
     if (links.addLink(droppedText(event.dataTransfer), folderId).status === 'invalid') {
       showToast({ message: 'Isso não parece o endereço de um site.', icon: 'alert' })
     }
@@ -76,7 +95,7 @@ defineExpose({ focusSearch: () => search.value?.focus() })
 </script>
 
 <template>
-  <aside class="links-sidebar" aria-label="Pastas de links">
+  <aside class="links-sidebar" aria-label="Categorias de links">
     <label class="search">
       <AppIcon name="search" :size="15" />
       <input ref="search" v-model="links.state.search" placeholder="Buscar links…" spellcheck="false" :aria-label="`Buscar links (${mod}+F)`" />
@@ -92,7 +111,7 @@ defineExpose({ focusSearch: () => search.value?.focus() })
         <span v-if="total" class="count">{{ total }}</span>
       </button>
       <button
-        v-if="links.state.folders.length || loose || isActive('none')"
+        v-if="showLoose"
         class="nav-item"
         :class="{ active: isActive('none'), 'drop-target': dropZone === 'none' }"
         @click="choose('none')"
@@ -101,14 +120,14 @@ defineExpose({ focusSearch: () => search.value?.focus() })
         @drop.prevent="onDrop($event, null)"
       >
         <AppIcon name="inbox" :size="17" />
-        <span class="nav-label">Sem pasta</span>
+        <span class="nav-label">Sem categoria</span>
         <span v-if="loose" class="count">{{ loose }}</span>
       </button>
     </div>
 
     <div class="group-head">
-      <span class="section-label">Pastas</span>
-      <button class="icon-btn sm" data-tip="Nova pasta" aria-label="Nova pasta" @click="emit('new-folder')"><AppIcon name="plus" :size="15" /></button>
+      <span class="section-label">Categorias</span>
+      <button class="icon-btn sm" data-tip="Nova categoria" aria-label="Nova categoria" @click="emit('new-folder')"><AppIcon name="plus" :size="15" /></button>
     </div>
     <div class="group folders">
       <TransitionGroup name="folder">
@@ -128,24 +147,24 @@ defineExpose({ focusSearch: () => search.value?.focus() })
           @dragleave="onDragLeave($event, folder.id)"
           @drop.prevent="onDrop($event, folder.id, index)"
         >
-          <CategoryAvatar :name="folder.name" :color="folder.color" :icon="folder.icon" :size="22" />
+          <CategoryAvatar :name="folder.name" :color="folder.color" :icon="folder.icon" :image="folder.image" :size="22" />
           <span class="nav-label">{{ folder.name }}</span>
           <span v-if="links.countByFolder.value.get(folder.id)" class="count">{{ links.countByFolder.value.get(folder.id) }}</span>
           <span class="item-actions">
-            <span class="icon-btn sm" role="button" data-tip="Editar pasta" aria-label="Editar pasta" @click.stop="emit('edit-folder', folder.id)">
+            <span class="icon-btn sm" role="button" data-tip="Editar categoria" aria-label="Editar categoria" @click.stop="emit('edit-folder', folder.id)">
               <AppIcon name="edit" :size="13" />
             </span>
-            <span class="icon-btn sm" role="button" data-tip="Mais opções" aria-label="Opções da pasta" @click.stop="folderMenu(folder)">
+            <span class="icon-btn sm" role="button" data-tip="Mais opções" aria-label="Opções da categoria" @click.stop="folderMenu(folder)">
               <AppIcon name="more" :size="13" />
             </span>
           </span>
         </button>
       </TransitionGroup>
-      <button v-if="!links.state.folders.length" class="empty-folders" @click="emit('new-folder')">+ Criar a primeira pasta</button>
+      <button v-if="!links.state.folders.length" class="empty-folders" @click="emit('new-folder')">+ Criar a primeira categoria</button>
     </div>
 
     <footer class="sidebar-foot">
-      <button class="import-btn" data-tip="Brave, Opera GX, Chrome, Edge… ou um arquivo de favoritos" @click="emit('import')">
+      <button class="import-btn" data-tip="Brave, Opera GX, Chrome, Edge, Firefox, Zen… ou um arquivo de favoritos" @click="emit('import')">
         <AppIcon name="download" :size="15" /> <span class="import-label">Importar do navegador</span>
       </button>
       <button class="foot-link" @click="links.revealFile()"><AppIcon name="folder" :size="13" /> links.json</button>

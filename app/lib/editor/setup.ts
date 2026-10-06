@@ -25,9 +25,10 @@ import { contextMenuTracking, formattingKeymap, livePreview } from './formatting
 import { hiddenMarkupEditing } from './hidden-markup'
 import { editorHost, type EditorHost } from './host'
 import { imagePreview } from './images'
-import { codeLanguages } from './languages'
+import { findLanguage, isTextBlockInfo } from './languages'
 import { listEditing } from './lists'
 import { markdownPreview } from './markdown-preview'
+import { multipleSelections } from './multi-select'
 import { noteMentions } from './mentions'
 import { pasteHandling } from './paste'
 import { codeHighlight, editorTheme, markdownHighlight } from './theme'
@@ -103,10 +104,13 @@ const markdownLines = ViewPlugin.fromClass(
             const last = doc.lineAt(node.to).number
             // Cerca ainda sem fechamento (enquanto você digita ```): não pinta o resto da nota como código
             if (node.name === 'FencedCode' && (node.node.getChildren('CodeMark').length < 2 || first === last)) return false
+            const info = node.name === 'FencedCode' ? node.node.getChild('CodeInfo') : null
+            const textBlock = !!info && isTextBlockInfo(view.state.sliceDoc(info.from, info.to))
             for (let n = first; n <= last; n++) {
               const pos = doc.line(n).from
               if (node.name === 'FencedCode') {
                 add(pos, 'cm-md-codeblock')
+                if (textBlock) add(pos, 'cm-md-textblock')
                 if (n === first) add(pos, 'cm-md-codeblock-first')
                 if (n === last) add(pos, 'cm-md-codeblock-last')
               } else if (node.name === 'Blockquote') {
@@ -189,8 +193,9 @@ export function buildExtensions(callbacks: EditorCallbacks, options: EditorOptio
     indentOnInput(),
     closeBrackets(),
     EditorView.lineWrapping,
-    // Sem títulos "sublinhados" (Texto + linha "---"): "---" é sempre uma linha horizontal
-    markdown({ base: markdownLanguage, addKeymap: true, codeLanguages, extensions: [{ remove: ['SetextHeading'] }] }),
+    // Sem títulos "sublinhados" (Texto + linha "---"): "---" é sempre uma linha horizontal.
+    // As cores do código seguem findLanguage (bloco de texto, ```text, fica sem linguagem)
+    markdown({ base: markdownLanguage, addKeymap: true, codeLanguages: (info) => findLanguage(info), extensions: [{ remove: ['SetextHeading'] }] }),
     syntaxHighlighting(markdownHighlight),
     syntaxHighlighting(codeHighlight),
     markdownLines,
@@ -208,6 +213,8 @@ export function buildExtensions(callbacks: EditorCallbacks, options: EditorOptio
     options.host?.titleFirstLine ? titleFirstLine : [],
     highlightSelectionMatches({ minSelectionLength: 2 }),
     search({ top: true }),
+    // Ctrl+D: seleciona a próxima ocorrência (várias seleções, editadas juntas)
+    multipleSelections,
     placeholderFor(options),
     EditorView.contentAttributes.of({ spellcheck: 'true', autocapitalize: 'sentences', 'aria-label': 'Editor de texto' }),
     keymap.of([...formattingKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),

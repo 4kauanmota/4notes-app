@@ -68,7 +68,7 @@ const context = computed(() => {
     return id === 'none' ? 'Sem categoria' : (tasks.categoryById.value.get(id)?.name ?? null)
   }
   if (route.path.startsWith('/links')) {
-    if (links.state.selection === 'none') return 'Sem pasta'
+    if (links.state.selection === 'none') return 'Sem categoria'
     return links.selectedFolder.value?.name ?? null
   }
   return null

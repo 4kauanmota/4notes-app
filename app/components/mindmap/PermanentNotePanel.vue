@@ -8,7 +8,7 @@ import type { MentionHost } from '~/lib/editor/host'
 import { paletteVar, type PaletteColor } from '~/lib/colors'
 import { countWords } from '~/lib/notes/title'
 import { DATA_PATHS } from '~/lib/storage/paths'
-import { describeMention, mentionRevision, openMentionPath, searchMentions } from '~/stores/mentions'
+import { describeMention, mentionRevision, openMentionPath, savedLinkIcon, searchMentions } from '~/stores/mentions'
 import { useMindmapStore } from '~/stores/mindmap'
 
 const emit = defineEmits<{ newLinked: [] }>()
@@ -22,12 +22,13 @@ const note = computed(() => mindmap.selectedNote.value!)
 const noteDir = computed(() => `${DATA_PATHS.mindmapDir}/${mindmap.state.currentMap}`)
 const notePath = computed(() => `${noteDir.value}/${note.value.id}`)
 
-/** Menções (@) a notas (das Notas e dos mapas) e a tarefas — stores/mentions.ts. */
+/** Menções (@) a notas (das Notas e dos mapas), tarefas e links salvos — stores/mentions.ts. */
 const mentions: MentionHost = {
   search: (query) => searchMentions(query, notePath.value),
   describe: describeMention,
   open: openMentionPath,
   revision: () => mentionRevision.value,
+  linkIcon: savedLinkIcon,
 }
 const neighbors = computed(() => mindmap.neighbors(note.value.id))
 const color = computed(() => mindmap.noteColor(note.value.id))
@@ -171,7 +172,6 @@ defineExpose({ focusEditor: () => editor.value?.focusEnd(), focusTitle: () => do
         :doc-key="note.key"
         :model-value="note.content"
         :asset-base="noteDir"
-        :note-path="notePath"
         :mentions="mentions"
         placeholder="Escreva aqui… (@ menciona notas e tarefas)"
         @update:model-value="(value) => mindmap.updateContent(note.id, value)"

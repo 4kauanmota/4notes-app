@@ -2,10 +2,10 @@
 /**
  * Importar favoritos do navegador, em dois passos:
  *  1. de onde: um navegador encontrado neste computador (Brave, Opera GX, Chrome,
- *     Edge…) ou um arquivo HTML de favoritos — que qualquer navegador exporta;
+ *     Edge, Firefox, Zen…) ou um arquivo HTML de favoritos — que qualquer navegador exporta;
  *  2. o quê e para onde: a árvore de favoritos com caixas de seleção (tudo marcado
- *     no começo) e onde os links ficam — uma pasta para cada pasta do navegador, ou
- *     tudo numa pasta só. Links que já estão salvos não são repetidos.
+ *     no começo) e onde os links ficam — uma categoria para cada pasta do navegador,
+ *     ou tudo numa categoria só. Links que já estão salvos não são repetidos.
  * Nada é alterado no navegador.
  */
 import { computed, ref, shallowRef, watch } from 'vue'
@@ -35,7 +35,7 @@ const selected = shallowRef(new Set<string>())
 const expanded = shallowRef(new Set<string>())
 const showAll = shallowRef(new Set<string>())
 const modeKind = ref<'folders' | 'single'>('folders')
-/** Pasta do modo "tudo numa pasta" ('' = sem pasta). */
+/** Categoria do modo "tudo numa categoria" ('' = sem categoria). */
 const singleFolder = ref('')
 const importing = ref(false)
 
@@ -254,7 +254,7 @@ async function runImport() {
           <span class="source-icon"><AppIcon name="bookmark" :size="18" /></span>
           <span class="source-text">
             <strong>Arquivo de favoritos (.html)…</strong>
-            <span>Exportado por qualquer navegador, inclusive o Firefox</span>
+            <span>Exportado por qualquer navegador</span>
           </span>
           <span v-if="reading === 'file'" class="spinner" />
           <AppIcon v-else name="chevron-right" :size="15" class="source-arrow" />
@@ -321,16 +321,16 @@ async function runImport() {
         <label class="radio">
           <input v-model="modeKind" type="radio" value="folders" />
           <span>
-            <strong>Uma pasta para cada pasta do navegador</strong>
-            <small>Pastas com o mesmo nome se juntam (inclusive com as que você já tem). Links fora de pastas ficam sem pasta.</small>
+            <strong>Uma categoria para cada pasta do navegador</strong>
+            <small>Pastas com o mesmo nome se juntam (inclusive com as categorias que você já tem). Links fora de pastas ficam sem categoria.</small>
           </span>
         </label>
         <label class="radio">
           <input v-model="modeKind" type="radio" value="single" />
           <span class="single">
             <strong>Tudo em</strong>
-            <select v-model="singleFolder" class="select select-sm" aria-label="Pasta de destino" @focus="modeKind = 'single'" @change="modeKind = 'single'">
-              <option value="">Sem pasta</option>
+            <select v-model="singleFolder" class="select select-sm" aria-label="Categoria de destino" @focus="modeKind = 'single'" @change="modeKind = 'single'">
+              <option value="">Sem categoria</option>
               <option v-for="folder in links.state.folders" :key="folder.id" :value="folder.id">{{ folder.name }}</option>
             </select>
           </span>
@@ -338,7 +338,7 @@ async function runImport() {
       </div>
 
       <p class="summary">
-        <template v-if="plan.newFolders.length">Novas pastas: {{ newFoldersLabel }}. </template>
+        <template v-if="plan.newFolders.length">Novas categorias: {{ newFoldersLabel }}. </template>
         <template v-if="plan.skipped">{{ count(plan.skipped, 'link já está salvo', 'links já estão salvos') }} e não {{ plan.skipped === 1 ? 'será repetido' : 'serão repetidos' }}.</template>
       </p>
 

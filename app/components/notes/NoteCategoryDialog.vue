@@ -2,11 +2,11 @@
 /**
  * Criar ou editar uma categoria das Notas: nome (= nome da pasta), cor (marca as
  * abas das notas dela) e aparência — a inicial do nome, um ícone pronto ou uma
- * imagem (guardada na pasta da categoria com o nome dela). Escolher um ícone tira a
- * imagem, e escolher uma imagem tira o ícone.
+ * imagem da biblioteca (uma cópia fica na pasta da categoria, com o nome dela).
+ * Escolher um ícone tira a imagem, e escolher uma imagem tira o ícone.
  */
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import type { PickedImage } from '#shared/ipc'
+import { computed, nextTick, ref, watch } from 'vue'
+import { pickLibraryImage } from '~/composables/useImageLibrary'
 import { requestDeleteCategory, useCategoryDialog } from '~/composables/useNoteCategories'
 import type { PaletteColor } from '~/lib/colors'
 import { categoryImagePath, MAX_CATEGORY_NAME, suggestCategoryColor } from '~/lib/notes/categories'
@@ -19,27 +19,18 @@ const name = ref('')
 const color = ref<PaletteColor>('purple')
 /** Ícone pronto (null = inicial do nome). */
 const icon = ref<string | null>(null)
-/** undefined = manter a imagem atual; null = sem imagem; PickedImage = imagem nova. */
-const image = ref<PickedImage | null | undefined>(undefined)
-const previewUrl = ref<string | null>(null)
+/** undefined = manter a imagem atual; null = sem imagem; texto = imagem da biblioteca escolhida agora. */
+const image = ref<string | null | undefined>(undefined)
 const error = ref<string | null>(null)
 const saving = ref(false)
 const input = ref<HTMLInputElement>()
 
 const editing = computed(() => (dialog.category ? (notes.findCategory(dialog.category) ?? null) : null))
 
-const MIME: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml' }
-
-function setPreview(next: PickedImage | null) {
-  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-  previewUrl.value = next ? URL.createObjectURL(new Blob([next.data as BlobPart], { type: MIME[next.extension] ?? `image/${next.extension}` })) : null
-}
-onBeforeUnmount(() => setPreview(null))
-
-/** O que aparece no quadrinho da prévia. */
+/** O que aparece no quadrinho da prévia (caminho da imagem no workspace). */
 const shownImage = computed(() => {
   if (image.value === null) return null
-  if (image.value) return previewUrl.value
+  if (image.value) return image.value
   return editing.value ? categoryImagePath(editing.value) : null
 })
 
@@ -51,7 +42,6 @@ watch(
     color.value = editing.value?.color ?? suggestCategoryColor(notes.state.categories.map((category) => category.color))
     icon.value = editing.value?.icon ?? null
     image.value = undefined
-    setPreview(null)
     error.value = null
     saving.value = false
     await nextTick()
@@ -60,17 +50,16 @@ watch(
   },
 )
 
+/** Escolhe a imagem na biblioteca (dá para enviar uma nova por lá). */
 async function chooseImage() {
-  const picked = await notes.pickImage()
-  if (!picked) return
+  const picked = await pickLibraryImage({ title: 'Imagem da categoria', confirmLabel: 'Usar imagem' })
+  if (!picked || !dialog.open) return
   image.value = picked
   icon.value = null
-  setPreview(picked)
 }
 
 function removeImage() {
   image.value = null
-  setPreview(null)
 }
 
 /** Ícone (ou a inicial): a imagem sai, senão ela continuaria aparecendo no lugar do ícone. */
@@ -147,7 +136,7 @@ function remove() {
 
       <p class="hint">
         <AppIcon name="folder" :size="13" />
-        <span>A categoria é a pasta <code>notes/{{ name.trim() || '…' }}</code>; a imagem fica dentro dela, com o nome da categoria.</span>
+        <span>A categoria é a pasta <code>notes/{{ name.trim() || '…' }}</code>; a imagem (da biblioteca) fica dentro dela, com o nome da categoria.</span>
       </p>
 
       <div class="actions">

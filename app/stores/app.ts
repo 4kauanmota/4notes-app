@@ -19,6 +19,8 @@ import { useNotesStore } from './notes'
 import { useTasksStore } from './tasks'
 
 export type AppPhase = 'booting' | 'no-desktop' | 'setup' | 'ready' | 'error'
+/** Abas das Configurações. */
+export type SettingsTab = 'general' | 'modules' | 'shortcuts'
 export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links'
 
 export const MODULES: readonly ModuleId[] = ['notes', 'tasks', 'mindmap', 'links']
@@ -31,7 +33,17 @@ const state = reactive({
   error: null as string | null,
   lastModule: 'notes' as ModuleId,
   settingsOpen: false,
+  settingsTab: 'general' as SettingsTab,
+  /** Módulo a mostrar ao abrir a aba Módulos (ex.: o botão de ajustes do mapa leva ao Mapa Mental). */
+  settingsSection: null as ModuleId | null,
 })
+
+/** Abre as Configurações (opcionalmente numa aba e no trecho de um módulo). */
+function openSettings(tab: SettingsTab = 'general', section: ModuleId | null = null): void {
+  state.settingsTab = tab
+  state.settingsSection = section
+  state.settingsOpen = true
+}
 
 const notes = useNotesStore()
 const tasks = useTasksStore()
@@ -235,7 +247,7 @@ export function useAppStore() {
     openWorkspace,
     createWorkspace,
     workspaceName: () => workspaceName(state.dataDir?.path),
-    openSettings: () => (state.settingsOpen = true),
+    openSettings,
     closeSettings: () => (state.settingsOpen = false),
     revealDataFolder: () => desktop().dataDir.reveal(),
   }

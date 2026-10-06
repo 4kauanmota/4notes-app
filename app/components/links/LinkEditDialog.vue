@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Editar um link: título, endereço e pasta. "Buscar no site" pega de novo o título e
+ * Editar um link: título, endereço e categoria. "Buscar no site" pega de novo o título e
  * o ícone da página (o título novo aparece no campo, se você não o tinha mudado).
  */
 import { computed, nextTick, ref, watch } from 'vue'
@@ -13,7 +13,7 @@ const links = useLinksStore()
 
 const title = ref('')
 const url = ref('')
-/** '' = sem pasta. */
+/** '' = sem categoria. */
 const folderId = ref('')
 const error = ref<string | null>(null)
 const titleInput = ref<HTMLInputElement>()
@@ -99,9 +99,9 @@ function remove() {
       <input id="link-edit-url" v-model="url" class="input mono" spellcheck="false" autocomplete="off" @input="error = null" />
       <Transition name="fade"><p v-if="error" class="error">{{ error }}</p></Transition>
 
-      <label class="field-label gap" for="link-edit-folder">Pasta</label>
+      <label class="field-label gap" for="link-edit-folder">Categoria</label>
       <select id="link-edit-folder" v-model="folderId" class="select">
-        <option value="">Sem pasta</option>
+        <option value="">Sem categoria</option>
         <option v-for="folder in links.state.folders" :key="folder.id" :value="folder.id">{{ folder.name }}</option>
       </select>
 

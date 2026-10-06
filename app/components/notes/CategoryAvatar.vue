@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Aparência de uma categoria (Notas) ou pasta (Links): a imagem dela, o ícone
+ * Aparência de uma categoria (Notas ou Links): a foto dela, o ícone
  * pronto ou a inicial do nome — os dois últimos na cor da categoria.
  */
 import { computed, ref, watch } from 'vue'

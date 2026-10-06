@@ -58,13 +58,16 @@ export const linksRepository = {
   readBrowser: (id: string): Promise<BookmarkFolder[]> => desktop().links.readBrowser(id),
   pickBookmarksFile: (): Promise<BookmarkFolder[] | null> => desktop().links.pickBookmarksFile(),
 
+  /** Caminho da imagem dentro da biblioteca (attachments/): copia para lá se ela estiver em outro lugar. */
+  libraryImage: (path: string): Promise<string> => desktop().library.adopt(path),
+
   reveal: () => desktop().files.reveal(DATA_PATHS.linksFile),
   openExternal: (url: string) => desktop().shell.openExternal(url),
 
   async readUiState(): Promise<LinksUiState> {
     const result = await readJsonFile(DATA_PATHS.linksUiState)
     const data = (result.status === 'ok' && result.data && typeof result.data === 'object' ? result.data : {}) as Record<string, unknown>
-    return { sort: data.sort === 'name' ? 'name' : 'recent' }
+    return { sort: data.sort === 'name' || data.sort === 'url' ? data.sort : 'recent' }
   },
   serializeUiState: (state: LinksUiState) => toJson(state),
 }

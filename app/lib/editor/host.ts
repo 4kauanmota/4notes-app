@@ -1,6 +1,7 @@
 /**
- * Ligação do editor com o resto do app: salvar e apagar imagens do workspace,
- * abrir código em tela cheia, mostrar avisos e mencionar outras notas.
+ * Ligação do editor com o resto do app: salvar imagens no workspace (e escolher
+ * da biblioteca), abrir código em tela cheia, mostrar avisos e mencionar outras
+ * notas e links.
  *
  * O MarkdownEditor fornece a implementação; as extensões do editor (lib/editor)
  * continuam sem saber de Vue, IPC ou rotas.
@@ -15,16 +16,18 @@ export interface CodeEditRequest {
   apply(code: string): void
 }
 
-/** Nota ou tarefa que pode ser mencionada (ver mentions.ts). */
+/** Nota, tarefa ou link salvo que pode ser mencionado (ver mentions.ts). */
 export interface MentionTarget {
   /**
    * Caminho no workspace: "notes/Ideias.md", "mindmap/Principal/Godot.md" ou,
-   * para tarefas, "tasks/tasks.json#<id>".
+   * para tarefas, "tasks/tasks.json#<id>". Vazio nos links.
    */
   path: string
   title: string
-  /** De onde é: "Notas", "Notas · Trabalho", "Mapa · Principal", "Tarefa"… */
+  /** De onde é: "Notas", "Notas · Trabalho", "Mapa · Principal", "Tarefa", "Link · nuxt.com"… */
   where: string
+  /** Link salvo (módulo Links): entra na nota como um link comum, [título](endereço). */
+  url?: string
 }
 
 /** Como está agora o que foi mencionado. */
@@ -34,9 +37,9 @@ export interface MentionState {
   done?: boolean
 }
 
-/** Menções a notas e tarefas (só nos editores em que o app liga o recurso). */
+/** Menções a notas, tarefas e links (só nos editores em que o app liga o recurso). */
 export interface MentionHost {
-  /** Notas e tarefas para mencionar, filtradas pelo texto digitado depois do "@". */
+  /** Notas, tarefas e links salvos para mencionar, filtrados pelo texto digitado depois do "@". */
   search(query: string): Promise<MentionTarget[]>
   /** Título e estado atuais; null se não existe mais. */
   describe(path: string): MentionState | null
@@ -44,6 +47,8 @@ export interface MentionHost {
   open(path: string): void
   /** Muda sempre que títulos ou estados mudam (o editor redesenha os chips). */
   revision(): string
+  /** Ícone do site (endereço da imagem) quando o link é um link salvo no módulo Links; null = não é. */
+  linkIcon?(url: string): string | null
 }
 
 export interface EditorHost {
@@ -55,17 +60,15 @@ export interface EditorHost {
   saveImage(data: ArrayBuffer, mime: string): Promise<string | null>
   /** Endereço para mostrar uma imagem do workspace (caminho relativo ao workspace). */
   imageUrl(workspacePath: string): string
-  /** A imagem saiu da nota pelo botão Remover: apaga o arquivo (se nenhuma outra nota o usa). `undo` devolve o texto. */
-  removeImage(workspacePath: string, undo: () => void): void
-  /** Devolve uma imagem apagada nesta sessão (a remoção foi desfeita com Ctrl+Z). */
-  restoreImage(workspacePath: string): Promise<boolean>
+  /** Escolhe uma imagem da biblioteca (caminho no workspace; null = cancelado). */
+  pickImage?(): Promise<string | null>
   /** Abre o código em tela cheia. */
   openCode(request: CodeEditRequest): void
   /** Escolher a linguagem de um bloco de código (null = cancelado). */
   chooseLanguage?(current: string): Promise<string | null>
   /** Aviso rápido; `undo` mostra o botão "Desfazer". */
   notify(message: string, undo?: () => void): void
-  /** Menções a notas e tarefas (@). Sem isso, links para notas aparecem como links comuns. */
+  /** Menções a notas, tarefas e links (@). Sem isso, links para notas aparecem como links comuns. */
   mentions?: MentionHost
   /** A primeira linha de uma nota vazia já começa como título (# ). */
   titleFirstLine?: boolean

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Escolha do ícone de uma categoria (Notas) ou pasta (Links): a inicial do nome
+ * Escolha do ícone de uma categoria (Notas ou Links): a inicial do nome
  * ou um dos ícones prontos de lib/category-icons.ts, desenhados na cor escolhida.
  */
 import { computed } from 'vue'

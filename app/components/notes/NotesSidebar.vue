@@ -15,6 +15,7 @@ import {
   requestDeleteCategory,
   useCategoryDialog,
 } from '~/composables/useNoteCategories'
+import { exportSubmenu, handleExportChoice } from '~/composables/useNoteExport'
 import { paletteVar } from '~/lib/colors'
 import { nameKey } from '~/lib/files/filename'
 import { categoryImagePath, type NoteCategory } from '~/lib/notes/categories'
@@ -136,6 +137,7 @@ function noteMenuItems(note: QuickNote): MenuItemSpec[] {
     { id: 'open', label: 'Abrir' },
     categorySubmenu(note),
     { id: 'duplicate', label: 'Duplicar' },
+    exportSubmenu(note),
     { id: 'reveal', label: 'Mostrar no Explorador', enabled: !!note.path },
     separator,
     { id: 'delete', label: 'Excluir (enviar para a Lixeira)', danger: true },
@@ -143,7 +145,7 @@ function noteMenuItems(note: QuickNote): MenuItemSpec[] {
 }
 
 function runNoteChoice(choice: string | null, note: QuickNote) {
-  if (handleCategoryChoice(choice, note)) return
+  if (handleCategoryChoice(choice, note) || handleExportChoice(choice, note)) return
   if (choice === 'open') notes.openNote(note.id)
   if (choice === 'duplicate') notes.duplicateNote(note.id)
   if (choice === 'reveal') notes.revealNote(note.id)
@@ -216,7 +218,11 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
 </script>
 
 <template>
-  <aside class="notes-sidebar" :class="{ open: notes.state.sidebarOpen }" aria-label="Lista de notas">
+  <aside
+    class="notes-sidebar"
+    :class="{ open: notes.state.sidebarOpen, 'folders-upper': notes.state.settings.folderCase === 'upper' }"
+    aria-label="Lista de notas"
+  >
     <div class="sidebar-inner">
       <div class="sidebar-head">
         <label class="search">
@@ -304,7 +310,8 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
           @dragleave="onDragLeave($event, 'root')"
           @drop.prevent="onDrop($event, null)"
         >
-          <div v-if="notes.state.categories.length && (rootRows.length || !searching)" class="section-head">
+          <!-- Só com notas sem categoria (ou arrastando uma nota até aqui, para tirar da categoria) -->
+          <div v-if="notes.state.categories.length && (rootRows.length || dropZone === 'root')" class="section-head">
             <span class="section-label">Notas</span>
           </div>
           <NoteTreeRow
@@ -399,6 +406,12 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
   min-height: 56px;
   border-radius: var(--r-lg);
   transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+
+/* Exibição das pastas pelo título em CAIXA ALTA (só a aparência; o título das notas não muda) */
+.folders-upper :deep(.tree-row.folder .row-label) {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 /* ── Cabeçalhos ── */

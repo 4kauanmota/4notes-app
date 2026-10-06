@@ -14,7 +14,7 @@
  */
 import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorSelection, EditorState, type ChangeSpec, type Range, type SelectionRange, type StateEffect } from '@codemirror/state'
-import { Decoration, EditorView, ViewPlugin, type Command, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import { Decoration, EditorView, ViewPlugin, WidgetType, type Command, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import {
   cssColor,
@@ -37,6 +37,8 @@ import {
   storedFormats,
   toggleStoredFormat,
 } from './hidden-markup'
+import { editorHost } from './host'
+import { refreshMentions } from './mentions'
 
 export { cssColor, findElements, linkAt, type ElementKind, type FormatElement, type InlineFormat } from './elements'
 export { balancedSlice, storedFormats } from './hidden-markup'
@@ -403,12 +405,18 @@ export const contextMenuTracking = EditorView.domEventHandlers({
   },
 })
 
-/** Link sob o clique direito que acabou de acontecer num editor (null se não foi num link). */
-export function linkAtContextMenu(): { view: EditorView; link: FormatElement } | null {
+/** Onde foi o clique direito que acabou de acontecer num editor (null se não foi num editor). */
+export function contextMenuPosition(): { view: EditorView; pos: number } | null {
   const context = lastContextMenu
   if (!context || Date.now() - context.at > 3000 || !context.view.dom.isConnected) return null
+  return context.pos > context.view.state.doc.length ? null : { view: context.view, pos: context.pos }
+}
+
+/** Link sob o clique direito que acabou de acontecer num editor (null se não foi num link). */
+export function linkAtContextMenu(): { view: EditorView; link: FormatElement } | null {
+  const context = contextMenuPosition()
+  if (!context) return null
   const { view, pos } = context
-  if (pos > view.state.doc.length) return null
   const line = view.state.doc.lineAt(pos)
   const link = findElements(view.state, line.from, line.to).find((el) => el.format === 'link' && el.from <= pos && pos <= el.to)
   return link ? { view, link } : null
@@ -507,6 +515,38 @@ function colorMark(color: string): Decoration | null {
   return mark
 }
 
+/** Ícone do site na frente de um link salvo no módulo Links (menção a um link). */
+class LinkIconWidget extends WidgetType {
+  constructor(readonly src: string) {
+    super()
+  }
+  override eq(other: LinkIconWidget): boolean {
+    return other.src === this.src
+  }
+  toDOM(): HTMLElement {
+    const img = document.createElement('img')
+    img.className = 'cm-link-icon'
+    img.src = this.src
+    img.alt = ''
+    img.draggable = false
+    img.setAttribute('aria-hidden', 'true')
+    // Ícone que não abre: some sem deixar espaço
+    img.addEventListener('error', () => (img.style.display = 'none'), { once: true })
+    return img
+  }
+}
+
+const linkIcons = new Map<string, Decoration>()
+function linkIconWidget(src: string): Decoration {
+  let widget = linkIcons.get(src)
+  if (!widget) {
+    widget = Decoration.widget({ widget: new LinkIconWidget(src), side: -1 })
+    if (linkIcons.size > 500) linkIcons.clear()
+    linkIcons.set(src, widget)
+  }
+  return widget
+}
+
 /** Texto do link: sublinhado discreto e a dica com o endereço. */
 function linkMark(url: string): Decoration {
   let mark = linkMarks.get(url)
@@ -526,6 +566,7 @@ function buildPreview(view: EditorView): { decorations: DecorationSet; atoms: De
   const atoms: Range<Decoration>[] = []
   const from = state.doc.lineAt(visible[0]!.from).from
   const to = state.doc.lineAt(visible.at(-1)!.to).to
+  const mentions = state.facet(editorHost)?.mentions
   for (const el of findElements(state, from, to)) {
     const content = hasContent(el)
     if (content && el.format === 'underline') ranges.push(underlineMark.range(el.openTo, el.closeFrom))
@@ -534,7 +575,12 @@ function buildPreview(view: EditorView): { decorations: DecorationSet; atoms: De
       const mark = colorMark(el.color ?? '')
       if (mark) ranges.push(mark.range(el.openTo, el.closeFrom))
     }
-    if (content && el.format === 'link' && el.url) ranges.push(linkMark(el.url).range(el.openTo, el.closeFrom))
+    if (content && el.format === 'link' && el.url) {
+      ranges.push(linkMark(el.url).range(el.openTo, el.closeFrom))
+      // Link salvo no módulo Links: o ícone do site aparece na frente do texto
+      const icon = mentions?.linkIcon?.(el.url)
+      if (icon) ranges.push(linkIconWidget(icon).range(el.openTo))
+    }
     if (!hasHiddenMarkup(el)) continue
     for (const [a, b] of [[el.from, el.openTo], [el.closeFrom, el.to]] as const) {
       if (b <= a) continue
@@ -554,7 +600,8 @@ export const livePreview = ViewPlugin.fromClass(
       ;({ decorations: this.decorations, atoms: this.atoms } = buildPreview(view))
     }
     update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+      const refreshed = update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshMentions)))
+      if (update.docChanged || update.viewportChanged || refreshed || syntaxTree(update.startState) !== syntaxTree(update.state)) {
         ;({ decorations: this.decorations, atoms: this.atoms } = buildPreview(update.view))
       }
     }

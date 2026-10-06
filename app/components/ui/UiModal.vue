@@ -1,33 +1,48 @@
 <script setup lang="ts">
-/** Moldura de janela modal (fundo escurecido + cartão central animado). */
-import { onBeforeUnmount, watch } from 'vue'
+/**
+ * Moldura de janela modal (fundo escurecido + cartão central animado).
+ * Com um modal aberto por cima de outro (ex.: a biblioteca de imagens sobre o
+ * diálogo da categoria), o Esc fecha só o de cima.
+ */
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { closeModal, isTopModal, openModal } from '~/composables/useModalStack'
 
 const props = defineProps<{ open: boolean; width?: number; label?: string }>()
 const emit = defineEmits<{ close: [] }>()
+const id = Symbol('modal')
+/** Camada do modal: o aberto por último fica por cima. */
+const layer = ref(900)
 
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    emit('close')
+  // Esc já usado por outra coisa (ex.: fechar um menu do clique direito aberto no diálogo)
+  if (event.key !== 'Escape' || event.defaultPrevented || !isTopModal(id)) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  emit('close')
+}
+
+function setOpen(open: boolean) {
+  if (open) {
+    layer.value = 900 + openModal(id)
+    window.addEventListener('keydown', onKeydown, true)
+  } else {
+    closeModal(id)
+    window.removeEventListener('keydown', onKeydown, true)
   }
 }
 
 watch(
   () => props.open,
-  (open) => {
-    if (open) window.addEventListener('keydown', onKeydown, true)
-    else window.removeEventListener('keydown', onKeydown, true)
-  },
+  (open) => setOpen(open),
   { immediate: true },
 )
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
+onBeforeUnmount(() => setOpen(false))
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="open" class="modal-backdrop" @mousedown.self="emit('close')">
+      <div v-if="open" class="modal-backdrop" :style="{ zIndex: layer }" @mousedown.self="emit('close')">
         <div class="modal-card" :style="{ width: `${width ?? 440}px` }" role="dialog" aria-modal="true" :aria-label="label">
           <slot />
         </div>

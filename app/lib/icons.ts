@@ -48,6 +48,12 @@ export const ICONS: Record<string, string> = {
   'node-plus': '<circle cx="7" cy="12" r="3.2"/><path d="M10.2 12h3.3"/><path d="M18 8.5v7M14.5 12h7"/>',
   keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M7.5 14h9"/>',
   info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.1"/>',
+  /** "?" das configurações (explicação curta ao passar o mouse). */
+  help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.6a2.4 2.4 0 0 1 4.7.7c0 1.6-2.4 2-2.4 3.6"/><path d="M12 16.9v.1"/>',
+  /** Exportar (folha com seta). */
+  export: '<path d="M14 3.5H7.5A2.5 2.5 0 0 0 5 6v12a2.5 2.5 0 0 0 2.5 2.5h9A2.5 2.5 0 0 0 19 18V8.5z"/><path d="M14 3.5v5h5"/><path d="M8.5 14.5h6M12.5 12l2.5 2.5-2.5 2.5"/>',
+  /** Enviar (seta subindo da bandeja). */
+  upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 13v4.5A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5V13"/>',
   sparkle: '<path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8z"/><path d="M19 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
   refresh: '<path d="M20 11A8 8 0 0 0 5.6 6.3L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.4 4.7L20 16"/><path d="M20 20v-4h-4"/>',
   grip: '<circle cx="9" cy="6" r="1.1" fill="currentColor"/><circle cx="15" cy="6" r="1.1" fill="currentColor"/><circle cx="9" cy="12" r="1.1" fill="currentColor"/><circle cx="15" cy="12" r="1.1" fill="currentColor"/><circle cx="9" cy="18" r="1.1" fill="currentColor"/><circle cx="15" cy="18" r="1.1" fill="currentColor"/>',
@@ -71,6 +77,8 @@ export const ICONS: Record<string, string> = {
   list: '<path d="M9.5 6.5h10M9.5 12h10M9.5 17.5h10"/><circle cx="5" cy="6.5" r="1.1" fill="currentColor"/><circle cx="5" cy="12" r="1.1" fill="currentColor"/><circle cx="5" cy="17.5" r="1.1" fill="currentColor"/>',
   checklist: '<rect x="3.5" y="4" width="6" height="6" rx="1.5"/><path d="m4.6 16.6 1.7 1.7 3-3.3"/><path d="M13 7h7.5M13 17h7.5"/>',
   code: '<path d="m8.5 7.5-4.5 4.5 4.5 4.5M15.5 7.5l4.5 4.5-4.5 4.5"/>',
+  /** Bloco de texto (barra de formatação). */
+  'text-block': '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M7.5 9.5h9M7.5 12.5h9M7.5 15.5h5"/>',
   at: '<circle cx="12" cy="12" r="3.6"/><path d="M15.6 8.4v4.8a2.6 2.6 0 0 0 5.2 0V12a8.8 8.8 0 1 0-3.4 6.9"/>',
   workspace: '<rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9h17M8 4v5"/>',
   image: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17.5 4.6-4.6a1.5 1.5 0 0 1 2.1 0l2.8 2.8 1.6-1.6a1.5 1.5 0 0 1 2.1 0l3.3 3.3"/>',

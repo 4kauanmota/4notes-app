@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Módulo LINKS: pastas à esquerda; à direita, o campo para salvar um link e a lista.
+ * Módulo LINKS: categorias à esquerda; à direita, o campo para salvar um link e a lista.
  *
  * Salvar é rápido: cole o endereço no campo (ou Ctrl+V em qualquer lugar desta tela)
  * ou arraste um link do navegador para cá — o título e o ícone do site chegam
@@ -34,21 +34,22 @@ const importOpen = ref(false)
 const searching = computed(() => !!links.state.search.trim())
 const folder = computed(() => links.selectedFolder.value)
 const shown = computed(() => links.visibleLinks.value)
-/** A pasta de cada link aparece na lista quando ela mistura pastas. */
+/** A categoria de cada link aparece na lista quando ela mistura categorias. */
 const showFolder = computed(() => searching.value || links.state.selection === 'all')
 
 const header = computed(() => {
   const count = shown.value.length
   const countLabel = `${count} ${count === 1 ? 'link' : 'links'}`
-  if (searching.value) return { title: 'Busca', subtitle: count ? `${count} ${count === 1 ? 'resultado' : 'resultados'} em todas as pastas` : 'Nenhum resultado' }
-  if (folder.value) return { title: folder.value.name, subtitle: count ? countLabel : 'Pasta vazia' }
-  if (links.state.selection === 'none') return { title: 'Sem pasta', subtitle: count ? countLabel : 'Nenhum link sem pasta' }
+  if (searching.value) return { title: 'Busca', subtitle: count ? `${count} ${count === 1 ? 'resultado' : 'resultados'} em todas as categorias` : 'Nenhum resultado' }
+  if (folder.value) return { title: folder.value.name, subtitle: count ? countLabel : 'Categoria vazia' }
+  if (links.state.selection === 'none') return { title: 'Sem categoria', subtitle: count ? countLabel : 'Nenhum link sem categoria' }
   return { title: 'Todos os links', subtitle: count ? countLabel : 'Nenhum link salvo ainda' }
 })
 
 const SORT_OPTIONS: { value: LinkSort; label: string }[] = [
   { value: 'recent', label: 'Recentes' },
   { value: 'name', label: 'A–Z' },
+  { value: 'url', label: 'URL' },
 ]
 const sort = computed({ get: () => links.state.sort, set: (value: LinkSort) => links.setSort(value) })
 
@@ -144,7 +145,7 @@ function onListKeydown(event: KeyboardEvent) {
   event.preventDefault()
 }
 
-// A seleção some quando o link sai da lista (outra pasta, busca…)
+// A seleção some quando o link sai da lista (outra categoria, busca…)
 watch(shown, (items) => {
   if (activeId.value && !items.some((link) => link.id === activeId.value)) activeId.value = null
 })
@@ -171,7 +172,7 @@ async function linkMenu(link: SavedLink, event: MouseEvent) {
   const anchor = event.type === 'click' ? (event.currentTarget as Element | null) : null
   const current = links.folderOf(link)
   const moveTo: MenuItemSpec[] = [
-    { id: 'move:', label: 'Sem pasta', type: 'radio', checked: !current },
+    { id: 'move:', label: 'Sem categoria', type: 'radio', checked: !current },
     ...links.state.folders.map((item) => ({
       id: `move:${item.id}`,
       label: item.name,
@@ -180,7 +181,7 @@ async function linkMenu(link: SavedLink, event: MouseEvent) {
       swatch: paletteVar(item.color),
     })),
     separator,
-    { id: 'move-new', label: 'Nova pasta…' },
+    { id: 'move-new', label: 'Nova categoria…' },
   ]
   const choice = await showContextMenu(
     [
@@ -327,7 +328,7 @@ useShortcuts({
           <header class="links-header">
             <div class="title-block">
               <h1>
-                <CategoryAvatar v-if="folder && !searching" :name="folder.name" :color="folder.color" :icon="folder.icon" :size="28" />
+                <CategoryAvatar v-if="folder && !searching" :name="folder.name" :color="folder.color" :icon="folder.icon" :image="folder.image" :size="28" />
                 <span class="title-text">{{ header.title }}</span>
               </h1>
               <p>
@@ -353,7 +354,7 @@ useShortcuts({
             aria-label="Links salvos"
             @keydown="onListKeydown"
           >
-            <!-- Trocar de pasta, buscar ou ordenar troca a lista inteira (sem animar cada linha);
+            <!-- Trocar de categoria, buscar ou ordenar troca a lista inteira (sem animar cada linha);
                  listas grandes não animam (a animação mede todas as linhas a cada mudança) -->
             <TransitionGroup v-if="animated" :key="listKey" name="link">
               <LinkRow
@@ -387,7 +388,7 @@ useShortcuts({
             v-else-if="searching"
             icon="search"
             :title="`Nada encontrado para “${links.state.search.trim()}”`"
-            text="A busca procura no título e no endereço dos links, em todas as pastas."
+            text="A busca procura no título e no endereço dos links, em todas as categorias."
           />
           <LinksEmpty
             v-else-if="!links.state.links.length"
@@ -400,10 +401,10 @@ useShortcuts({
           <LinksEmpty
             v-else-if="folder"
             icon="folder-open"
-            title="Pasta vazia"
-            text="Cole um link acima: ele já entra nesta pasta. Para trazer links que já estão salvos, arraste-os até a pasta na lista lateral."
+            title="Categoria vazia"
+            text="Cole um link acima: ele já entra nesta categoria. Para trazer links que já estão salvos, arraste-os até a categoria na lista lateral."
           />
-          <LinksEmpty v-else icon="check" title="Tudo organizado" text="Todos os links estão em pastas." />
+          <LinksEmpty v-else icon="check" title="Tudo organizado" text="Todos os links estão em categorias." />
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Mensagem da lista de links vazia (sem links, pasta vazia, busca sem resultado). */
+/** Mensagem da lista de links vazia (sem links, categoria vazia, busca sem resultado). */
 defineProps<{ icon: string; title: string; text?: string }>()
 </script>
 

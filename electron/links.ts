@@ -1,6 +1,7 @@
 /**
  * Links (processo principal): buscar o título e o ícone de um site, e ler os
- * favoritos dos navegadores instalados (para importar).
+ * favoritos dos navegadores instalados (para importar): os baseados no Chromium
+ * (arquivo Bookmarks) e o Firefox e o Zen (banco places.sqlite).
  *
  * - O ícone de cada site é guardado no workspace, em links/icons/<site>.<ext>:
  *   aparece mesmo sem internet e vai junto no backup.
@@ -10,8 +11,20 @@
  */
 import { app, dialog, net, type BrowserWindow } from 'electron'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
-import { countLinks, parseBookmarksHtml, parseChromiumBookmarks, type BookmarkFolder, type BrowserSource } from '../shared/bookmarks'
+import {
+  countLinks,
+  decodeMozLz4,
+  geckoBookmarksFromRows,
+  parseBookmarksHtml,
+  parseChromiumBookmarks,
+  parseGeckoBackup,
+  parseProfilesIni,
+  type BookmarkFolder,
+  type BrowserSource,
+  type PlacesRow,
+} from '../shared/bookmarks'
 import type { LinkMeta } from '../shared/ipc'
 import { declaredCharset, iconFileBase, iconUrls, parseHead, sniffImage, type IconFormat } from '../shared/link-meta'
 import { AppError, resolveInside } from './files'
@@ -227,13 +240,127 @@ async function profilesOf(dir: string): Promise<[string, string | null][]> {
   return entries.filter((name) => name === 'Default' || /^Profile \d+$/.test(name)).map((name) => [name, null])
 }
 
-/** Arquivos de favoritos encontrados na última busca (a interface só conhece os ids). */
-const sourceFiles = new Map<string, string>()
+// ── Firefox e Zen (o Zen é feito a partir do Firefox: mesmo formato) ─────────
+
+interface GeckoBrowser {
+  name: string
+  /** Pastas onde pode estar o profiles.ini (a primeira que existir vale). */
+  dirs: string[]
+}
+
+function geckoBrowsers(): GeckoBrowser[] {
+  const home = app.getPath('home')
+  if (process.platform === 'win32') {
+    const roaming = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming')
+    return [
+      { name: 'Firefox', dirs: [path.join(roaming, 'Mozilla', 'Firefox')] },
+      { name: 'Zen', dirs: [path.join(roaming, 'zen')] },
+    ]
+  }
+  if (process.platform === 'darwin') {
+    const support = path.join(home, 'Library', 'Application Support')
+    return [
+      { name: 'Firefox', dirs: [path.join(support, 'Firefox')] },
+      { name: 'Zen', dirs: [path.join(support, 'zen')] },
+    ]
+  }
+  const config = process.env.XDG_CONFIG_HOME ?? path.join(home, '.config')
+  return [
+    {
+      name: 'Firefox',
+      dirs: [
+        path.join(config, 'mozilla', 'firefox'),
+        path.join(home, '.mozilla', 'firefox'),
+        path.join(home, 'snap', 'firefox', 'common', '.mozilla', 'firefox'),
+        path.join(home, '.var', 'app', 'org.mozilla.firefox', '.mozilla', 'firefox'),
+      ],
+    },
+    { name: 'Zen', dirs: [path.join(config, 'zen'), path.join(home, '.zen'), path.join(home, '.var', 'app', 'app.zen_browser.zen', '.zen')] },
+  ]
+}
+
+/** Perfis (pasta e nome) de um navegador da família do Firefox. */
+async function geckoProfiles(browser: GeckoBrowser): Promise<{ dir: string; name: string }[]> {
+  for (const base of browser.dirs) {
+    const ini = await fs.readFile(path.join(base, 'profiles.ini'), 'utf8').catch(() => null)
+    if (ini === null) continue
+    return parseProfilesIni(ini).map((profile) => ({
+      dir: profile.relative ? path.join(base, ...profile.path.split(/[\\/]/)) : profile.path,
+      name: profile.name,
+    }))
+  }
+  return []
+}
+
+/** Lê os favoritos do places.sqlite (de uma cópia: o navegador aberto trava o arquivo). */
+async function readPlaces(profileDir: string): Promise<BookmarkFolder[] | null> {
+  const source = path.join(profileDir, 'places.sqlite')
+  if (!(await fs.stat(source).catch(() => null))?.isFile()) return null
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), '4notes-places-'))
+  try {
+    const copy = path.join(tmp, 'places.sqlite')
+    await fs.copyFile(source, copy)
+    // Mudanças recentes podem estar só no -wal (ainda não gravadas no banco)
+    await fs.copyFile(`${source}-wal`, `${copy}-wal`).catch(() => undefined)
+    const { DatabaseSync } = await import('node:sqlite')
+    const db = new DatabaseSync(copy)
+    try {
+      const rows = db
+        .prepare(
+          'SELECT b.id AS id, b.parent AS parent, b.type AS type, b.title AS title, b.position AS position, b.guid AS guid, p.url AS url FROM moz_bookmarks b LEFT JOIN moz_places p ON p.id = b.fk',
+        )
+        .all() as unknown as PlacesRow[]
+      return geckoBookmarksFromRows(rows)
+    } finally {
+      db.close()
+    }
+  } catch (error) {
+    console.warn('[4notes] Não foi possível ler o places.sqlite:', error)
+    return null
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+/** Plano B: a cópia automática mais recente (bookmarkbackups/*.jsonlz4). */
+async function readBookmarkBackup(profileDir: string): Promise<BookmarkFolder[] | null> {
+  const dir = path.join(profileDir, 'bookmarkbackups')
+  const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((name) => /\.(?:json|jsonlz4|mozlz4)$/i.test(name))
+  const dated = await Promise.all(names.map(async (name) => ({ name, mtime: (await fs.stat(path.join(dir, name)).catch(() => null))?.mtimeMs ?? 0 })))
+  for (const { name } of dated.sort((a, b) => b.mtime - a.mtime)) {
+    try {
+      const data = new Uint8Array(await fs.readFile(path.join(dir, name)))
+      const text = new TextDecoder().decode(/\.json$/i.test(name) ? data : decodeMozLz4(data))
+      const roots = parseGeckoBackup(JSON.parse(text))
+      if (countLinks(roots)) return roots
+    } catch (error) {
+      console.warn('[4notes] Cópia de favoritos ilegível:', name, error)
+    }
+  }
+  return null
+}
+
+async function readGeckoProfile(profileDir: string): Promise<BookmarkFolder[] | null> {
+  const places = await readPlaces(profileDir)
+  return places && countLinks(places) ? places : readBookmarkBackup(profileDir)
+}
+
+// ── Navegadores encontrados ──────────────────────────────────────────────────
+
+type SourceLocation = { kind: 'chromium'; file: string } | { kind: 'gecko'; dir: string }
+
+/** Favoritos encontrados na última busca (a interface só conhece os ids). */
+const sourceFiles = new Map<string, SourceLocation>()
 
 /** Navegadores (e perfis) com favoritos neste computador. */
 export async function findBrowserSources(): Promise<BrowserSource[]> {
   sourceFiles.clear()
   const sources: BrowserSource[] = []
+  const add = (location: SourceLocation, browser: string, profile: string | null, count: number) => {
+    const id = `b${sourceFiles.size + 1}`
+    sourceFiles.set(id, location)
+    sources.push({ id, browser, profile, count })
+  }
   for (const browser of browserDirs()) {
     const candidates: [string, string | null][] = browser.profiles
       ? (await profilesOf(browser.dir)).map(([folder, name]) => [path.join(browser.dir, folder, 'Bookmarks'), name])
@@ -245,20 +372,32 @@ export async function findBrowserSources(): Promise<BrowserSource[]> {
       const roots = parseChromiumBookmarks(await readJson(file))
       const count = countLinks(roots)
       if (!count) continue
-      const id = `b${sourceFiles.size + 1}`
-      sourceFiles.set(id, file)
-      sources.push({ id, browser: browser.name, profile, count })
+      add({ kind: 'chromium', file }, browser.name, profile, count)
       if (!browser.profiles) break // Opera: um arquivo só
     }
+  }
+  for (const browser of geckoBrowsers()) {
+    const found: { dir: string; name: string; count: number }[] = []
+    for (const profile of await geckoProfiles(browser)) {
+      const count = countLinks((await readGeckoProfile(profile.dir)) ?? [])
+      if (count) found.push({ ...profile, count })
+    }
+    // Com um perfil só, o nome dele ("default-release") não ajuda em nada
+    for (const profile of found) add({ kind: 'gecko', dir: profile.dir }, browser.name, found.length > 1 ? profile.name : null, profile.count)
   }
   return sources
 }
 
 /** Favoritos de um dos navegadores encontrados por findBrowserSources. */
 export async function readBrowserBookmarks(id: unknown): Promise<BookmarkFolder[]> {
-  const file = typeof id === 'string' ? sourceFiles.get(id) : undefined
-  if (!file) throw new AppError('ENOENT', 'Navegador não encontrado. Abra a importação de novo.')
-  const raw = await readJson(file)
+  const location = typeof id === 'string' ? sourceFiles.get(id) : undefined
+  if (!location) throw new AppError('ENOENT', 'Navegador não encontrado. Abra a importação de novo.')
+  if (location.kind === 'gecko') {
+    const roots = await readGeckoProfile(location.dir)
+    if (!roots) throw new AppError('EIO', 'Não foi possível ler os favoritos desse navegador.')
+    return roots
+  }
+  const raw = await readJson(location.file)
   if (raw === null) throw new AppError('EIO', 'Não foi possível ler os favoritos desse navegador.')
   return parseChromiumBookmarks(raw)
 }

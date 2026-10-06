@@ -1,10 +1,11 @@
 /**
- * Menções — a ponte entre Tarefas, Notas e Mapa Mental (a única ligação entre os
- * módulos, pedida para as menções):
+ * Menções — a ponte entre Tarefas, Notas, Mapa Mental e Links (a única ligação
+ * entre os módulos, pedida para as menções):
  *
  * - Tarefas mencionam notas (das Notas e de qualquer mapa): ficam no tasks.json.
- * - Notas (das Notas e do Mapa Mental) mencionam notas e tarefas: são links
- *   Markdown dentro do texto (lib/notes/mention-links.ts).
+ * - Notas (das Notas e do Mapa Mental) mencionam notas, tarefas e links salvos: são
+ *   links Markdown dentro do texto (lib/notes/mention-links.ts). Um link salvo é um
+ *   link comum, com o ícone do site na frente.
  * - Lista o que pode ser mencionado e abre o que foi mencionado (vai para o
  *   módulo certo, troca de mapa se precisar).
  * - Quando uma nota, uma categoria ou um mapa muda de nome no app
@@ -13,9 +14,11 @@
  *   elas continuarem funcionando depois de reabrir o app.
  */
 import { computed, watch } from 'vue'
+import { workspaceFileUrl } from '#shared/ipc'
 import { showToast } from '~/composables/useToasts'
 import type { MentionState, MentionTarget } from '~/lib/editor/host'
 import { nameKey, stripExtension } from '~/lib/files/filename'
+import { displayHost, searchLinks, urlKey, type SavedLink } from '~/lib/links/model'
 import { mindmapRepository } from '~/lib/mindmap/repository'
 import { onNoteChange } from '~/lib/note-events'
 import { categoryOfPath } from '~/lib/notes/categories'
@@ -24,6 +27,7 @@ import { DATA_PATHS } from '~/lib/storage/paths'
 import type { NoteRef } from '~/lib/tasks/mentions'
 import type { Task } from '~/lib/tasks/model'
 import { debounce } from '~/lib/utils/async'
+import { useLinksStore } from './links'
 import { useMindmapStore } from './mindmap'
 import { noteTitle, useNotesStore } from './notes'
 import { useTasksStore } from './tasks'
@@ -38,6 +42,7 @@ export interface MentionCandidate {
 const notes = useNotesStore()
 const mindmap = useMindmapStore()
 const tasks = useTasksStore()
+const links = useLinksStore()
 
 const fold = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('pt-BR')
 
@@ -87,13 +92,15 @@ export async function mentionCandidates(): Promise<MentionCandidate[]> {
 
 /**
  * Filtra pelo texto digitado e ordena: quem começa com o texto vem primeiro, depois
- * o que está no fim da fila (`late`, ex.: tarefas concluídas), depois em ordem alfabética.
+ * o que está no fim da fila (`late`: 1 = tarefas concluídas, 2 = links), depois em
+ * ordem alfabética. Itens com `matched` já foram filtrados por outra regra (links:
+ * título ou endereço).
  */
-function rank<T extends { title: string }>(list: T[], query: string, limit: number, late?: (item: T) => boolean): T[] {
+function rank<T extends { title: string; matched?: boolean }>(list: T[], query: string, limit: number, late?: (item: T) => number): T[] {
   const q = fold(query.trim())
   return list
-    .map((item) => ({ item, title: fold(item.title), late: late?.(item) ? 1 : 0 }))
-    .filter(({ title }) => !q || title.includes(q))
+    .map((item) => ({ item, title: fold(item.title), late: late?.(item) ?? 0 }))
+    .filter(({ item, title }) => !q || item.matched || title.includes(q))
     .sort((a, b) => Number(!a.title.startsWith(q)) - Number(!b.title.startsWith(q)) || a.late - b.late || a.title.localeCompare(b.title, 'pt-BR'))
     .slice(0, limit)
     .map(({ item }) => item)
@@ -151,14 +158,46 @@ const taskWhere = (task: Task) => {
   return category ? `Tarefa · ${category.name}` : 'Tarefa'
 }
 
-/** Notas e tarefas para mencionar dentro de uma nota (sem a própria nota). */
+/** Um item da lista do "@": o que vai para a nota (MentionTarget) + a ordem dele. */
+type RankedTarget = MentionTarget & { late: number; matched?: boolean }
+
+/** Notas, tarefas e links salvos para mencionar dentro de uma nota (sem a própria nota). */
 export async function searchMentions(query: string, exceptPath: string | null): Promise<MentionTarget[]> {
   const except = exceptPath ? nameKey(exceptPath) : null
-  const noteTargets = (await mentionCandidates())
+  const noteTargets: RankedTarget[] = (await mentionCandidates())
     .filter((candidate) => nameKey(refPath(candidate.ref)) !== except)
-    .map((candidate) => ({ path: refPath(candidate.ref), title: candidate.title, where: candidate.where, done: false }))
-  const taskTargets = tasks.state.tasks.map((task) => ({ path: taskMentionPath(task.id), title: task.title, where: taskWhere(task), done: task.done }))
-  return rank([...noteTargets, ...taskTargets], query, 30, (item) => item.done).map(({ path, title, where }) => ({ path, title, where }))
+    .map((candidate) => ({ path: refPath(candidate.ref), title: candidate.title, where: candidate.where, late: 0 }))
+  const taskTargets: RankedTarget[] = tasks.state.tasks.map((task) => ({ path: taskMentionPath(task.id), title: task.title, where: taskWhere(task), late: task.done ? 1 : 0 }))
+  // Links: a busca procura no título e no endereço (como na tela dos Links)
+  const linkTargets: RankedTarget[] = (query.trim() ? searchLinks(links.state.links, query) : links.state.links).map((link) => ({
+    path: '',
+    url: link.url,
+    title: link.title,
+    where: `Link · ${displayHost(link.url)}`,
+    late: 2,
+    matched: true,
+  }))
+  return rank([...noteTargets, ...taskTargets, ...linkTargets], query, 30, (item) => item.late).map(({ path, title, where, url }) =>
+    url ? { path, title, where, url } : { path, title, where },
+  )
+}
+
+// ── Links salvos dentro das notas ────────────────────────────────────────────
+
+/** Endereço para comparar: o do arquivo da nota vem com ( ) < > codificados. */
+const linkKey = (url: string) => urlKey(url.trim().replace(/%28/gi, '(').replace(/%29/gi, ')').replace(/%3C/gi, '<').replace(/%3E/gi, '>'))
+
+const savedLinks = computed(() => {
+  const map = new Map<string, SavedLink>()
+  for (const link of links.state.links) map.set(linkKey(link.url), link)
+  return map
+})
+
+/** Ícone do site (endereço da imagem) quando `url` é um link salvo no módulo Links; null = não é (ou ainda sem ícone). */
+export function savedLinkIcon(url: string): string | null {
+  const link = savedLinks.value.get(linkKey(url))
+  const path = link ? links.iconPath(link) : null
+  return path ? `${workspaceFileUrl(path)}?v=${links.state.iconVersion}` : null
 }
 
 /** Título atual de uma nota mencionada; null se ela não existe mais. */
@@ -212,6 +251,10 @@ export const mentionRevision = computed(() => {
   for (const note of notes.state.notes) if (note.path) parts.push(`${note.path}:${noteTitle(note)}`)
   parts.push(`${mindmap.state.currentMap}/${mindmap.state.notes.map((note) => note.id).join('/')}`)
   parts.push(mindmap.state.maps.map((map) => map.name).join('/'))
+  // Ícones dos links salvos (aparecem na frente dos links mencionados)
+  let withIcon = 0
+  for (const link of links.state.links) if (link.icon) withIcon++
+  parts.push(`links:${links.state.links.length}:${withIcon}:${links.state.iconVersion}`)
   return parts.join('|')
 })
 

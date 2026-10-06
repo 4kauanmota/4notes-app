@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Campo para salvar um link rápido: cole o endereço e aperte Enter. O título e o
- * ícone do site chegam sozinhos logo depois. Com uma pasta aberta, o link vai para ela.
+ * ícone do site chegam sozinhos logo depois. Com uma categoria aberta, o link vai para ela.
  */
 import { computed, ref } from 'vue'
 import { useLinksStore } from '~/stores/links'
@@ -67,7 +67,7 @@ defineExpose({
         @keydown="onKeydown"
       />
       <span v-if="folder" class="qa-folder" :data-tip="`O link vai para ${folder.name}`">
-        <CategoryAvatar :name="folder.name" :color="folder.color" :icon="folder.icon" :size="16" />
+        <CategoryAvatar :name="folder.name" :color="folder.color" :icon="folder.icon" :image="folder.image" :size="16" />
         {{ folder.name }}
       </span>
       <button type="submit" class="btn btn-sm btn-primary qa-save" :disabled="!text.trim()">Salvar</button>

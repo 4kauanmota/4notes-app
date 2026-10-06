@@ -1,12 +1,15 @@
 /**
- * Menções a notas e tarefas no editor — só onde o app liga o recurso
+ * Menções a notas, tarefas e links no editor — só onde o app liga o recurso
  * (EditorHost.mentions: nas Notas e nas notas do Mapa Mental).
  *
- * - Digitar "@" abre a lista (notas das Notas e dos mapas, e tarefas); Enter ou clique insere.
+ * - Digitar "@" abre a lista (notas das Notas e dos mapas, tarefas e links salvos);
+ *   Enter ou clique insere.
  * - No arquivo, a menção é um link Markdown comum (lib/notes/mention-links.ts).
- * - No editor, aparece como um chip com o título atual (e, nas tarefas, se está
- *   concluída). O chip é um bloco só (o cursor passa por cima e Backspace apaga a
- *   menção inteira); clicar abre a nota ou a tarefa.
+ * - Notas e tarefas aparecem como um chip com o título atual (e, nas tarefas, se
+ *   está concluída). O chip é um bloco só (o cursor passa por cima e Backspace apaga
+ *   a menção inteira); clicar abre a nota ou a tarefa.
+ * - Um link salvo entra como um link comum ([título](endereço), texto editável) e
+ *   aparece com o ícone do site na frente (formatting.ts).
  */
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete'
 import { syntaxTree } from '@codemirror/language'
@@ -15,6 +18,7 @@ import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemir
 import { basename, stripExtension } from '../files/filename'
 import { iconSvg } from '../icons'
 import { mentionKind, mentionMarkdown, mentionTarget, unescapeLinkText, type MentionKind } from '../notes/mention-links'
+import { linkDestination, linkLabel } from './elements'
 import { editorHost, type MentionTarget } from './host'
 
 interface MentionLink {
@@ -58,7 +62,7 @@ function findMentions(state: EditorState): MentionLink[] {
 
 // ── Chip ─────────────────────────────────────────────────────────────────────
 
-const ICON: Record<MentionKind, string> = { note: 'notes', map: 'graph', task: 'task-open' }
+const ICON: Record<MentionKind | 'link', string> = { note: 'notes', map: 'graph', task: 'task-open', link: 'link' }
 const TIP: Record<MentionKind, string> = { note: 'Abrir a nota', map: 'Abrir a nota no Mapa Mental', task: 'Abrir a tarefa' }
 
 class MentionWidget extends WidgetType {
@@ -133,7 +137,7 @@ function insideCode(state: EditorState, pos: number): boolean {
 function insertMention(view: EditorView, target: MentionTarget, from: number, to: number): void {
   const host = view.state.facet(editorHost)
   if (!host) return
-  const text = mentionMarkdown(host.assetBase(), target.path, target.title)
+  const text = target.url ? `[${linkLabel(target.title)}](${linkDestination(target.url)})` : mentionMarkdown(host.assetBase(), target.path, target.title)
   const next = view.state.sliceDoc(to, to + 1)
   const insert = next && /\s/.test(next) ? text : `${text} `
   view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length }, userEvent: 'input.complete', scrollIntoView: true })
@@ -158,7 +162,7 @@ async function mentionCompletions(context: CompletionContext): Promise<Completio
       (target): Completion => ({
         label: target.title,
         detail: target.where,
-        type: `mention-${mentionKind(target.path)}`,
+        type: `mention-${target.url ? 'link' : mentionKind(target.path)}`,
         apply: (view, _completion, from, to) => insertMention(view, target, from, to),
       }),
     ),
@@ -177,7 +181,7 @@ const mentionPicker = autocompletion({
       render: (completion) => {
         const icon = document.createElement('span')
         icon.className = 'cm-mention-option-icon'
-        const kind = (completion.type?.replace('mention-', '') ?? 'note') as MentionKind
+        const kind = (completion.type?.replace('mention-', '') ?? 'note') as MentionKind | 'link'
         icon.innerHTML = iconSvg(ICON[kind] ?? 'notes', 14)
         return icon
       },

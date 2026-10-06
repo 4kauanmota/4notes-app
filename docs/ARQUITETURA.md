@@ -24,7 +24,10 @@ Cada um roda em um **processo** separado, e eles conversam por mensagens (**IPC*
 │  ├─ ipc.ts        atende os pedidos  ◀─IPC─▶ ├─ stores/      estado          │
 │  ├─ files.ts      lê/grava arquivos          ├─ lib/         regras + disco  │
 │  ├─ data-dir.ts   workspaces                 │                               │
+│  ├─ library.ts    biblioteca de imagens      │                               │
+│  ├─ export.ts     exportar TXT/PDF           │                               │
 │  ├─ links.ts      sites e favoritos          │                               │
+│  ├─ system.ts     iniciar com o computador   │                               │
 │  └─ config.ts     preferências da máquina    └─ window.fourNotes  ◀── preload│
 │         │                                         (electron/preload.ts)      │
 └─────────┼────────────────────────────────────────────────────────────────────┘
@@ -34,7 +37,7 @@ Cada um roda em um **processo** separado, e eles conversam por mensagens (**IPC*
    ├── tasks/tasks.json
    ├── mindmap/<mapa>/ (.md + mapa.json)
    ├── links/links.json (+ icons/, os ícones dos sites)
-   ├── attachments/ (imagens das notas)
+   ├── attachments/ (biblioteca de imagens)
    └── .4notes/
 ```
 
@@ -44,10 +47,11 @@ Cada um roda em um **processo** separado, e eles conversam por mensagens (**IPC*
 | ---------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Interface                    | `app/pages`, `app/components`                                 | O que você vê e clica. Não sabe onde os arquivos ficam.                          |
 | Estado da aplicação          | `app/stores/*.ts`                                             | Dados em memória de cada módulo + ações (criar, editar, salvar…).                |
-| Lógica pura                  | `app/lib/dates.ts`, `app/lib/tasks/`, `app/lib/notes/title.ts`, `app/lib/mindmap/`, `app/lib/editor/`, `app/lib/links/`, `shared/link-meta.ts`, `shared/bookmarks.ts` | Regras sem Vue e sem disco (títulos, recorrência, formatação, marcação escondida, prévia do Markdown, listas, detecção de código, menções, conexões, layout do mapa, endereços, título/ícone de páginas, favoritos dos navegadores). Testadas em `tests/`. |
+| Lógica pura                  | `app/lib/dates.ts`, `app/lib/tasks/`, `app/lib/notes/` (título, categoria automática, exportar), `app/lib/mindmap/`, `app/lib/editor/`, `app/lib/links/`, `shared/link-meta.ts`, `shared/bookmarks.ts` | Regras sem Vue e sem disco (títulos, recorrência, formatação, marcação escondida, prévia do Markdown, listas, detecção de código, menções, conexões, layout do mapa, endereços, título/ícone de páginas, favoritos dos navegadores — Chromium, Firefox/Zen e HTML —, texto e HTML das notas exportadas). Testadas em `tests/`. |
 | Persistência                 | `app/lib/*/repository.ts`, `app/lib/storage/`                 | Sabe **onde** e **em que formato** cada coisa é salva.                           |
-| Sistema de arquivos          | `electron/files.ts`, `electron/data-dir.ts`                   | Leitura/escrita real no disco (Node.js), protegida.                              |
+| Sistema de arquivos          | `electron/files.ts`, `electron/data-dir.ts`, `electron/library.ts`, `electron/export.ts` | Leitura/escrita real no disco (Node.js), protegida: notas, workspaces, biblioteca de imagens, arquivos exportados. |
 | Rede e navegadores (Links)   | `electron/links.ts`                                           | Busca o título e o ícone de um site e lê os favoritos dos navegadores instalados. |
+| Sistema operacional          | `electron/system.ts`                                          | Iniciar o 4notes junto com o computador.                                         |
 | Renderização do mapa         | `app/lib/mindmap/graph-view.ts`                               | Desenho em `<canvas>`, câmera, arrastar/conectar, animações.                     |
 | Camada desktop               | `electron/`                                                   | Janela, protocolo, menus, IPC, segurança.                                        |
 
@@ -64,13 +68,14 @@ Links        → stores/links.ts   → lib/links/   → links/links.json + links
 
 Os módulos não importam uns aos outros. Eles compartilham **infraestrutura** (editor de Markdown, ícones, diálogos, a API de arquivos) e `stores/app.ts` conhece os quatro só para tarefas gerais: carregar tudo ao abrir, salvar tudo antes de fechar e reler os arquivos quando você volta para a janela.
 
-A **única ligação** entre módulos é a que foi pedida: **menções** — tarefas mencionam notas (1.1.0); notas das Notas mencionam notas (1.1.1) e tarefas (1.2.0); notas do Mapa Mental mencionam notas e tarefas (1.2.0). Ela é explícita e fica num lugar só (ver item 10):
+A **única ligação** entre módulos é a que foi pedida: **menções** — tarefas mencionam notas (1.1.0); notas das Notas mencionam notas (1.1.1) e tarefas (1.2.0); notas do Mapa Mental mencionam notas e tarefas (1.2.0); notas (das Notas e do Mapa) mencionam **links salvos** (1.3.1). Ela é explícita e fica num lugar só (ver item 10):
 
 ```
 Notas / Mapa Mental ──(avisam "nota renomeada / movida")──▶ lib/note-events.ts
                                                                 │
-stores/mentions.ts  ◀───────────────────────────────────────────┘   lista notas e tarefas, abre o que foi
+stores/mentions.ts  ◀───────────────────────────────────────────┘   lista notas, tarefas e links, abre o que foi
        │        ◀── (observa os títulos das tarefas) ── stores/tasks.ts  mencionado, corrige as menções
+       │        ◀── (lê os links salvos e os ícones) ── stores/links.ts
        ▼
 stores/tasks.ts   → tasks.json ("mentions": [...])
 stores/notes.ts   → links no texto das Notas (rewriteContents)
@@ -79,7 +84,7 @@ stores/mindmap.ts → links no texto do mapa aberto (rewriteContents) e dos outr
 
 Notas e Mapa Mental não sabem quem os menciona: só publicam o aviso de renomeação (e oferecem funções genéricas para reescrever o texto das notas, que a ponte usa). Tarefas não sabem que são mencionadas: a ponte observa os títulos delas.
 
-O módulo **Links** (1.3.0) não tem ligação com nenhum outro: só compartilha a infraestrutura (o seletor de ícones e o avatar das categorias das Notas, que viraram peças comuns).
+O módulo **Links** não sabe que é mencionado: a ponte só lê a lista de links salvos (para o `@` e para o ícone do site na frente de um link mencionado). Ele também compartilha a infraestrutura (o seletor de ícones, o avatar das categorias e a **biblioteca de imagens**, que é de todo o app — ver item 12).
 
 ---
 
@@ -165,7 +170,8 @@ Peças:
 - **`shared/ipc.ts`** — o contrato (`FourNotesApi`) e os nomes dos canais. É importado pelos dois lados, então o TypeScript avisa se algo não bater.
 - **`electron/preload.ts`** — roda antes da página, em um contexto isolado, e expõe só as funções do contrato como `window.fourNotes` (`contextBridge`).
 - **`electron/ipc.ts`** — um *handler* por canal. Antes de tudo, confere se o pedido veio da própria interface do 4notes.
-- **`electron/files.ts`** — faz o trabalho real com `fs` do Node.js (inclusive `saveImage`, que grava as imagens coladas em `attachments/` com nome único e limite de 40 MB, e `removeImage`/`restoreImage`, que apagam uma imagem removida da nota e a devolvem no Desfazer).
+- **`electron/files.ts`** — faz o trabalho real com `fs` do Node.js (inclusive `saveImage`, que grava as imagens coladas em `attachments/` com nome único e limite de 40 MB, e `copyImage`, que copia uma imagem da biblioteca para a pasta de uma categoria das Notas).
+- **`electron/library.ts`** — a biblioteca de imagens (item 12): lista, envia, exclui e "adota" imagens; **`electron/export.ts`** — salva as notas exportadas (TXT/PDF) onde você escolher; **`electron/system.ts`** — iniciar com o computador (item 13).
 - **`electron/links.ts`** — o único lugar que usa a rede (módulo Links, ver item 11). A interface não ganha acesso livre à internet nem ao disco: ela só pede "o título e o ícone deste endereço" ou "os favoritos do navegador X" (da lista que o próprio processo principal encontrou).
 
 Proteções:
@@ -190,7 +196,7 @@ Pessoal/
 │   ├── Lista de compras.md
 │   ├── categorias.json         ordem, cor, ícone e imagem das categorias
 │   └── Trabalho/               uma pasta por categoria, com as notas dela
-│       ├── Trabalho.png        imagem da categoria (nome da categoria + extensão)
+│       ├── Trabalho.png        foto da categoria (cópia da imagem da biblioteca, com o nome da categoria)
 │       └── Reunião.md
 ├── tasks/
 │   └── tasks.json              Tarefas + categorias (um arquivo só)
@@ -203,13 +209,13 @@ Pessoal/
 │   └── Estudos/
 │       └── …
 ├── links/
-│   ├── links.json              Links salvos + pastas (um arquivo só)
+│   ├── links.json              Links salvos + categorias (um arquivo só)
 │   └── icons/                  ícones dos sites, um por site (nuxt.com.png, store.steampowered.com.ico…)
-├── attachments/                Imagens coladas nas notas (imagem-20261002-141503.png)
+├── attachments/                Biblioteca de imagens: coladas nas notas (imagem-20261002-141503.png), enviadas, fotos das categorias
 └── .4notes/                    Estado da interface (pode ser apagado sem perder dados)
-    ├── notes.json              abas abertas, aba ativa, lista lateral, categorias recolhidas e pastas abertas
-    ├── mindmap.json            mapa aberto, posições dos nós de cada mapa e ajustes
-    ├── links.json              ordem da lista de links (recentes ou A–Z)
+    ├── notes.json              abas abertas, aba ativa, lista lateral, categorias recolhidas, pastas abertas e as configurações das Notas
+    ├── mindmap.json            mapa aberto, posições dos nós de cada mapa e as configurações do Mapa Mental
+    ├── links.json              ordem da lista de links (recentes, A–Z ou URL)
     ├── app.json                último módulo aberto
     └── backups/                tasks-segunda.json … tasks-domingo.json e links-segunda.json … (7 dias) e conversões do mapa
 ```
@@ -223,7 +229,8 @@ Formatos escolhidos:
 | Conexões e cores do mapa | JSON (`mapa.json`, um por mapa) | O texto das notas fica limpo (sem `[[referências]]`) e as setas ficam num lugar só, fácil de ler. |
 | Imagens das notas | Arquivos em `attachments/` + `![](../attachments/x.png)` na nota | A imagem fica no workspace (backup = copiar a pasta) e o caminho relativo também funciona no Obsidian/VS Code. |
 | Categorias das Notas | Pastas em `notes/` + `notes/categorias.json` (ordem, cor, ícone, imagem) | A categoria de uma nota é a pasta onde o arquivo está: aparece igual no Explorador e no Obsidian, sem cadastro paralelo que possa ficar diferente. |
-| Links | JSON (`links/links.json`) + ícones em `links/icons/` | Uma lista de registros (endereço, título, pasta): JSON é o formato natural e continua editável à mão. Os ícones ficam no workspace para aparecer sem internet e ir junto no backup. |
+| Links | JSON (`links/links.json`) + ícones em `links/icons/` | Uma lista de registros (endereço, título, categoria): JSON é o formato natural e continua editável à mão. Os ícones ficam no workspace para aparecer sem internet e ir junto no backup. |
+| Configurações dos módulos | JSON em `.4notes/` (no arquivo de estado de cada módulo) | Valem para o workspace (cada workspace com as suas) e não misturam com os dados. |
 | Estado da interface | JSON em `.4notes/` | Separado dos dados: apagar não perde nada importante. |
 
 Exemplo de `tasks.json`:
@@ -276,7 +283,7 @@ As notas são referenciadas pelo título (nome do arquivo sem `.md`). A conexão
 
 ## 5. Workspaces: criar, abrir e trocar
 
-Um **workspace é uma pasta de dados**, e o **nome do workspace é o nome da pasta** — não existe um segundo cadastro de nomes que possa ficar diferente do que você vê no Explorador. O nome aparece no canto superior esquerdo (`components/shell/TitleBar.vue`); clicar nele abre o menu **Abrir outro workspace… / Criar workspace… / Mostrar no Explorador**. As mesmas ações ficam em **Configurações → Workspace**.
+Um **workspace é uma pasta de dados**, e o **nome do workspace é o nome da pasta** — não existe um segundo cadastro de nomes que possa ficar diferente do que você vê no Explorador. O nome aparece no canto superior esquerdo (`components/shell/TitleBar.vue`); clicar nele abre o menu **Abrir outro workspace… / Criar workspace… / Mostrar no Explorador**. As mesmas ações ficam em **Configurações → Geral → Workspace**.
 
 **Primeira execução** — não existe `dataDir` no `config.json`, então aparece a tela de boas-vindas (`components/shell/WelcomeScreen.vue`) com **Criar workspace** e **Abrir workspace existente**. Não existe pasta sugerida nem pré-definida.
 
@@ -345,12 +352,24 @@ Cada categoria é uma **pasta** em `notes/`; as notas dela ficam lá dentro (`no
 ```
 
 - **Categorias = categorias.json + pastas com notas.** Uma pasta criada fora do app (com notas) também aparece, com uma cor escolhida pelo nome (sempre a mesma), até você editar; uma categoria sem notas existe pelo `categorias.json`. Um `categorias.json` com erro é copiado para `.4notes/backups/` e as pastas continuam valendo.
-- **Ícone** (1.3.0): um dos ícones prontos de `lib/category-icons.ts` (desenhados em `lib/icons.ts`, na cor da categoria), escolhido no `components/ui/IconPicker.vue`. Ícone e imagem se excluem: escolher um tira o outro; sem nenhum dos dois, aparece a inicial do nome (`CategoryAvatar.vue`). O mesmo seletor e o mesmo avatar servem para as pastas dos Links.
-- **Imagem**: escolhida no seletor de arquivos do sistema (`images.pick`, até 10 MB); o Electron devolve os bytes e a interface grava `notes/<Categoria>/<Categoria>.<ext>` (`images.write`, só extensões de imagem, dentro do workspace). Trocar a imagem regrava o arquivo; tirar manda para a Lixeira.
+- **Ícone** (1.3.0): um dos ícones prontos de `lib/category-icons.ts` (desenhados em `lib/icons.ts`, na cor da categoria), escolhido no `components/ui/IconPicker.vue`. Ícone e imagem se excluem: escolher um tira o outro; sem nenhum dos dois, aparece a inicial do nome (`CategoryAvatar.vue`). O mesmo seletor e o mesmo avatar servem para as categorias dos Links.
+- **Imagem** (1.3.1): escolhida na **biblioteca de imagens** (item 12 — dá para enviar uma nova por lá). Uma cópia vai para `notes/<Categoria>/<Categoria>.<ext>` (`images.copy`, só extensões de imagem, dentro do workspace), mantendo a estrutura de antes: a categoria continua sendo uma pasta com tudo dela. Trocar ou tirar a imagem manda a cópia antiga para a Lixeira — mas antes ela é "adotada" pela biblioteca (`library.adopt`: se não existir uma igual em `attachments/`, uma cópia vai para lá), então continua disponível para usar de novo. Excluir a categoria faz o mesmo com a foto dela.
 - **Mover uma nota** (submenu "Categoria" da aba ou da lista, ou arrastando a aba/nota até a categoria — o arrastar leva o id da nota no tipo `application/x-4notes-note`): na fila da nota, o arquivo é renomeado para a outra pasta (com `(2)` se o nome já existir lá), os links relativos dela são refeitos para a pasta nova (`rebaseLinks`: `../attachments/x.png` → `../../attachments/x.png`, `Ideias.md` → `../Ideias.md`) e o aviso `note-renamed` corrige as menções a ela. O aviso de "foi para…" tem **Desfazer**.
 - **Renomear a categoria** renomeia a pasta (e a imagem, que acompanha o nome) com as filas de todas as notas dela paradas; as notas mudam de caminho e o aviso `notes-folder-renamed` corrige as menções.
 - **Excluir a categoria** move as notas de volta para `notes/` (com os links refeitos) e manda a pasta para a Lixeira — só se não sobrar nenhum outro arquivo nela (senão a pasta fica e um aviso explica).
 - Operações de categoria acontecem uma de cada vez (`§categories` na fila); as das notas esperam por elas.
+
+### Categoria automática pelo título — `lib/notes/auto-category.ts`, `stores/notes.ts`
+
+Configuração das Notas (desligada no começo, item 13). Uma nota **nova** criada por você fora das categorias (`createNote(…, { autoCategory: true })`, só nesta sessão — duplicar ou desfazer uma exclusão não contam) vai para a categoria que já tem notas com o mesmo começo de título — o mesmo critério das pastas pelo título:
+
+```
+Dev: "4notes 1.1.1", "4notes 1.2.0"        nova: "4notes 1.2.1"  →  Dev
+```
+
+- `matchCategory` compara as palavras do começo do título (sem diferenciar maiúsculas): vale a categoria com o começo em comum mais comprido; empatando, a que tem mais notas com esse começo; empate de novo, a nota fica onde está.
+- A decisão acontece **uma vez**, quando o título fica pronto: `Enter` depois do título (`titleLineFinished`) ou ao sair da nota (outra aba, fechar a aba). Assim, digitar o título aos poucos não leva a nota para o lugar errado no meio do caminho.
+- Mover usa o mesmo caminho do "Categoria" do menu (`moveToCategory`), com o aviso "foi para Dev (categoria em comum)" e **Desfazer**. Com a opção desligada, nada muda — e ligar depois não mexe nas notas que já existem.
 
 ### Lista lateral: categorias no topo e pastas pelo título — `NotesSidebar.vue`, `lib/notes/title-tree.ts`
 
@@ -369,6 +388,8 @@ Lista de compras          1.1.1
 - A nota com o título exatamente igual ao da pasta é a própria pasta: clicar nela abre a nota (a setinha abre/fecha a pasta).
 - Maiúsculas não importam para agrupar; o nome da pasta usa a grafia da nota da pasta (ou a mais comum). Pastas primeiro, depois as notas, em ordem alfabética com números na ordem certa (`1.9` antes de `1.10`).
 - As pastas começam fechadas; as que levam até a nota ativa abrem sozinhas. Categorias recolhidas e pastas abertas ficam em `.4notes/notes.json`. Buscando, tudo aparece aberto.
+- **Exibição das pastas pelo título** (1.3.1, configuração das Notas): **Padrão** (como foi digitado) ou **CAIXA ALTA** — só CSS (`text-transform` no nome das pastas); o título das notas e os arquivos não mudam.
+- O título **"Notas"** em cima das notas sem categoria só aparece quando existe alguma nota sem categoria (ou enquanto você arrasta uma nota até ali, para tirar a categoria).
 - O **+** de uma pasta (1.3.0, aparece ao passar o mouse) cria uma nota na mesma categoria que já começa com o título da pasta — `# 4notes ` (`titlePath` da pasta, em `title-tree.ts`) —, com o cursor no fim. Completando o título, a nota cai na pasta. Esse começo é só uma sugestão (`createNote(…, { template: true })`): enquanto você não digita mais nada, a nota não vira arquivo e fechar a aba a descarta.
 
 A aba de uma nota com categoria fica marcada com a **cor da categoria** (na aba ativa, o indicador de baixo inteiro; nas outras, um traço discreto).
@@ -377,7 +398,7 @@ A aba de uma nota com categoria fica marcada com a **cor da categoria** (na aba 
 
 Arquivos: `app/lib/editor/elements.ts` (lê os trechos formatados), `app/lib/editor/formatting.ts` (comandos e desenho), `app/lib/editor/hidden-markup.ts` (edição com as marcações escondidas), `app/components/editor/FormatToolbar.vue` (barra) e `app/lib/editor/setup.ts` (monta o editor com todas as extensões abaixo).
 
-Ao selecionar um trecho aparece a barra de formatação: negrito, itálico, sublinhado, tachado, cor do texto, marca-texto, título, lista, lista de tarefas, código, link e "limpar formatação". O arquivo continua sendo Markdown comum:
+Ao selecionar um trecho aparece a barra de formatação: negrito, itálico, sublinhado, tachado, cor do texto, marca-texto, título, lista, lista de tarefas, código, **bloco de texto** (1.3.2, ver "Blocos de texto" abaixo), link e "limpar formatação". Com várias ocorrências selecionadas (`Ctrl+D`) a barra não aparece — ela cobriria as outras seleções —, mas os atalhos (`Ctrl+B`…) formatam todas. O arquivo continua sendo Markdown comum:
 
 ```
 **negrito**   *itálico*   ~~tachado~~   ==marca-texto==   `código`
@@ -423,32 +444,69 @@ O arquivo continua sendo Markdown puro — a prévia só muda o desenho.
 - **Tela cheia** (`components/editor/CodeFullscreen.vue`) é um segundo editor com a linguagem do bloco; cada alteração é gravada de volta no bloco (`replaceBlockCode`), então desfazer/salvar funcionam como no resto da nota. **Remover bloco** apaga o bloco inteiro de uma vez, com **Desfazer** no aviso.
 - As cores vêm de `@codemirror/language-data`: a lista oficial de linguagens do CodeMirror, que **carrega cada linguagem só quando ela aparece** numa nota. GDScript (Godot) não está na lista e foi adicionado em `languages.ts` como um modo simples.
 
+### Blocos de texto — `text-blocks.ts`, `code-blocks.ts`, `languages.ts` (1.3.2)
+
+Um bloco de texto é um bloco cercado com ` ```text ` — Markdown comum (o Obsidian/VS Code mostram como texto pré-formatado):
+
+````
+Olá
+```text
+mundo
+```
+bonito
+````
+
+- **Só manual**: o botão **Bloco de texto** da barra de formatação (`wrapInTextBlock` → `textBlockChange`). Nada vira bloco de texto sozinho: colar só cria bloco para **código reconhecido** (como antes); texto comum, listas e trechos longos entram como texto. `fenceFromVsCodeMode` e `codeLanguage` (em `paste.ts`) nunca devolvem `text`.
+- **O conteúdo é o que aparece na tela**, sem tratamento: dentro de uma cerca não existe formatação, então o trecho é convertido pelas mesmas regras do **Exportar TXT** (`noteToPlainText` sobre `balancedSlice` da seleção): sai a marcação escondida (`**`, `<u>`, o endereço dos links; as menções ficam com o título), os itens de lista ficam com o marcador da tela (`•`, `1.`, `☐`/`☑`) e indentação/espaços continuam. Nenhuma linguagem, nenhuma cor, nada de "normalizar" o texto.
+- **Um bloco ocupa linhas inteiras**: o que sobra antes e depois da seleção, na mesma linha, continua no lugar, em linhas próprias. Formatos cortados pelo bloco fecham antes dele e reabrem depois (`**abcd**` com `bc` selecionado → `**a**`, bloco `bc`, `**d**`); os espaços encostados no corte saem (para o Markdown continuar valendo). Parte de um item de lista: o item continua com o resto do texto. Várias linhas a partir do começo do texto de uma linha: a primeira entra inteira (com o marcador da lista). Seleção que corta um bloco de código leva o bloco inteiro; dentro de um bloco, o botão não aparece (`canWrapInTextBlock`).
+- A cerca usa mais crases que qualquer linha do texto que comece com crases (` ```` ` quando precisa), para não fechar antes da hora.
+- **Cartão**: o mesmo dos blocos de código (`code-blocks.ts` reconhece `isTextBlock`), com o cabeçalho **Texto** (sem trocar linguagem), **Copiar**, **Tela cheia** e **Remover** (com **Desfazer** no aviso), altura máxima e rolagem interna — mas com a fonte do texto e linhas que quebram (`.cm-textblock` em `theme.ts`; editando, as linhas ganham `cm-md-textblock` em `setup.ts`). A **tela cheia** (`CodeFullscreen.vue`) abre como texto: fonte do texto, linhas que quebram, corretor ligado, sem números de linha nem recursos de código.
+- `text` é reservado: `findLanguage('text')` não devolve linguagem (a busca aproximada do CodeMirror acharia o LaTeX pelo apelido `tex`) e o Markdown do editor usa `findLanguage` para colorir o código dos blocos. No PDF exportado o bloco sai com a fonte do texto (`.code.text`).
+
+### Várias ocorrências — `Ctrl+D` — `multi-select.ts` (1.3.2)
+
+- `Ctrl+D` (`⌘D`) com um trecho selecionado acrescenta à seleção a **próxima ocorrência** do mesmo texto, sem diferenciar maiúsculas (como o VS Code); de novo, a seguinte — chegando ao fim da nota, continua do começo. A ocorrência nova vira a seleção principal (a próxima busca continua depois dela). Sem nada selecionado, o primeiro `Ctrl+D` seleciona a palavra do cursor e os próximos só pegam a mesma palavra inteira, com as mesmas maiúsculas (`wordModeField`).
+- Digitar, colar, apagar e os atalhos de formatação agem em todas as seleções juntas (os comandos de formatação já usavam `changeByRange`); um `Ctrl+Z` desfaz tudo de uma vez; `Esc` volta para um cursor só.
+- Ocorrências que começam ou terminam dentro de algo escondido ficam de fora: o endereço de um link, o título de uma menção, imagens, marcadores de linha e marcações (lido do texto por `hiddenRanges`, valendo também fora da parte visível da nota, e das partes atômicas do editor). Dentro do código de um bloco vale — o cartão se abre para mostrar a seleção.
+- O editor passou a aceitar várias seleções (`EditorState.allowMultipleSelections`), mas **só o `Ctrl+D` cria seleções extras** (`onlyCtrlDAddsRanges`): `Ctrl+clique` continua abrindo links (`clickAddsSelectionRange` desligado) e outros comandos do CodeMirror que criariam cursores (`Ctrl+Shift+L`, `Ctrl+Alt+↑`…) continuam como antes. Vale nas Notas e nas notas do Mapa Mental.
+
 ### Imagens — `images.ts`, `paste.ts`, `host.ts`
 
-1. Colar um print (ou soltar um arquivo de imagem) chama `attachments.saveImage` → o Electron grava `attachments/imagem-AAAAMMDD-HHMMSS.png` no workspace.
+1. Colar um print (ou soltar um arquivo de imagem) chama `attachments.saveImage` → o Electron grava `attachments/imagem-AAAAMMDD-HHMMSS.png` no workspace (a biblioteca de imagens, item 12). **Inserir imagem…** (1.3.1, botão direito no editor, fora dos blocos de código) abre a biblioteca e insere a escolhida no lugar do clique (`insertImageFromLibrary` → `host.pickImage`).
 2. A nota recebe `![](../attachments/imagem-….png)` — caminho **relativo à pasta da nota** (`relativeTo`), por isso a nota também abre certo no Obsidian/VS Code e o workspace pode mudar de lugar.
 3. Para mostrar, `resolveFromNote` transforma o caminho da nota em caminho do workspace (recusando endereços que saiam dele) e a imagem é carregada por `workspace://files/…`.
 
 No editor aparece só a imagem — o texto `![](…)` nunca aparece (1.3.0). Clicar seleciona a imagem (com contorno; `Backspace`/`Delete` tiram da nota, `Ctrl+C` copia), e o que for digitado logo antes ou depois de uma imagem sozinha na linha vai para uma linha própria.
 
-**Remover** (botão sobre a imagem) tira a imagem da nota e chama `attachments.removeImage`: se nenhuma outra nota (.md em `notes/` e `mindmap/`) cita o arquivo, ele vai para a Lixeira — o conteúdo fica guardado na memória durante a sessão. **Desfazer** (no aviso ou com Ctrl+Z) devolve o texto e o arquivo (`restoreImage`): quando uma imagem apagada nesta sessão volta para a nota, o arquivo é regravado no mesmo lugar.
+**Remover** (botão sobre a imagem) tira a imagem **só da nota** (1.3.1): o arquivo continua na biblioteca, para usar de novo — ele só sai de lá pela própria biblioteca, quando nada mais o usa. **Desfazer** (no aviso ou com Ctrl+Z) devolve a imagem para a nota. (Até a 1.3.0, Remover mandava o arquivo para a Lixeira.)
 
-### Menções a notas e tarefas — `mentions.ts`, `lib/notes/mention-links.ts`
+### Menções a notas, tarefas e links — `mentions.ts`, `lib/notes/mention-links.ts`
 
-Nas Notas e nas notas do Mapa Mental, digitar **`@`** abre a lista: notas das Notas (de todas as categorias), notas de todos os mapas (sem a própria nota) e **tarefas** (as concluídas no fim). A escolhida entra como um **link Markdown comum**, relativo à pasta da nota, então o arquivo continua legível e o link funciona no Obsidian/VS Code:
+Nas Notas e nas notas do Mapa Mental, digitar **`@`** abre a lista: notas das Notas (de todas as categorias), notas de todos os mapas (sem a própria nota), **tarefas** (as concluídas no fim) e **links salvos** (1.3.1, depois das notas e tarefas; a busca procura no título e no endereço do link). A escolhida entra como um **link Markdown comum**, relativo à pasta da nota, então o arquivo continua legível e o link funciona no Obsidian/VS Code:
 
 ```
 [Ideias](Ideias.md)                              nota das Notas (na mesma pasta)
 [Reunião](Trabalho/Reuni%C3%A3o.md)                nota de uma categoria
 [Godot](../mindmap/Principal/Godot.md)           nota de um mapa (vista das Notas)
 [Estudar Godot](../tasks/tasks.json#t_k3j9x0)    tarefa: o tasks.json + o id dela depois do "#"
+[Nuxt](https://nuxt.com/)                        link salvo: um link comum
 ```
+
+Um link salvo **não vira chip**: ele é um link como os outros (o texto continua editável) e ganha o **ícone do site** na frente (`formatting.ts → LinkIconWidget`, pelo `MentionHost.linkIcon`). Vale para qualquer link do texto cujo endereço é um link salvo no módulo Links (`savedLinkIcon` em `stores/mentions.ts`, comparando com `urlKey`); quando os ícones chegam ou mudam, o `revision()` da ponte muda e os editores redesenham.
 
 No editor, o link vira um **chip** com o título atual (um bloco só: o cursor passa por cima e Backspace apaga a menção inteira): roxo para notas, amarelo para tarefas — a tarefa concluída aparece riscada. Clicar abre a nota no módulo dela ou a tarefa no painel das Tarefas. O que não existe mais aparece riscado e cinza. Os chips são redesenhados quando um título ou estado muda fora do editor (o `revision()` da ponte muda e o editor recebe o efeito `refreshMentions`). Mudanças vindas de fora (menção corrigida, arquivo editado em outro programa) não entram no Desfazer.
 
 Os caminhos dos links codificam só o que quebraria o link (espaços, parênteses, `#`…) e mantêm os acentos legíveis (`lib/files/workspace-path.ts`).
 
-As extensões do editor não conhecem Vue nem IPC: tudo que precisa do app (salvar e apagar imagens, endereço da imagem, abrir a tela cheia, mostrar aviso, listar e abrir notas mencionadas) passa pela interface `EditorHost` (`host.ts`), que o `MarkdownEditor.vue` fornece.
+As extensões do editor não conhecem Vue nem IPC: tudo que precisa do app (salvar imagens e escolher da biblioteca, endereço da imagem, abrir a tela cheia, mostrar aviso, listar e abrir notas mencionadas, ícone dos links salvos) passa pela interface `EditorHost` (`host.ts`), que o `MarkdownEditor.vue` fornece.
+
+### Exportar como TXT ou PDF — `lib/notes/export.ts`, `composables/useNoteExport.ts`, `electron/export.ts`
+
+No menu da nota (lista lateral e aba): **Exportar → TXT / PDF**. O Markdown é lido pelas **mesmas regras do editor** (`findElements`, `lineMarkerAt`, `codeBlocks`, num `EditorState` só para isso — `parseNote` completa a árvore até o fim, mesmo em notas grandes), então o que sai é o que você vê:
+
+- **TXT** (`noteToPlainText`): sai toda a formatação e toda a sintaxe do Markdown — `#`, `**`, `==`, `<u>`, a cor, o endereço dos links (fica o texto), as menções (fica o título), as imagens e as cercas dos blocos de código (fica o código). Cada linha da nota é uma linha do arquivo; os itens de lista ficam com o marcador que aparece na tela (`•`, `1.`, `☐`/`☑`) e a indentação do nível. No Windows, as quebras de linha são as do Windows.
+- **PDF** (`noteToPdfHtml`): um HTML com a mesma aparência da nota (títulos, formatos, links clicáveis só para `http(s)`/`mailto`, chips das menções, listas, checklists, citações, linhas horizontais, imagens e blocos de código **coloridos** — a linguagem é carregada na hora, com as mesmas cores do editor), no tema claro. O processo principal (`exportPdf`) troca as imagens do workspace pela imagem embutida (`data:`, `inlineWorkspaceImages`), grava o HTML numa pasta temporária, abre uma janela escondida (sem JavaScript; a *Content-Security-Policy* do HTML bloqueia qualquer acesso à rede) e usa `printToPDF` (A4).
+- O "Salvar como" começa com o título da nota como nome do arquivo e lembra a última pasta usada na sessão. O aviso tem **Mostrar** (abre no Explorador — só arquivos exportados nesta sessão).
 
 ---
 
@@ -469,6 +527,8 @@ Arquivo: `app/stores/mindmap.ts` (+ `app/lib/mindmap/model.ts` e `repository.ts`
 ---
 
 ## 8. Como funcionam as tarefas recorrentes
+
+> **Painel de edição** (1.3.2, `pages/tasks.vue` + `TaskDrawer.vue`): clicar fora do painel — na lista, nas categorias, no cabeçalho — fecha o painel, como o clique no vazio do Mapa Mental fecha o painel da nota. O clique continua fazendo o que faria (concluir, trocar de lista…): a página observa o clique (`pointerdown`/`click` na fase de captura) e só fecha o painel **depois** dele, se ele mesmo não mexeu no painel — clicar em outra tarefa abre a outra, "Nova tarefa" abre a criação. Não contam: cliques dentro do painel, o que abre por cima dele (lista de notas para mencionar, diálogo de categoria, menus — ficam fora da tela de Tarefas), arrastar para selecionar texto do painel até fora dele, o "clique" do teclado (`Enter` num botão) e um painel de **Nova tarefa** com algo já escrito (para não perder o rascunho).
 
 Arquivos: `app/lib/tasks/recurrence.ts` (regras puras), `app/lib/tasks/model.ts` (concluir/pular/agrupar) e `app/stores/tasks.ts`.
 
@@ -562,7 +622,7 @@ Os nós **ficam onde você os deixa** (arrastar move uma nota). Nota nova aparec
 - Interações: zoom com a roda (em direção ao cursor), arrastar o fundo para mover a câmera, arrastar um nó para movê-lo, Shift + arrastar para conectar, clique abre a nota, clique no vazio tira a seleção, duplo clique ou botão direito no vazio criam uma nota ali, botão direito no nó abre o menu (renomear, cor, excluir…).
 - Com o mouse sobre uma nota, ela e as conexões dela ganham destaque; as **setas que saem dela** ficam com a **cor da nota** (`Edge.tint`).
 - Ao abrir/fechar o painel, a câmera desliza para manter o centro; se você pega o mapa no meio desse ajuste, ele termina na hora (abrir e fechar rápido não deixa o mapa deslocado).
-- Ajustes: esconder notas sem conexões e nós em **cards** (padrão, com o nome dentro) ou **círculos** (estilo Obsidian). Nos círculos, os nomes aparecem **só na nota selecionada** (padrão), conforme o zoom ou sempre.
+- Ajustes (desde a 1.3.1 em **Configurações → Módulos → Mapa Mental**, `components/mindmap/GraphSettings.vue`; o botão de ajustes da barra do mapa abre ali): esconder notas sem conexões e nós em **cards** (padrão, com o nome dentro) ou **círculos** (estilo Obsidian). Nos círculos, os nomes aparecem **só na nota selecionada** (padrão), conforme o zoom ou sempre. **Reorganizar o mapa** continua no próprio mapa: botão na barra e no clique direito do fundo.
 - Os ajustes ficam em `.4notes/mindmap.json` com `settingsVersion`: na primeira abertura da 1.1.0, os ajustes gravados pelas versões anteriores (que sempre salvavam os padrões antigos) passam para os novos padrões — cards e nomes ao selecionar — uma única vez.
 
 ---
@@ -576,7 +636,7 @@ Arquivos: `app/lib/tasks/mentions.ts` (menções nas tarefas), `app/lib/notes/me
   `{ "kind": "note", "path": "notes/Ideias.md", "title": "Ideias" }` ou `{ "kind": "map", "map": "Principal", "note": "Godot.md", "title": "Godot" }`.
   O texto da tarefa fica limpo (`@ide` vira `Ideias de jogo`); a menção aparece como um chip.
 - **Clicar no chip** abre a nota no módulo dela (troca de mapa se precisar). Se a nota não existir mais, aparece um aviso — a tarefa não é alterada.
-- **Dentro das notas** (Notas e Mapa Mental), a menção é um link Markdown no texto (ver "Menções a notas e tarefas" no item 6).
+- **Dentro das notas** (Notas e Mapa Mental), a menção é um link Markdown no texto (ver "Menções a notas, tarefas e links" no item 6). Os links salvos entram como links comuns, com o ícone do site.
 - **Renomear ou mover no app** (título de uma nota rápida, nota movida de categoria, categoria renomeada, nota ou mapa do Mapa Mental) publica um aviso em `note-events.ts` (`note-renamed`, `notes-folder-renamed`, `map-note-renamed`, `map-renamed`). O store de menções:
   - corrige as tarefas afetadas (o `tasks.json` é salvo);
   - reescreve os links das Notas e do mapa aberto na hora (`renameMentionLinks`, com a pasta de cada nota; o texto do link acompanha o novo título);
@@ -596,45 +656,74 @@ Arquivos: `app/stores/links.ts` (estado e ações), `app/lib/links/model.ts` (en
 {
   "app": "4notes",
   "version": 1,
-  "folders": [{ "id": "dev", "name": "Dev", "color": "purple", "icon": "code", "createdAt": "…" }],
+  "folders": [{ "id": "dev", "name": "Dev", "color": "purple", "icon": "code", "image": null, "createdAt": "…" }],
   "links": [
     { "id": "l_k3j9x0a2qm", "url": "https://nuxt.com/docs", "title": "Nuxt Docs", "folderId": "dev", "icon": "nuxt.com.png", "createdAt": "…", "updatedAt": "…" }
   ]
 }
 ```
 
-As pastas são de um nível só (nome, cor e ícone, como as categorias das Notas). Um link sem pasta tem `"folderId": null`; um `links.json` editado à mão é lido de forma tolerante (endereços inválidos e pastas inexistentes são ignorados); um arquivo com JSON inválido não é sobrescrito — a tela mostra o erro, como nas Tarefas.
+Na interface elas se chamam **categorias** (1.3.1; no arquivo continuam `folders`/`folderId`, para não quebrar nada): um nível só, com nome, cor e um ícone pronto **ou uma foto** (1.3.1: `image`, uma imagem da biblioteca — sempre de dentro de `attachments/`; uma foto antiga de categoria das Notas ganha uma cópia lá ao ser escolhida, `library.adopt`). Um link sem categoria tem `"folderId": null`; um `links.json` editado à mão é lido de forma tolerante (endereços inválidos, categorias inexistentes e fotos fora da biblioteca são ignorados); um arquivo com JSON inválido não é sobrescrito — a tela mostra o erro, como nas Tarefas.
 
 **Salvar um link** (`addLink`):
 
-1. `normalizeUrl` completa o que foi colado ou digitado (`nuxt.com/docs` → `https://nuxt.com/docs`, `localhost:3000` → `http://…`) e recusa o que não é endereço de site. `urlKey` acha repetidos (maiúsculas no domínio e `/` no fim não contam): um link repetido não entra — o aviso diz em que pasta ele está.
-2. O link entra na hora, com o domínio como título provisório, na pasta aberta.
+1. `normalizeUrl` completa o que foi colado ou digitado (`nuxt.com/docs` → `https://nuxt.com/docs`, `localhost:3000` → `http://…`) e recusa o que não é endereço de site. `urlKey` acha repetidos (maiúsculas no domínio e `/` no fim não contam): um link repetido não entra — o aviso diz em que categoria ele está.
+2. O link entra na hora, com o domínio como título provisório, na categoria aberta.
 3. Em segundo plano, `links.fetchMeta` pede ao processo principal o título e o ícone. `electron/links.ts` baixa só o começo da página (`net.fetch`, que usa o proxy e os certificados do sistema; até 768 KB e 9 s), lê o `<title>` (ou `og:title`) e os `<link rel="icon">` (`parseHead`), escolhe o melhor ícone para mostrar pequeno (`iconUrls`: SVG, depois tamanhos médios; o `/favicon.ico` do site por último), confere pelos primeiros bytes que é mesmo uma imagem (`sniffImage`) e grava `links/icons/<site>.<ext>`. O ícone vale para todos os links do mesmo site.
 4. Sem internet ou com o site fora do ar, o link fica com o domínio e a inicial dele numa cor fixa por site; **Atualizar título e ícone** tenta de novo. Ao abrir a tela, os ícones que faltam são procurados uma vez por sessão, três sites por vez.
 
-**Tela** (`pages/links.vue`): lista lateral com busca, "Todos os links", "Sem pasta" e as pastas (arraste um link até uma pasta para movê-lo — o arrastar leva o id no tipo `application/x-4notes-link` — e arraste as pastas para reordenar); no centro, o campo de salvar e a lista (recentes ou A–Z, lembrado em `.4notes/links.json`). Colar com `Ctrl+V` fora de um campo e soltar um link vindo do navegador também salvam. Clicar abre no navegador padrão (`shell.openExternal`). Mover, excluir e excluir pasta têm **Desfazer**; excluir uma pasta não apaga links — eles ficam sem pasta.
+**Tela** (`pages/links.vue`): lista lateral com busca, "Todos os links", "Sem categoria" e as categorias (arraste um link até uma categoria para movê-lo — o arrastar leva o id no tipo `application/x-4notes-link` — e arraste as categorias para reordenar). "Sem categoria" só aparece quando existe algum link sem categoria, quando ela está aberta ou enquanto um link da lista é arrastado (para poder soltar ali). No centro, o campo de salvar (com o ícone de link, igual ao da barra de nova tarefa) e a lista — **Recentes**, **A–Z** ou **URL** (1.3.1: pelo endereço, `urlSortKey`: o domínio sem `www.` e com acentos, depois o caminho), lembrado em `.4notes/links.json`. Colar com `Ctrl+V` fora de um campo e soltar um link vindo do navegador também salvam. Clicar abre no navegador padrão (`shell.openExternal`). Mover, excluir e excluir categoria têm **Desfazer**; excluir uma categoria não apaga links — eles ficam sem categoria.
 
 **Milhares de links** (favoritos importados): a lista desenha 150 linhas e mais ao rolar perto do fim (um `IntersectionObserver` no fim da lista; teclado e link recém-salvo garantem que a linha deles exista), as linhas fora da tela não são calculadas pelo navegador (`content-visibility: auto`) e listas com mais de 300 links não animam (a animação mediria todas as linhas a cada mudança). A busca guarda o texto já normalizado de cada link, e os links "buscando ícone" ficam num `Set` reativo — só a linha do link muda quando a busca dele começa ou termina. Testado com 3.000 links: buscar, ordenar e salvar levam frações de segundo.
 
 **Importar do navegador** (`LinkImportDialog.vue`):
 
 1. `links.browsers()` → `findBrowserSources` procura o arquivo `Bookmarks` (JSON) dos navegadores baseados no Chromium nas pastas padrão de cada sistema — Brave, Opera GX, Opera, Chrome, Edge, Vivaldi —, um item por **perfil** (os nomes vêm do `Local State`). A interface recebe só ids (`b1`, `b2`…); o caminho do arquivo fica no processo principal.
-2. Para os outros navegadores (Firefox, Safari…), **Arquivo de favoritos** abre o seletor do sistema e lê o HTML exportado (o formato "Netscape", que todos exportam — `parseBookmarksHtml`, inclusive os ícones embutidos `data:image/…`).
-3. A árvore aparece com tudo marcado (pastas vazias somem; pastas grandes mostram 150 links e "mostrar mais"). `planImport` decide o resultado: **uma pasta para cada pasta do navegador** (a pasta de dentro vale; pastas com o mesmo nome se juntam, inclusive com as que já existem; links soltos numa raiz ficam sem pasta) ou **tudo numa pasta**. Links que já estão salvos não entram de novo; o botão mostra quantos vão entrar de fato.
-4. Os links entram de uma vez; os ícones embutidos no arquivo HTML são gravados e os outros chegam em segundo plano (a tela mostra "Buscando ícones dos sites… n/total"). Nada é alterado no navegador.
+2. **Firefox e Zen** (1.3.1): o Zen é feito a partir do Firefox e guarda os favoritos do mesmo jeito, então os dois usam o mesmo caminho. Os perfis vêm do `profiles.ini` (`parseProfilesIni`; o padrão primeiro) da pasta de cada navegador — Windows `%APPDATA%\Mozilla\Firefox` e `%APPDATA%\zen`; macOS `~/Library/Application Support/Firefox` e `…/zen`; Linux `~/.mozilla/firefox`, `~/.config/mozilla/firefox`, `~/.zen` (e as versões Snap/Flatpak). Os favoritos estão no banco **`places.sqlite`** do perfil (tabelas `moz_bookmarks` + `moz_places`): como o navegador aberto trava o banco, o 4notes copia o arquivo (e o `-wal`, onde ficam as mudanças mais recentes) para uma pasta temporária e lê a cópia com o SQLite do próprio Node.js (`node:sqlite`, sem dependência nova); `geckoBookmarksFromRows` monta as pastas (Barra de favoritos, Menu de favoritos, Outros favoritos, Favoritos do celular; marcadores, separadores e consultas `place:` ficam de fora). Se não der para ler o banco, vale a **cópia automática** mais recente de `bookmarkbackups/` (`.jsonlz4`: `"mozLz40\0"` + tamanho + um bloco LZ4 — `decodeMozLz4` e `parseGeckoBackup`).
+3. Para os outros navegadores (Safari…), **Arquivo de favoritos** abre o seletor do sistema e lê o HTML exportado (o formato "Netscape", que todos exportam — `parseBookmarksHtml`, inclusive os ícones embutidos `data:image/…`).
+4. A árvore aparece com tudo marcado (pastas vazias somem; pastas grandes mostram 150 links e "mostrar mais"). `planImport` decide o resultado: **uma categoria para cada pasta do navegador** (a pasta de dentro vale; pastas com o mesmo nome se juntam, inclusive com as categorias que já existem; links soltos numa raiz ficam sem categoria) ou **tudo numa categoria**. Links que já estão salvos não entram de novo; o botão mostra quantos vão entrar de fato.
+5. Os links entram de uma vez; os ícones embutidos no arquivo HTML são gravados e os outros chegam em segundo plano (a tela mostra "Buscando ícones dos sites… n/total"). Nada é alterado no navegador.
 
 ---
 
-## 12. Como gerar uma nova versão/build
+## 12. Biblioteca de imagens
 
-1. Aumente a versão no `package.json` (ex.: `"version": "1.3.0"`).
+Arquivos: `electron/library.ts` (processo principal), `components/shell/ImageLibraryDialog.vue` + `composables/useImageLibrary.ts` (interface: `pickLibraryImage()` abre a biblioteca para escolher e devolve o caminho; `openImageLibrary()` abre só para ver, enviar e excluir).
+
+Toda imagem enviada ao 4notes fica em **`attachments/`** — coladas nas notas, enviadas pela biblioteca (**Enviar imagens…**, com o nome original do arquivo, até 40 MB) e escolhidas como foto de categoria — e pode ser usada de novo sem enviar outra vez: **Escolher imagem/foto…** nas categorias das Notas e dos Links, **Inserir imagem…** no editor e **Configurações → Geral → Biblioteca de imagens…**.
+
+- **Sem repetidas**: `listLibrary` junta as imagens de `attachments/` e as fotos das categorias das Notas que estão só na pasta da categoria (de antes da biblioteca), e imagens com o mesmo conteúdo aparecem uma vez só (compara o tamanho e, só quando ele empata, um hash SHA-1). Enviar de novo uma imagem que já está lá devolve a que existe, sem criar outra cópia.
+- **Onde é usada**: cada imagem mostra o uso — notas (`.md` em `notes/` e `mindmap/` que citam o arquivo: `referencedFiles` lê os links e imagens do texto e resolve os caminhos relativos), foto de categoria das Notas (`categorias.json`) e dos Links (`links.json`). Antes de listar, o app grava o que estiver pendente (`flushEverything`), para o "em uso" ficar certo.
+- **Excluir** só aparece nas imagens sem uso (e só em `attachments/`); o arquivo — e as cópias iguais a ele — vão para a Lixeira (`removeFromLibrary` confere o uso de novo antes). Tirar uma imagem de uma nota ou de uma categoria nunca apaga o arquivo da biblioteca.
+- **Adotar** (`library.adopt`): uma foto que está fora de `attachments/` (a foto antiga de uma categoria) ganha uma cópia na biblioteca quando é escolhida para outro lugar ou quando sai da categoria.
+- **Modais empilhados** (`composables/useModalStack.ts`): a biblioteca abre por cima de outro diálogo (a categoria, as Configurações); o `Esc` fecha só o de cima e o aberto por último fica por cima, mesmo que tenha sido montado antes.
+
+---
+
+## 13. Configurações (e iniciar com o computador)
+
+`components/shell/SettingsDialog.vue`, em três abas (`app.openSettings(aba, módulo)`):
+
+- **Geral**: tema; **Iniciar com o computador**; workspace (pasta, abrir/criar outro) e a biblioteca de imagens.
+- **Módulos**: os ajustes de cada módulo que fazem sentido como configuração permanente, guardados **no workspace** (no arquivo de estado do módulo em `.4notes/`): Notas (`NotesSettings.vue`: categoria automática pelo título, exibição das pastas pelo título), Mapa Mental (`GraphSettings.vue`: notas sem conexões, estilo dos nós, nomes), e Tarefas e Links com "Sem nenhuma configuração disponível no momento.". **Critério**: o que se usa toda hora fica na tela do próprio módulo — ordenar os links, as opções de criação das tarefas, reorganizar o mapa.
+- **Atalhos** de teclado.
+
+Cada configuração é um `components/ui/SettingRow.vue`: nome, o **?** com uma explicação bem curta (balão ao passar o mouse ou focar com o teclado) e o controle.
+
+**Iniciar com o computador** (`electron/system.ts`): `app.setLoginItemSettings({ openAtLogin })` — no Windows, a mesma lista do Gerenciador de Tarefas › Inicializar (desligado por lá conta como desligado aqui; ligar aqui religa lá). É uma configuração **da máquina** (não do workspace) e só existe no app instalado (Windows e macOS): em desenvolvimento ela abriria o Electron "puro", então o switch fica desativado com o aviso "Disponível no 4notes instalado". Nos testes automatizados só simula.
+
+---
+
+## 14. Como gerar uma nova versão/build
+
+1. Aumente a versão no `package.json` (ex.: `"version": "1.3.1"`).
 2. Rode:
 
    ```bash
    npm run dist:win
    ```
 
-3. O instalador aparece em `release/1.3.0/4notes-Setup-1.3.0.exe`.
+3. O instalador aparece em `release/1.3.1/4notes-Setup-1.3.1.exe`.
 
 O que acontece por baixo (`package.json` → scripts):
 
@@ -654,7 +743,7 @@ Para testar a versão de produção sem instalar: `npm start`.
 
 ---
 
-## 13. Como instalar em outro computador
+## 15. Como instalar em outro computador
 
 1. Leve o arquivo `4notes-Setup-<versão>.exe` (pendrive, nuvem…) e execute.
    - O instalador não é **assinado digitalmente** (isso exige um certificado pago). O Windows SmartScreen pode avisar: clique em **Mais informações → Executar assim mesmo**.
@@ -681,14 +770,19 @@ Para gerar o instalador em outra máquina (para desenvolver lá), instale o Node
 | Notas permanentes | Uma pasta por mapa: `.md` (só texto) + `mapa.json` (conexões e cores) | Texto limpo; conexões explícitas, fáceis de criar arrastando e de remover. |
 | Formatação | Markdown + HTML simples (`<u>`, `<span style="color">`), marcações **sempre** escondidas no editor, protegidas e mantidas válidas por ele | Continua texto puro e compatível com o Obsidian, com a experiência de um editor visual (formatos guardados como no Word, nada de `**` à vista). |
 | Links | `links/links.json` + ícones gravados em `links/icons/`; título/ícone buscados pelo processo principal | Abre sem internet e vai junto no backup; a interface continua sem acesso à rede (a CSP só permite imagens do próprio workspace). |
-| Importar favoritos | Ler o `Bookmarks` dos navegadores Chromium direto da pasta deles + arquivo HTML para os outros | Brave e Opera GX (e Chrome, Edge…) importam com um clique, sem exportar nada; o HTML cobre qualquer navegador. Só leitura: o navegador nunca é alterado. |
+| Importar favoritos | Ler o `Bookmarks` dos navegadores Chromium e o `places.sqlite` do Firefox/Zen (de uma cópia, com `node:sqlite`; plano B: a cópia `.jsonlz4`) direto da pasta deles + arquivo HTML para os outros | Brave, Opera GX, Firefox e Zen (e Chrome, Edge…) importam com um clique, sem exportar nada; o HTML cobre qualquer navegador. Só leitura: o navegador nunca é alterado. |
 | Workspaces | Workspace = pasta de dados; nome = nome da pasta | Nada de cadastro paralelo de nomes; qualquer pasta abre; backup continua sendo copiar a pasta. |
 | Imagens | `attachments/` + caminho relativo + protocolo `workspace://` só para imagens | Imagens junto dos dados, notas compatíveis com outros editores, interface sem acesso livre ao disco. |
 | Blocos de código | Detecção própria por padrões + `@codemirror/language-data` | Sem serviço externo; cores para dezenas de linguagens, cada uma carregada só quando usada. |
+| Blocos de texto | ` ```text ` (Markdown comum), criado só pelo botão da barra; conteúdo = o texto da tela (regras do Exportar TXT); mesmo cartão dos blocos de código | Continua legível em qualquer editor; nada vira bloco de texto sem você pedir; nenhuma marcação aparece dentro do bloco. |
+| `Ctrl+D` | Seleções múltiplas do CodeMirror, criadas só pelo `Ctrl+D`; busca no texto do arquivo pulando o que fica escondido | Funciona como nos editores de código sem mudar o resto do editor (Ctrl+clique continua abrindo links). |
 | Tarefas | Um `tasks.json` | Dados estruturados; gravação atômica de tudo de uma vez; fácil de fazer backup. |
 | Menções | Tarefas: referência estruturada no `tasks.json`. Notas (das Notas e do Mapa): link Markdown relativo para o `.md` ou para `tasks.json#<id>`. Renomear no app avisa a ponte, que corrige tudo (inclusive os arquivos dos mapas fechados) | Abre a nota/tarefa certa depois de reabrir o app; o texto das notas continua Markdown comum; a ligação entre módulos fica explícita e num lugar só. |
 | Menus | Componente próprio (`ContextMenuHost.vue`); o Electron só manda os dados do menu de texto | Visual do 4notes no claro e no escuro, com submenus e teclado; foco continua no editor. |
-| Imagens removidas | Lixeira + cópia na memória durante a sessão | O arquivo sai do workspace, mas Desfazer/Ctrl+Z devolvem tudo. |
+| Imagens removidas | Saem só da nota (ou da categoria); o arquivo fica na biblioteca até ser excluído por lá, sem uso | Uma imagem enviada pode ser usada de novo em qualquer lugar; nada some sem você pedir. |
+| Biblioteca de imagens | `attachments/` + o uso calculado na hora (notas, `categorias.json`, `links.json`), sem cadastro paralelo | Continua uma pasta comum de imagens; nada a manter sincronizado. As fotos das categorias das Notas continuam dentro da pasta da categoria (cópia), como antes. |
+| Exportar | TXT e PDF montados pela interface com as regras do editor; o PDF impresso por uma janela escondida (`printToPDF`) | Sai o que você vê, sem dependência nova; imagens embutidas e nada buscado na internet. |
+| Configurações | Abas Geral / Módulos / Atalhos; as dos módulos no workspace (`.4notes/`), "iniciar com o computador" na máquina | Cada workspace com os seus ajustes; o que se usa toda hora continua na tela do módulo. |
 | Recorrência | Data da próxima ocorrência + regra, calculado ao abrir | Funciona com o app fechado, sem processo em segundo plano. |
 | Estado da interface | `.4notes/` | Separado dos dados; pode ser apagado. |
 | Editor | CodeMirror 6 | Editor de Markdown "de verdade" (o mesmo motor do Obsidian), com busca, desfazer e prévia ao vivo da formatação, listas, código e imagens. |
@@ -696,13 +790,13 @@ Para gerar o instalador em outra máquina (para desenvolver lá), instale o Node
 | Estado/estilo | `reactive()` do Vue + CSS com variáveis | Sem Pinia/Tailwind: menos dependências; tema claro/escuro por variáveis CSS. |
 | Ícones | SVG próprios | Sem biblioteca de ícones. |
 
-Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 entrou `@codemirror/language-data`, para colorir o código dos blocos), `electron`, `electron-builder` e `esbuild` (build). Para testes: `vitest`. (O `d3-force` da 1.0.0 saiu: o mapa não usa mais física.)
+Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 entrou `@codemirror/language-data`, para colorir o código dos blocos), `electron`, `electron-builder` e `esbuild` (build). Para testes: `vitest`. (O `d3-force` da 1.0.0 saiu: o mapa não usa mais física.) A 1.3.1 não trouxe dependências: o SQLite que lê os favoritos do Firefox/Zen é o do próprio Node.js do Electron (`node:sqlite`), o LZ4 das cópias `.jsonlz4` é um descompactador de ~40 linhas e o PDF é impresso pelo próprio Chromium do Electron.
 
 ## Testes
 
-- `npm test` — testes unitários das regras puras (datas, recorrência, tarefas, títulos, nomes de arquivo, formatação, marcação de listas/tarefas, níveis e numeração automática das listas, blocos de código e detecção de linguagem, caminhos das imagens, menções em tarefas e notas (inclusive a tarefas), links refeitos ao mover uma nota de pasta, categorias e `categorias.json`, pastas pelo título, primeira linha como título, nomes de workspace, `mapa.json`, conversão da 1.0.0, grafo, layout sem cruzamentos e compactação, marcação escondida (proteção, formatos guardados, marcações válidas, links), endereços e links repetidos, título e ícone de páginas, favoritos do Chromium/Opera e HTML, `links.json` e plano da importação).
+- `npm test` — testes unitários das regras puras (datas, recorrência, tarefas, títulos, nomes de arquivo, formatação, marcação de listas/tarefas, níveis e numeração automática das listas, blocos de código e detecção de linguagem, caminhos das imagens, menções em tarefas e notas (inclusive a tarefas), links refeitos ao mover uma nota de pasta, categorias e `categorias.json`, pastas pelo título, primeira linha como título, nomes de workspace, `mapa.json`, conversão da 1.0.0, grafo, layout sem cruzamentos e compactação, marcação escondida (proteção, formatos guardados, marcações válidas, links), endereços e links repetidos, título e ícone de páginas, favoritos do Chromium/Opera e HTML, `links.json` e plano da importação; na 1.3.1: categoria automática pelo título, exportar TXT e PDF, biblioteca de imagens (uso, cópias iguais, adotar, excluir), favoritos do Firefox/Zen — `profiles.ini`, `places.sqlite`, `.jsonlz4` com LZ4 —, foto das categorias dos Links e ordem pela URL; na 1.3.2: bloco de texto — linhas próprias, formatos cortados, listas, cerca maior, dentro de blocos — e `Ctrl+D` — maiúsculas, palavra inteira, volta ao começo, partes escondidas, só o `Ctrl+D` cria seleções — em `tests/text-blocks-and-multiselect.test.ts`).
 - `npm run typecheck` — TypeScript estrito na interface e no Electron.
-- Durante o desenvolvimento, o app também foi testado de ponta a ponta dirigindo o Electron real (workspaces, notas, abas, formatação, listas, checklists e numeração automática, código e imagens colados e apagados, menus do clique direito, tarefas recorrentes com datas simuladas e app fechado, menções em tarefas e notas depois de reabrir, categorias criadas/renomeadas/excluídas com imagem e cor nas abas, notas arrastadas para categorias, pastas pelo título, menções a tarefas nas Notas e no Mapa, mapas mentais com conversão da 1.0.0, conexões e notas novas por arraste, cores, vários mapas, layout salvo, fechamento seguro; na 1.3.0: ícones nas categorias, + nas pastas pelo título, fechar notas de categoria sem pergunta, Markdown escondido com teclado, mouse e acentos compostos, links e blocos de código no editor, e o módulo Links inteiro com sites locais de teste e perfis falsos do Brave/Opera). O instalador do Windows foi testado no Wine (tela "Atalhos", reinstalação e desinstalação).
+- Durante o desenvolvimento, o app também foi testado de ponta a ponta dirigindo o Electron real (workspaces, notas, abas, formatação, listas, checklists e numeração automática, código e imagens colados e apagados, menus do clique direito, tarefas recorrentes com datas simuladas e app fechado, menções em tarefas e notas depois de reabrir, categorias criadas/renomeadas/excluídas com imagem e cor nas abas, notas arrastadas para categorias, pastas pelo título, menções a tarefas nas Notas e no Mapa, mapas mentais com conversão da 1.0.0, conexões e notas novas por arraste, cores, vários mapas, layout salvo, fechamento seguro; na 1.3.0: ícones nas categorias, + nas pastas pelo título, fechar notas de categoria sem pergunta, Markdown escondido com teclado, mouse e acentos compostos, links e blocos de código no editor, e o módulo Links inteiro com sites locais de teste e perfis falsos do Brave/Opera; na 1.3.1: as abas das Configurações com o "?", iniciar com o computador (simulado), configurações dos módulos gravadas no workspace, categoria automática pelo título, CAIXA ALTA nas pastas, exportar TXT/PDF (conferido com `pdftotext`), biblioteca de imagens — enviar, escolher, inserir, remover da nota, excluir, `Esc` com modais empilhados —, fotos nas categorias das Notas e dos Links, "Sem categoria", ordem pela URL, importação de perfis falsos do Zen — `places.sqlite` com `-wal` — e do Firefox — só a cópia `.jsonlz4` —, menções a links com o ícone do site, e o tema escuro; na 1.3.2: bloco de texto pela barra — cartão, copiar, editar no cartão, tela cheia, remover e desfazer, listas e negrito, bloco grande com rolagem, tema escuro —, colar texto/listas/trechos longos sem virar bloco (e código continuando a virar), `Ctrl+D` com duplo clique, digitação, `Ctrl+Z`, `Esc`, `Ctrl+clique` e `Ctrl+B`, nas Notas e no Mapa Mental, e o painel das Tarefas fechando ao clicar fora — com os casos que não podem fechar). O instalador do Windows foi testado no Wine (tela "Atalhos", reinstalação e desinstalação).
 
 ## Onde mexer para…
 
@@ -719,15 +813,22 @@ Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 
 | Mudar títulos/listas/checklists no editor | `app/lib/editor/markdown-preview.ts` (desenho), `app/lib/editor/line-markers.ts` (leitura da marcação) |
 | Ajustar a detecção de código colado | `app/lib/editor/code-detect.ts` (linguagens: `languages.ts`) |
 | Mudar o cartão do bloco de código / as cores do código | `app/lib/editor/code-blocks.ts`, `app/lib/editor/theme.ts` (`--code-*` em `tokens.css`) |
+| Mudar o bloco de texto | `app/lib/editor/text-blocks.ts` (criar a partir da seleção), `app/lib/editor/code-blocks.ts` (cartão), `.cm-textblock` em `app/lib/editor/theme.ts`, `CodeFullscreen.vue` (tela cheia) |
+| Mudar o `Ctrl+D` (várias ocorrências) | `app/lib/editor/multi-select.ts` |
+| Mudar quando o painel das Tarefas fecha | `app/pages/tasks.vue` (`onPagePointerDown`/`onPageClick`), `app/components/tasks/TaskDrawer.vue` (`contains`, `hasDraft`) |
 | Mudar como as imagens são salvas/mostradas | `electron/files.ts` (`saveImage`), `app/lib/editor/images.ts`, `app/lib/editor/paste.ts` |
+| Mudar a biblioteca de imagens | `electron/library.ts` (listar, uso, enviar, excluir), `app/components/shell/ImageLibraryDialog.vue`, `app/composables/useImageLibrary.ts` |
+| Mudar o TXT/PDF exportado | `app/lib/notes/export.ts` (texto, HTML e estilo do PDF), `electron/export.ts` (salvar, imprimir), `app/composables/useNoteExport.ts` (menu) |
+| Mudar as Configurações | `app/components/shell/SettingsDialog.vue`, `app/components/ui/SettingRow.vue`, `NotesSettings.vue`, `GraphSettings.vue`; iniciar com o computador: `electron/system.ts` |
+| Mudar a categoria automática pelo título | `app/lib/notes/auto-category.ts` (regra), `app/stores/notes.ts` (`considerAutoCategory`) |
 | Mudar as menções | `app/lib/tasks/mentions.ts` (tarefas), `app/lib/editor/mentions.ts` + `app/lib/notes/mention-links.ts` (notas), `app/stores/mentions.ts` (ponte) |
 | Mudar Tab/Shift+Tab ou a numeração das listas | `app/lib/editor/lists.ts` |
 | Mudar os menus do clique direito | `app/components/shell/ContextMenuHost.vue`, `app/composables/useContextMenu.ts` |
 | Mudar a criação/abertura de workspaces | `app/stores/app.ts`, `electron/data-dir.ts` |
 | Adicionar um novo pedido ao "lado desktop" | `shared/ipc.ts` → `electron/preload.ts` → `electron/ipc.ts` |
 | Mudar o instalador | `electron-builder.yml`, `build/installer.nsh` (tela "Atalhos") |
-| Mudar os ícones prontos das categorias/pastas | `app/lib/category-icons.ts` (lista), `app/lib/icons.ts` (desenhos), `app/components/ui/IconPicker.vue` |
+| Mudar os ícones prontos das categorias | `app/lib/category-icons.ts` (lista), `app/lib/icons.ts` (desenhos), `app/components/ui/IconPicker.vue` |
 | Mudar como as marcações escondidas se comportam | `app/lib/editor/hidden-markup.ts` (edição), `app/lib/editor/elements.ts` (leitura dos trechos) |
 | Mudar a tela de Links | `app/pages/links.vue`, `app/components/links/` |
 | Mudar como o título/ícone dos sites é buscado | `electron/links.ts` (rede), `shared/link-meta.ts` (leitura do HTML e escolha do ícone) |
-| Adicionar um navegador à importação | `electron/links.ts` (`browserDirs`), `shared/bookmarks.ts` (formatos) |
+| Adicionar um navegador à importação | `electron/links.ts` (`browserDirs` para os Chromium, `geckoBrowsers` para os derivados do Firefox), `shared/bookmarks.ts` (formatos) |

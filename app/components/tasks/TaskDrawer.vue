@@ -3,6 +3,7 @@
  * Painel lateral para criar/editar uma tarefa.
  * No modo edição, cada alteração é salva na hora (sem botão "Salvar").
  * Digitar "@" no título ou nos detalhes (ou usar "Mencionar nota") menciona uma nota.
+ * Clicar fora do painel o fecha (pages/tasks.vue).
  */
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useMentionTrigger, type MentionPickerControls } from '~/composables/useMentionTrigger'
@@ -14,6 +15,7 @@ import { useTasksStore, withMention } from '~/stores/tasks'
 
 const tasks = useTasksStore()
 const today = tasks.today
+const panel = ref<HTMLElement>()
 const titleInput = ref<HTMLTextAreaElement>()
 const notesInput = ref<HTMLTextAreaElement>()
 const mentionButton = ref<HTMLButtonElement>()
@@ -223,11 +225,18 @@ function completeTask() {
 
 const createdOn = computed(() => (task.value ? formatDateBR(toISODate(new Date(task.value.createdAt))) : ''))
 const timesDone = computed(() => task.value?.history.length ?? 0)
+
+defineExpose({
+  /** O elemento está dentro do painel? */
+  contains: (node: Node | null) => !!node && !!panel.value?.contains(node),
+  /** "Nova tarefa" já com algo escrito: clicar fora não descarta o rascunho. */
+  hasDraft: () => mode.value === 'create' && !!(titleText.value.trim() || draft.notes.trim() || draft.mentions.length),
+})
 </script>
 
 <template>
   <Transition name="drawer">
-    <aside v-if="open" class="drawer" :aria-label="mode === 'create' ? 'Nova tarefa' : 'Editar tarefa'">
+    <aside v-if="open" ref="panel" class="drawer" :aria-label="mode === 'create' ? 'Nova tarefa' : 'Editar tarefa'">
       <header class="drawer-head">
         <span class="drawer-kicker">
           <AppIcon :name="mode === 'create' ? 'plus' : recurring ? 'repeat' : 'tasks'" :size="15" />

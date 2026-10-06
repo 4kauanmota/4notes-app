@@ -104,20 +104,34 @@ export function workspaceFileUrl(relativePath: string): string {
   return `${WORKSPACE_SCHEME}://files/${relativePath.split('/').map(encodeURIComponent).join('/')}`
 }
 
-/** Resultado de apagar uma imagem: apagada, mantida (outra nota usa) ou já não existia. */
+/** Resultado de excluir uma imagem da biblioteca: excluída, mantida (está em uso) ou já não existia. */
 export type RemoveImageResult = 'removed' | 'in-use' | 'missing'
 
-/** Imagem escolhida no seletor de arquivos do sistema (ex.: a imagem de uma categoria). */
-export interface PickedImage {
-  /** Nome original do arquivo (só para mostrar). */
+/** Extensões de imagem aceitas ao enviar imagens para a biblioteca. */
+export const PICKABLE_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg'] as const
+
+/**
+ * Uma imagem da biblioteca — todas as imagens enviadas ao 4notes (coladas nas
+ * notas, enviadas pela biblioteca ou como foto de uma categoria).
+ */
+export interface LibraryImage {
+  /** Caminho no workspace ("attachments/foto.png"; fotos antigas de categorias: "notes/Dev/Dev.png"). */
+  path: string
   name: string
-  /** Extensão em minúsculas, sem ponto ("png", "jpg"…). */
-  extension: string
-  data: Uint8Array
+  size: number
+  mtimeMs: number
+  /** Onde ela está sendo usada ("2 notas", "Categoria “Dev”"…). Vazia = sem uso (pode ser excluída). */
+  usage: string[]
 }
 
-/** Extensões de imagem aceitas pelo seletor de imagens. */
-export const PICKABLE_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg'] as const
+/** Iniciar o 4notes junto com o computador. */
+export interface LaunchAtLogin {
+  /** Dá para ligar aqui (Windows ou macOS, no app instalado). */
+  supported: boolean
+  enabled: boolean
+  /** Por que não dá: modo de desenvolvimento ou sistema sem suporte. */
+  reason?: 'dev' | 'platform'
+}
 
 /** Título e ícone de um site (módulo Links). */
 export interface LinkMeta {
@@ -188,21 +202,36 @@ export interface FourNotesApi {
     mkdir(dir: string): Promise<void>
   }
   images: {
-    /** Abre o seletor de arquivos do sistema para escolher uma imagem (até 10 MB). null = cancelado. */
-    pick(): Promise<PickedImage | null>
-    /** Grava uma imagem no workspace (caminho relativo com extensão de imagem), substituindo a anterior. */
-    write(path: string, data: Uint8Array): Promise<FileEntry>
+    /** Copia uma imagem do workspace para outro caminho dele, substituindo o destino (ex.: a foto de uma categoria das Notas). */
+    copy(from: string, to: string): Promise<FileEntry>
   }
   attachments: {
     /** Grava uma imagem em attachments/ e devolve o caminho dela (ex.: "attachments/imagem-20261002-141503.png"). */
     saveImage(data: Uint8Array, mime: string): Promise<string>
-    /**
-     * Apaga (Lixeira) uma imagem removida de uma nota, se nenhuma outra nota a usa.
-     * @param exceptNote caminho da nota de onde ela saiu (ex.: "notes/Ideias.md")
-     */
-    removeImage(path: string, exceptNote: string | null): Promise<RemoveImageResult>
-    /** Devolve uma imagem apagada nesta sessão (Desfazer). */
-    restoreImage(path: string): Promise<boolean>
+  }
+  /** Biblioteca de imagens (attachments/): escolher de novo uma imagem já enviada. */
+  library: {
+    /** Imagens da biblioteca, das mais novas para as mais antigas, sem repetidas. */
+    list(): Promise<LibraryImage[]>
+    /** Escolhe imagens no seletor do sistema e guarda na biblioteca. Devolve os caminhos ([] = cancelado). */
+    upload(): Promise<string[]>
+    /** Caminho da imagem dentro da biblioteca (attachments/): copia para lá se ela estiver em outro lugar. */
+    adopt(path: string): Promise<string>
+    /** Exclui (Lixeira) uma imagem da biblioteca — só se ela não estiver em uso. */
+    remove(path: string): Promise<RemoveImageResult>
+  }
+  /** Exportar notas (o arquivo vai para onde você escolher, fora do workspace). */
+  exports: {
+    /** Salva o texto num .txt (diálogo "Salvar como"). Devolve o caminho, ou null se cancelado. */
+    saveText(name: string, text: string): Promise<string | null>
+    /** Gera um PDF a partir do HTML da nota e salva (diálogo "Salvar como"). */
+    savePdf(name: string, html: string): Promise<string | null>
+    /** Mostra no Explorador um arquivo exportado nesta sessão. */
+    reveal(path: string): Promise<void>
+  }
+  system: {
+    launchAtLogin(): Promise<LaunchAtLogin>
+    setLaunchAtLogin(enabled: boolean): Promise<LaunchAtLogin>
   }
   links: {
     /** Busca o título e o ícone do site (o ícone vai para links/icons/ do workspace). */
@@ -251,11 +280,17 @@ export const IPC = {
   filesTrash: 'files:trash',
   filesReveal: 'files:reveal',
   filesMkdir: 'files:mkdir',
-  imagesPick: 'images:pick',
-  imagesWrite: 'images:write',
+  imagesCopy: 'images:copy',
   attachmentsSaveImage: 'attachments:save-image',
-  attachmentsRemoveImage: 'attachments:remove-image',
-  attachmentsRestoreImage: 'attachments:restore-image',
+  libraryList: 'library:list',
+  libraryUpload: 'library:upload',
+  libraryAdopt: 'library:adopt',
+  libraryRemove: 'library:remove',
+  exportText: 'export:text',
+  exportPdf: 'export:pdf',
+  exportReveal: 'export:reveal',
+  launchAtLogin: 'system:launch-at-login',
+  setLaunchAtLogin: 'system:set-launch-at-login',
   linksFetchMeta: 'links:fetch-meta',
   linksSaveIcon: 'links:save-icon',
   linksBrowsers: 'links:browsers',

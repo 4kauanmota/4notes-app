@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Barra de formatação que aparece sobre o texto selecionado (como no Notion).
- * Só mostra botões e avisa o que foi clicado — quem aplica é o MarkdownEditor.
+ * Só mostra botões e avisa o que foi clicado — quem aplica é o MarkdownEditor
+ * (inclusive o "Bloco de texto", que transforma a seleção num bloco).
  * O mousedown é cancelado para o editor não perder o foco nem a seleção (menos no
  * campo do endereço do link, que precisa do foco para receber o texto).
  */
@@ -20,6 +21,8 @@ const props = defineProps<{
   linkMode: boolean
   /** Endereço inicial do campo (o do link atual ou um copiado). */
   linkInitial: string
+  /** A seleção pode virar um bloco de texto (fora de blocos de código/texto). */
+  textBlock: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +34,7 @@ const emit = defineEmits<{
   unlink: []
   'close-link': []
   clear: []
+  'text-block': []
 }>()
 
 const mod = modKeyLabel()
@@ -190,6 +194,17 @@ function pickColor(color: PaletteColor | null) {
         @click="emit('inline', 'code')"
       >
         <AppIcon name="code" :size="16" :stroke="2" />
+      </button>
+      <button
+        v-if="textBlock"
+        class="fmt-btn"
+        data-format="text-block"
+        data-tip="Bloco de texto"
+        data-tip-pos="top"
+        aria-label="Bloco de texto"
+        @click="emit('text-block')"
+      >
+        <AppIcon name="text-block" :size="16" :stroke="1.9" />
       </button>
       <button
         class="fmt-btn"

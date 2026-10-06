@@ -8,9 +8,9 @@ export const DATA_PATHS = {
   tasksFile: 'tasks/tasks.json',
   /** Mapas mentais: uma pasta por mapa, com um .md por nó e o mapa.json (conexões e cores). */
   mindmapDir: 'mindmap',
-  /** Imagens coladas nas notas (Notas e Mapa Mental). */
+  /** Biblioteca de imagens: coladas nas notas (Notas e Mapa Mental), enviadas pela biblioteca, fotos das categorias. */
   attachmentsDir: 'attachments',
-  /** Links salvos e as pastas deles. */
+  /** Links salvos e as categorias deles. */
   linksFile: 'links/links.json',
   /** Ícones dos sites (um por site), mostrados ao lado de cada link. */
   linkIconsDir: 'links/icons',

@@ -4,22 +4,27 @@
  * Tudo fica em <workspace>/links/links.json:
  * {
  *   "app": "4notes", "version": 1,
- *   "folders": [{ "id": "dev", "name": "Dev", "color": "purple", "icon": "code", ... }],
+ *   "folders": [{ "id": "dev", "name": "Dev", "color": "purple", "icon": "code", "image": null, ... }],
  *   "links": [{ "id": "l_x1", "url": "https://nuxt.com", "title": "Nuxt", "folderId": "dev",
  *               "icon": "nuxt.com.png", ... }]
  * }
  * Os ícones dos sites ficam em links/icons/ (um arquivo por site, ex.: nuxt.com.png).
+ * Na interface, as "folders" se chamam categorias; a foto de uma categoria é uma
+ * imagem da biblioteca (attachments/…).
  */
 import { isCategoryIcon } from '../category-icons'
 import { isPaletteColor, PALETTE, type PaletteColor } from '../colors'
 import { createId } from '../utils/async'
 
+/** Uma categoria de links (no arquivo, "folder"). */
 export interface LinkFolder {
   id: string
   name: string
   color: PaletteColor
   /** Ícone pronto (lib/category-icons.ts) ou null (a inicial do nome). */
   icon: string | null
+  /** Foto da categoria: imagem da biblioteca ("attachments/foto.png"), ou null. Tem prioridade sobre o ícone. */
+  image: string | null
   createdAt: string
 }
 
@@ -27,7 +32,7 @@ export interface SavedLink {
   id: string
   url: string
   title: string
-  /** Pasta do link (null = sem pasta). */
+  /** Categoria do link (null = sem categoria). */
   folderId: string | null
   /** Arquivo do ícone do site em links/icons/ (null = ainda sem ícone). */
   icon: string | null
@@ -40,7 +45,8 @@ export interface LinksData {
   links: SavedLink[]
 }
 
-export type LinkSort = 'recent' | 'name'
+/** Ordem da lista: mais recentes, pelo nome (A–Z) ou pelo endereço (URL). */
+export type LinkSort = 'recent' | 'name' | 'url'
 
 export const MAX_FOLDER_NAME = 40
 
@@ -162,19 +168,19 @@ export function placeholderTitle(url: string): string {
   return displayHost(url) || url
 }
 
-// ── Pastas ───────────────────────────────────────────────────────────────────
+// ── Categorias (no arquivo, "folders") ──────────────────────────────────────
 
 const fold = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('pt-BR').trim()
 
 export function folderNameProblem(raw: string, others: string[]): string | null {
   const name = raw.trim()
-  if (!name) return 'Dê um nome à pasta.'
+  if (!name) return 'Dê um nome à categoria.'
   if (Array.from(name).length > MAX_FOLDER_NAME) return `Use um nome com até ${MAX_FOLDER_NAME} caracteres.`
-  if (others.some((other) => fold(other) === fold(name))) return 'Já existe uma pasta com esse nome.'
+  if (others.some((other) => fold(other) === fold(name))) return 'Já existe uma categoria com esse nome.'
   return null
 }
 
-/** Id legível e único para uma pasta nova ("Jogos e Godot" → "jogos-e-godot"). */
+/** Id legível e único para uma categoria nova ("Jogos e Godot" → "jogos-e-godot"). */
 export function folderIdFor(name: string, taken: (id: string) => boolean): string {
   const base =
     fold(name)
@@ -186,7 +192,7 @@ export function folderIdFor(name: string, taken: (id: string) => boolean): strin
   return id
 }
 
-/** Cor para uma pasta nova: a primeira da paleta que ainda não está em uso. */
+/** Cor para uma categoria nova: a primeira da paleta que ainda não está em uso. */
 export function suggestFolderColor(used: PaletteColor[]): PaletteColor {
   return PALETTE.find((color) => !used.includes(color)) ?? PALETTE[used.length % PALETTE.length]!
 }
@@ -218,9 +224,35 @@ export function searchLinks(links: SavedLink[], query: string): SavedLink[] {
 
 const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' })
 
+/** Endereço para ordenar pela URL: domínio sem "www." e com acentos, depois o caminho ("nuxt.com/docs"). */
+const sortKeys = new Map<string, string>()
+export function urlSortKey(url: string): string {
+  let key = sortKeys.get(url)
+  if (key === undefined) {
+    if (sortKeys.size > 50_000) sortKeys.clear()
+    try {
+      const parsed = new URL(url)
+      key = `${displayHost(url)}${parsed.port ? `:${parsed.port}` : ''}${decodeSafe(parsed.pathname).replace(/\/+$/, '')}${decodeSafe(parsed.search)}${decodeSafe(parsed.hash)}`
+    } catch {
+      key = url
+    }
+    sortKeys.set(url, key)
+  }
+  return key
+}
+
+function decodeSafe(text: string): string {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
+}
+
 export function sortLinks(links: SavedLink[], sort: LinkSort): SavedLink[] {
   const list = [...links]
   if (sort === 'name') return list.sort((a, b) => collator.compare(a.title, b.title) || collator.compare(a.url, b.url))
+  if (sort === 'url') return list.sort((a, b) => collator.compare(urlSortKey(a.url), urlSortKey(b.url)) || collator.compare(a.url, b.url))
   return list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
 }
 
@@ -229,6 +261,8 @@ export function sortLinks(links: SavedLink[], sort: LinkSort): SavedLink[] {
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 const str = (value: unknown, fallback = '') => (typeof value === 'string' ? value : fallback)
 const ICON_FILE = /^[^/\\]+\.(?:png|jpe?g|gif|webp|bmp|avif|svg|ico)$/i
+/** Foto de categoria: uma imagem da biblioteca (attachments/…), sem sair dela. */
+const LIBRARY_IMAGE = /^attachments\/(?:[^/\\]+\/)*[^/\\]+\.(?:png|jpe?g|gif|webp|bmp|avif|svg|ico)$/i
 
 function normalizeFolder(raw: unknown): LinkFolder | null {
   if (!isObject(raw)) return null
@@ -240,6 +274,7 @@ function normalizeFolder(raw: unknown): LinkFolder | null {
     name: name.slice(0, MAX_FOLDER_NAME * 2),
     color: isPaletteColor(raw.color) ? raw.color : 'gray',
     icon: isCategoryIcon(raw.icon) ? raw.icon : null,
+    image: typeof raw.image === 'string' && LIBRARY_IMAGE.test(raw.image) && !raw.image.split('/').includes('..') ? raw.image : null,
     createdAt: str(raw.createdAt, new Date().toISOString()),
   }
 }
@@ -287,7 +322,7 @@ export function serializeLinks(data: LinksData): string {
   const file = {
     app: '4notes',
     version: 1,
-    folders: data.folders.map(({ id, name, color, icon, createdAt }) => ({ id, name, color, icon, createdAt })),
+    folders: data.folders.map(({ id, name, color, icon, image, createdAt }) => ({ id, name, color, icon, image, createdAt })),
     links: data.links.map(({ id, url, title, folderId, icon, createdAt, updatedAt }) => ({ id, url, title, folderId, icon, createdAt, updatedAt })),
   }
   return `${JSON.stringify(file, null, 2)}\n`

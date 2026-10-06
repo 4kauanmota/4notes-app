@@ -10,6 +10,18 @@ import { readJsonFile, toJson } from '../storage/json-file'
 import { DATA_PATHS } from '../storage/paths'
 import { CATEGORIES_FILE, normalizeCategories, serializeCategories, type NoteCategory } from './categories'
 
+/** Como os nomes das pastas pelo título aparecem: como foram digitados ou em CAIXA ALTA. */
+export type FolderCase = 'typed' | 'upper'
+
+/** Configurações das Notas (Configurações › Módulos), guardadas no workspace. */
+export interface NotesSettings {
+  /** Nota nova sem categoria vai para a categoria que já tem notas com o mesmo começo de título. */
+  autoCategory: boolean
+  folderCase: FolderCase
+}
+
+export const DEFAULT_NOTES_SETTINGS: NotesSettings = { autoCategory: false, folderCase: 'typed' }
+
 export interface NotesUiState {
   openTabs: string[]
   activeTab: string | null
@@ -18,6 +30,7 @@ export interface NotesUiState {
   collapsedCategories: string[]
   /** Pastas (pelo título) abertas na lista lateral. */
   openFolders: string[]
+  settings: NotesSettings
 }
 
 export type CategoriesResult = { status: 'ok' | 'missing'; categories: NoteCategory[]; raw: string | null } | { status: 'invalid'; raw: string }
@@ -46,8 +59,10 @@ export const notesRepository = {
   mkdir: (dir: string) => desktop().files.mkdir(dir),
   /** Todos os arquivos (visíveis) de uma pasta, de qualquer tipo. */
   listAll: (dir: string) => desktop().files.list(dir, { recursive: true }),
-  writeImage: (path: string, data: Uint8Array) => desktop().images.write(path, data),
-  pickImage: () => desktop().images.pick(),
+  /** Copia uma imagem do workspace (ex.: da biblioteca para a pasta da categoria). */
+  copyImage: (from: string, to: string) => desktop().images.copy(from, to),
+  /** Garante que a imagem está na biblioteca (attachments/); devolve o caminho dela lá. */
+  keepInLibrary: (path: string) => desktop().library.adopt(path),
 
   async readCategories(): Promise<CategoriesResult> {
     const result = await readJsonFile(CATEGORIES_FILE)
@@ -74,12 +89,17 @@ export const notesRepository = {
   async readUiState(): Promise<NotesUiState> {
     const result = await readJsonFile(DATA_PATHS.notesUiState)
     const data = (result.status === 'ok' && result.data && typeof result.data === 'object' ? result.data : {}) as Record<string, unknown>
+    const settings = (data.settings && typeof data.settings === 'object' ? data.settings : {}) as Record<string, unknown>
     return {
       openTabs: strings(data.openTabs),
       activeTab: typeof data.activeTab === 'string' ? data.activeTab : null,
       sidebarOpen: data.sidebarOpen !== false,
       collapsedCategories: strings(data.collapsedCategories),
       openFolders: strings(data.openFolders),
+      settings: {
+        autoCategory: settings.autoCategory === true,
+        folderCase: settings.folderCase === 'upper' ? 'upper' : 'typed',
+      },
     }
   },
 

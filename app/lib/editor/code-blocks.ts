@@ -10,6 +10,8 @@
  *   setas e os cliques passam direto para o código ou para fora do bloco.
  * - Digitar ``` (ou ```linguagem) numa linha e apertar Enter cria um bloco; a
  *   linguagem muda pelo nome dela no cabeçalho. Backspace num bloco vazio o remove.
+ * - Blocos de texto (```text, criados pela barra de formatação — text-blocks.ts) usam
+ *   o mesmo cartão, mas com a fonte do texto, linhas que quebram e sem linguagem.
  * - O arquivo continua sendo Markdown comum.
  */
 import { undo } from '@codemirror/commands'
@@ -20,7 +22,7 @@ import { highlightTree } from '@lezer/highlight'
 import { iconSvg } from '../icons'
 import { focusChanged, focusTracking, isFocused } from './focus'
 import { editorHost } from './host'
-import { findLanguage, languageLabel } from './languages'
+import { findLanguage, isTextBlockInfo, languageLabel } from './languages'
 import { codeHighlight } from './theme'
 
 export interface CodeBlock {
@@ -84,6 +86,9 @@ export function codeBlockAt(state: EditorState, pos: number): CodeBlock | null {
   return codeBlocks(state).find((block) => block.from <= pos && pos <= block.to) ?? null
 }
 
+/** Bloco de texto (```text): sem linguagem, conteúdo exatamente como está. */
+export const isTextBlock = (block: CodeBlock) => isTextBlockInfo(block.info)
+
 /** Troca o código de um bloco (usado pela tela cheia). */
 export function replaceBlockCode(view: EditorView, at: number, code: string): void {
   const block = codeBlockAt(view.state, at)
@@ -129,17 +134,33 @@ const ACTIONS = [
   { action: 'remove', icon: 'trash', tip: 'Remover bloco de código' },
 ] as const
 
+const TEXT_ACTIONS = [
+  { action: 'copy', icon: 'copy', tip: 'Copiar texto' },
+  { action: 'expand', icon: 'expand', tip: 'Abrir em tela cheia' },
+  { action: 'remove', icon: 'trash', tip: 'Remover bloco de texto' },
+] as const
+
 function header(info: string): HTMLElement {
   const head = el('div', 'cm-codeblock-head')
-  const label = el('button', 'cm-codeblock-lang')
-  label.type = 'button'
-  label.dataset.action = 'language'
-  label.dataset.tip = 'Trocar a linguagem'
-  label.dataset.tipPos = 'top'
-  label.textContent = languageLabel(info)
-  label.insertAdjacentHTML('beforeend', iconSvg('chevron-down', 12))
+  const text = isTextBlockInfo(info)
+  let label: HTMLElement
+  if (text) {
+    // Bloco de texto: sem linguagem para trocar
+    label = el('span', 'cm-codeblock-kind')
+    label.innerHTML = iconSvg('text-block', 13)
+    label.append('Texto')
+  } else {
+    const button = el('button', 'cm-codeblock-lang')
+    button.type = 'button'
+    button.dataset.action = 'language'
+    button.dataset.tip = 'Trocar a linguagem'
+    button.dataset.tipPos = 'top'
+    button.textContent = languageLabel(info)
+    button.insertAdjacentHTML('beforeend', iconSvg('chevron-down', 12))
+    label = button
+  }
   const actions = el('span', 'cm-codeblock-actions')
-  for (const { action, icon, tip } of ACTIONS) {
+  for (const { action, icon, tip } of text ? TEXT_ACTIONS : ACTIONS) {
     const button = el('button', 'cm-codeblock-btn')
     button.type = 'button'
     button.dataset.action = action
@@ -184,12 +205,15 @@ class CodeBlockWidget extends WidgetType {
     return other.info === this.info && other.code === this.code && other.loaded === this.loaded
   }
   toDOM(): HTMLElement {
+    const text = isTextBlockInfo(this.info)
     // Espaçamento por padding (margens em widgets de bloco atrapalham a medição do editor)
-    const wrap = el('div', 'cm-codeblock')
+    const wrap = el('div', text ? 'cm-codeblock cm-textblock' : 'cm-codeblock')
     const card = el('div', 'cm-codeblock-card')
     const pre = el('pre', 'cm-codeblock-pre')
     const code = el('code')
-    renderHighlighted(code, this.code, this.info)
+    // Bloco de texto: o conteúdo exatamente como está (sem cores de linguagem)
+    if (text) code.textContent = this.code
+    else renderHighlighted(code, this.code, this.info)
     pre.append(code)
     card.append(header(this.info), pre)
     wrap.append(card)
@@ -212,7 +236,7 @@ class CodeHeaderWidget extends WidgetType {
     return other.info === this.info
   }
   toDOM(): HTMLElement {
-    const wrap = el('div', 'cm-codeblock-head-editing')
+    const wrap = el('div', isTextBlockInfo(this.info) ? 'cm-codeblock-head-editing cm-textblock' : 'cm-codeblock-head-editing')
     // O espaço abaixo do cabeçalho é o mesmo do cartão fechado (o código não "pula")
     wrap.append(header(this.info), el('div', 'cm-codeblock-gap'))
     return wrap
@@ -500,7 +524,7 @@ function runAction(view: EditorView, block: CodeBlock, action: string, button: H
     host?.openCode({ code, info: block.info, apply: (next) => replaceBlockCode(view, block.from, next) })
   } else if (action === 'remove') {
     removeBlock(view, block)
-    host?.notify('Bloco de código removido', () => undo(view))
+    host?.notify(isTextBlock(block) ? 'Bloco de texto removido' : 'Bloco de código removido', () => undo(view))
   } else if (action === 'language') {
     const at = block.from
     void host?.chooseLanguage?.(block.info).then((info) => {

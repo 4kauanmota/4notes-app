@@ -6,8 +6,9 @@
  * - No editor aparece só a imagem — o texto Markdown dela nunca aparece. Clicar na
  *   imagem a seleciona (Backspace/Delete tira da nota, Ctrl+C copia); o que for
  *   digitado logo antes ou depois de uma imagem sozinha na linha vai para uma linha própria.
- * - O botão Remover tira a imagem da nota e apaga o arquivo (vai para a Lixeira),
- *   a menos que outra nota use a mesma imagem. Desfazer (no aviso ou Ctrl+Z) devolve tudo.
+ * - O botão Remover tira a imagem só da nota: o arquivo continua na biblioteca de
+ *   imagens (dá para usar de novo, ou excluir por lá). Desfazer (no aviso ou Ctrl+Z)
+ *   devolve a imagem para a nota.
  */
 import { undo } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
@@ -64,14 +65,9 @@ function safeDecode(text: string): string {
   }
 }
 
-/** Imagens apagadas pelo botão Remover nesta sessão: se o texto delas voltar (Ctrl+Z), o arquivo volta junto. */
-const removedPaths = new Set<string>()
-
 class ImageWidget extends WidgetType {
   constructor(
     readonly src: string,
-    /** Caminho da imagem no workspace (null = endereço externo ou inválido). */
-    readonly path: string | null,
     readonly url: string | null,
     readonly alt: string,
     /** A imagem está selecionada (contorno em volta). */
@@ -88,7 +84,7 @@ class ImageWidget extends WidgetType {
     dom.classList.toggle('selected', this.selected)
     return true
   }
-  toDOM(view: EditorView): HTMLElement {
+  toDOM(): HTMLElement {
     // Espaçamento por padding no elemento de fora (margens atrapalham a medição do editor)
     const wrap = document.createElement('div')
     wrap.className = this.selected ? 'cm-image selected' : 'cm-image'
@@ -108,26 +104,13 @@ class ImageWidget extends WidgetType {
     img.src = this.url
     img.alt = this.alt
     img.draggable = false
-    // Imagem apagada nesta sessão voltou para o texto (Desfazer): devolve o arquivo
-    const { path, url } = this
-    const host = view.state.facet(editorHost)
-    const restore = () => {
-      if (!host || !path) return broken()
-      void host.restoreImage(path).then((restored) => {
-        if (!restored) return broken()
-        removedPaths.delete(path)
-        img.addEventListener('error', broken, { once: true })
-        img.src = `${url}?v=${Date.now()}`
-      })
-    }
-    if (path && removedPaths.has(path)) restore()
-    else img.addEventListener('error', restore, { once: true })
+    img.addEventListener('error', broken, { once: true })
     const remove = document.createElement('button')
     remove.type = 'button'
     remove.className = 'cm-image-remove'
     remove.dataset.action = 'remove-image'
-    remove.dataset.tip = 'Remover imagem'
-    remove.setAttribute('aria-label', 'Remover imagem')
+    remove.dataset.tip = 'Remover da nota (continua na biblioteca)'
+    remove.setAttribute('aria-label', 'Remover imagem da nota')
     remove.innerHTML = iconSvg('trash', 15)
     frame.append(img, remove)
     return wrap
@@ -155,7 +138,7 @@ function buildDecorations(state: EditorState): { decorations: DecorationSet; ato
   for (const image of findImages(state)) {
     const path = imagePath(state, image.src)
     const selected = state.selection.ranges.some((range) => !range.empty && range.from <= image.from && range.to >= image.to)
-    const widget = new ImageWidget(image.src, path, host && path ? host.imageUrl(path) : null, image.alt, selected)
+    const widget = new ImageWidget(image.src, host && path ? host.imageUrl(path) : null, image.alt, selected)
     if (image.alone) {
       ranges.push(Decoration.replace({ widget, block: true }).range(image.lineFrom, image.lineTo))
       atoms.push(hidden.range(image.lineFrom, image.lineTo))
@@ -226,14 +209,8 @@ const imageEvents = EditorView.domEventHandlers({
           ? { from: line.from, to: line.to + 1 }
           : { from: Math.max(0, line.from - 1), to: line.to }
       view.dispatch({ changes, userEvent: 'delete.image' })
-      // Apaga o arquivo, a não ser que a mesma imagem continue em outro lugar desta nota
-      const host = view.state.facet(editorHost)
-      const path = imagePath(view.state, image.src)
-      const stillHere = findImages(view.state).some((other) => imagePath(view.state, other.src) === path)
-      if (host && path && !stillHere) {
-        removedPaths.add(path)
-        host.removeImage(path, () => undo(view))
-      }
+      // Só sai da nota: o arquivo continua na biblioteca de imagens
+      view.state.facet(editorHost)?.notify('Imagem removida da nota (continua na biblioteca de imagens)', () => undo(view))
       return true
     }
     // Clique na imagem: seleciona a imagem (Backspace/Delete tira da nota, Ctrl+C copia)

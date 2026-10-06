@@ -158,8 +158,13 @@ async function onNodeContextMenu(node: GraphNodeInfo) {
 
 async function onBackgroundContextMenu(world: { x: number; y: number }) {
   hover.value = null
-  const choice = await showContextMenu([{ id: 'new', label: 'Nova nota' }])
+  const choice = await showContextMenu([
+    { id: 'new', label: 'Nova nota' },
+    separator,
+    { id: 'relayout', label: 'Reorganizar o mapa', enabled: hasNotes.value },
+  ])
   if (choice === 'new') void newNote({ position: [Math.round(world.x), Math.round(world.y)] })
+  if (choice === 'relayout') graph.value?.relayout()
 }
 
 /** Clique no vazio: tira a seleção (da conexão e da nota) e fecha o painel da nota. */

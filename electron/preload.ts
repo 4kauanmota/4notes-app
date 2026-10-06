@@ -55,13 +55,25 @@ const api: FourNotesApi = {
     mkdir: (dir) => ipcRenderer.invoke(IPC.filesMkdir, dir),
   },
   images: {
-    pick: () => ipcRenderer.invoke(IPC.imagesPick),
-    write: (path, data) => ipcRenderer.invoke(IPC.imagesWrite, path, data),
+    copy: (from, to) => ipcRenderer.invoke(IPC.imagesCopy, from, to),
   },
   attachments: {
     saveImage: (data, mime) => ipcRenderer.invoke(IPC.attachmentsSaveImage, data, mime),
-    removeImage: (path, exceptNote) => ipcRenderer.invoke(IPC.attachmentsRemoveImage, path, exceptNote),
-    restoreImage: (path) => ipcRenderer.invoke(IPC.attachmentsRestoreImage, path),
+  },
+  library: {
+    list: () => ipcRenderer.invoke(IPC.libraryList),
+    upload: () => ipcRenderer.invoke(IPC.libraryUpload),
+    adopt: (path) => ipcRenderer.invoke(IPC.libraryAdopt, path),
+    remove: (path) => ipcRenderer.invoke(IPC.libraryRemove, path),
+  },
+  exports: {
+    saveText: (name, text) => ipcRenderer.invoke(IPC.exportText, name, text),
+    savePdf: (name, html) => ipcRenderer.invoke(IPC.exportPdf, name, html),
+    reveal: (path) => ipcRenderer.invoke(IPC.exportReveal, path),
+  },
+  system: {
+    launchAtLogin: () => ipcRenderer.invoke(IPC.launchAtLogin),
+    setLaunchAtLogin: (enabled) => ipcRenderer.invoke(IPC.setLaunchAtLogin, enabled),
   },
   links: {
     fetchMeta: (url, withIcon) => ipcRenderer.invoke(IPC.linksFetchMeta, url, withIcon),

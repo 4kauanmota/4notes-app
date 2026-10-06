@@ -82,6 +82,7 @@ function reload() {
     </div>
 
     <SettingsDialog v-if="app.state.phase === 'ready'" />
+    <ImageLibraryDialog v-if="app.state.phase === 'ready'" />
     <DialogHost />
     <ToastHost />
     <ContextMenuHost />

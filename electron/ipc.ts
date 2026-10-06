@@ -9,7 +9,6 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import {
   IPC,
-  PICKABLE_IMAGE_EXTENSIONS,
   type BootstrapInfo,
   type DataDirStatus,
   type ListOptions,
@@ -18,24 +17,12 @@ import {
 } from '../shared/ipc'
 import { getConfig, updateConfig } from './config'
 import { copyDataDir, createWorkspace, dataDirStatus, inspectFolder, prepareDataDir } from './data-dir'
-import {
-  AppError,
-  fileExists,
-  listFiles,
-  makeDir,
-  readFile,
-  readPickedImage,
-  removeImage,
-  renameFile,
-  restoreImage,
-  revealFile,
-  saveImage,
-  trashFile,
-  writeFile,
-  writeImage,
-} from './files'
+import { exportPdf, exportText, revealExport } from './export'
+import { AppError, copyImage, fileExists, listFiles, makeDir, readFile, renameFile, revealFile, saveImage, trashFile, writeFile } from './files'
+import { adoptIntoLibrary, listLibrary, removeFromLibrary, uploadToLibrary } from './library'
 import { fetchLinkMeta, findBrowserSources, pickBookmarksFile, readBrowserBookmarks, saveDataIcon } from './links'
 import { APP_ORIGIN } from './protocol'
+import { launchAtLogin, setLaunchAtLogin } from './system'
 import { setTitleBarColors } from './window'
 
 interface IpcContext {
@@ -158,23 +145,22 @@ export function registerIpc(context: IpcContext): void {
   handle(IPC.filesReveal, (_event, file: string) => revealFile(requireDataDir(), file))
   handle(IPC.filesMkdir, (_event, dir: string) => makeDir(requireDataDir(), assertString(dir, 'Caminho')))
 
-  // ── Imagens escolhidas pelo usuário (imagem das categorias) ──
-  handle(IPC.imagesPick, async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const options: Electron.OpenDialogOptions = {
-      title: 'Escolha uma imagem',
-      buttonLabel: 'Usar imagem',
-      properties: ['openFile'],
-      filters: [{ name: 'Imagens', extensions: [...PICKABLE_IMAGE_EXTENSIONS] }],
-    }
-    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
-    return result.canceled || !result.filePaths[0] ? null : readPickedImage(result.filePaths[0])
-  })
-  handle(IPC.imagesWrite, (_event, file: unknown, data: unknown) => writeImage(requireDataDir(), file, data))
-
+  // ── Imagens ──
+  handle(IPC.imagesCopy, (_event, from: unknown, to: unknown) => copyImage(requireDataDir(), from, to))
   handle(IPC.attachmentsSaveImage, (_event, data: unknown, mime: unknown) => saveImage(requireDataDir(), data, mime))
-  handle(IPC.attachmentsRemoveImage, (_event, file: unknown, exceptNote: unknown) => removeImage(requireDataDir(), file, exceptNote))
-  handle(IPC.attachmentsRestoreImage, (_event, file: unknown) => restoreImage(requireDataDir(), file))
+
+  // ── Biblioteca de imagens ──
+  handle(IPC.libraryList, () => listLibrary(requireDataDir()))
+  handle(IPC.libraryUpload, (event) => uploadToLibrary(requireDataDir(), BrowserWindow.fromWebContents(event.sender)))
+  handle(IPC.libraryAdopt, (_event, file: unknown) => adoptIntoLibrary(requireDataDir(), file))
+  handle(IPC.libraryRemove, (_event, file: unknown) => removeFromLibrary(requireDataDir(), file))
+
+  // ── Exportar notas (TXT / PDF) ──
+  handle(IPC.exportText, (event, name: unknown, text: unknown) => exportText(BrowserWindow.fromWebContents(event.sender), name, text))
+  handle(IPC.exportPdf, (event, name: unknown, html: unknown) =>
+    exportPdf(BrowserWindow.fromWebContents(event.sender), cachedStatus.ready ? getConfig().dataDir : null, name, html),
+  )
+  handle(IPC.exportReveal, (_event, file: unknown) => revealExport(file))
 
   // ── Links: título e ícone dos sites, favoritos dos navegadores ──
   handle(IPC.linksFetchMeta, (_event, url: unknown, withIcon: unknown) => fetchLinkMeta(requireDataDir(), url, withIcon))
@@ -184,6 +170,9 @@ export function registerIpc(context: IpcContext): void {
   handle(IPC.linksPickFile, (event) => pickBookmarksFile(BrowserWindow.fromWebContents(event.sender)))
 
   // ── Sistema ──
+  handle(IPC.launchAtLogin, () => launchAtLogin())
+  handle(IPC.setLaunchAtLogin, (_event, enabled: unknown) => setLaunchAtLogin(enabled))
+
   handle(IPC.openExternal, async (_event, url: string) => {
     if (typeof url !== 'string' || !/^(https?:|mailto:)/i.test(url)) throw new AppError('EINVAL', 'Link não permitido.')
     await shell.openExternal(url)

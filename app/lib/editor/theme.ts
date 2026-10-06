@@ -67,6 +67,17 @@ export const editorTheme = EditorView.theme({
   '.cm-md-rule': { display: 'inline-block', width: '100%', height: '0', borderTop: '1.5px solid var(--border-strong)', verticalAlign: 'middle' },
   '.cm-md-link': { color: 'var(--primary-text)', textDecoration: 'underline', textDecorationColor: 'var(--primary-soft-2)', textUnderlineOffset: '3px' },
   '&.cm-mod-held .cm-md-link': { cursor: 'pointer', textDecorationColor: 'currentColor' },
+  // Ícone do site na frente de um link salvo no módulo Links (formatting.ts)
+  '.cm-link-icon': {
+    display: 'inline-block',
+    width: '14px',
+    height: '14px',
+    marginRight: '4px',
+    verticalAlign: '-2px',
+    borderRadius: '3px',
+    objectFit: 'contain',
+    userSelect: 'none',
+  },
 
   // Listas e tarefas (ver markdown-preview.ts): o marcador fica na margem e o texto quebrado alinha com o primeiro
   '.cm-md-li': {
@@ -174,6 +185,22 @@ export const editorTheme = EditorView.theme({
     color: 'var(--text)',
   },
   '.cm-md-codeblock.cm-md-codeblock-first': { borderTopLeftRadius: '0', borderTopRightRadius: '0' },
+
+  // Blocos de texto (```text): o mesmo cartão, com a fonte do texto e linhas que quebram
+  '.cm-codeblock-kind': { display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: '600', letterSpacing: '0.01em' },
+  '.cm-codeblock-kind svg': { opacity: '0.8' },
+  '.cm-textblock .cm-codeblock-pre': {
+    fontFamily: 'var(--font-ui)',
+    fontSize: '1em',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    overflowX: 'hidden',
+  },
+  // O <code> de dentro teria a fonte monoespaçada do navegador
+  '.cm-textblock .cm-codeblock-pre code': { fontFamily: 'inherit', fontSize: 'inherit' },
+  '.cm-md-codeblock.cm-md-textblock': { fontFamily: 'var(--font-ui)', fontSize: '1em' },
+  // O Markdown marca o conteúdo das cercas como código (monoespaçado): no bloco de texto, não
+  '.cm-md-textblock *': { fontFamily: 'inherit !important', fontSize: 'inherit !important' },
 
   // Imagens (ver images.ts)
   '.cm-image': { padding: '6px var(--editor-padding-x, 28px)', lineHeight: '0' },
@@ -395,6 +422,23 @@ export const codeEditorTheme = EditorView.theme({
     backgroundColor: 'var(--selection) !important',
   },
   '.cm-matchingBracket': { backgroundColor: 'var(--primary-soft-2)', outline: 'none' },
+  '.cm-selectionMatch': { backgroundColor: 'var(--accent-soft)' },
+  '.cm-panels': { backgroundColor: 'var(--surface-2)', color: 'var(--text)' },
+  '.cm-textfield': { border: '1px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', borderRadius: '6px' },
+  '.cm-button': { backgroundImage: 'none', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text)' },
+})
+
+/** Bloco de texto em tela cheia (CodeFullscreen.vue): a fonte do texto e linhas que quebram. */
+export const textEditorTheme = EditorView.theme({
+  '&': { height: '100%', fontSize: 'var(--editor-font-size, 15px)', color: 'var(--text)', backgroundColor: 'var(--surface)' },
+  '&.cm-focused': { outline: 'none' },
+  '.cm-scroller': { fontFamily: 'var(--font-ui)', lineHeight: '1.72' },
+  '.cm-content': { maxWidth: '900px', width: '100%', margin: '0 auto', padding: '20px 0 40vh', caretColor: 'var(--primary)' },
+  '.cm-line': { padding: '0 28px' },
+  '.cm-cursor': { borderLeftColor: 'var(--primary)', borderLeftWidth: '2px' },
+  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+    backgroundColor: 'var(--selection) !important',
+  },
   '.cm-selectionMatch': { backgroundColor: 'var(--accent-soft)' },
   '.cm-panels': { backgroundColor: 'var(--surface-2)', color: 'var(--text)' },
   '.cm-textfield': { border: '1px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', borderRadius: '6px' },

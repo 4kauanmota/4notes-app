@@ -64,16 +64,31 @@ export const codeLanguages: LanguageDescription[] = [
   LanguageDescription.of({ name: 'GDScript', alias: ['gdscript', 'gd'], extensions: ['gd'], support: new LanguageSupport(gdscriptLanguage) }),
 ]
 
+// ── Blocos de texto ──────────────────────────────────────────────────────────
+
+/**
+ * Texto depois da cerca dos blocos de texto (```text): criados só pela barra de
+ * formatação; o conteúdo fica como está, sem linguagem e sem cores.
+ */
+export const TEXT_BLOCK_INFO = 'text'
+
+export function isTextBlockInfo(info: string): boolean {
+  return (info.trim().split(/\s+/)[0] ?? '').toLowerCase() === TEXT_BLOCK_INFO
+}
+
 // ── Consultas ────────────────────────────────────────────────────────────────
 
-/** Linguagem pelo texto depois da cerca (```ts, ```python…). */
+/** Linguagem pelo texto depois da cerca (```ts, ```python…). Bloco de texto: nenhuma. */
 export function findLanguage(info: string): LanguageDescription | null {
   const name = info.trim().split(/\s+/)[0] ?? ''
-  return name ? LanguageDescription.matchLanguageName(codeLanguages, name, true) : null
+  // "text" também "lembraria" o LaTeX (busca aproximada pelo apelido "tex")
+  if (!name || isTextBlockInfo(name)) return null
+  return LanguageDescription.matchLanguageName(codeLanguages, name, true)
 }
 
 /** Nome mostrado no cabeçalho do bloco. */
 export function languageLabel(info: string): string {
+  if (isTextBlockInfo(info)) return 'Texto'
   return findLanguage(info)?.name ?? (info.trim().split(/\s+/)[0] || 'Código')
 }
 
@@ -123,5 +138,7 @@ const VSCODE_MODES: Record<string, string | null> = {
 export function fenceFromVsCodeMode(mode: string | undefined): string | null | undefined {
   if (!mode) return undefined
   if (mode in VSCODE_MODES) return VSCODE_MODES[mode]
+  // Texto nunca vira bloco sozinho (bloco de texto só pela barra de formatação)
+  if (isTextBlockInfo(mode)) return null
   return findLanguage(mode) ? mode : ''
 }

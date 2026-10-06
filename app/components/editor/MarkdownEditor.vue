@@ -6,9 +6,11 @@
  *   a seleção e a rolagem de cada nota são guardados e restaurados.
  * - `assetBase` é a pasta da nota no workspace (base dos caminhos das imagens).
  * - Ao selecionar texto, aparece a barra de formatação (FormatToolbar).
- * - Colar uma imagem a salva no workspace (remover a imagem pelo botão apaga o
- *   arquivo); colar código cria um bloco de código, que pode ser aberto em tela
- *   cheia (CodeFullscreen).
+ * - Colar uma imagem a salva na biblioteca de imagens do workspace (attachments/);
+ *   "Inserir imagem…" no clique direito escolhe uma que já está lá. Remover a imagem
+ *   pelo botão tira só da nota. Colar código cria um bloco de código, que pode ser
+ *   aberto em tela cheia (CodeFullscreen). "Bloco de texto" (na barra) transforma a
+ *   seleção num bloco de texto, com o mesmo cartão e a mesma tela cheia.
  */
 import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { EditorView, type ViewUpdate } from '@codemirror/view'
@@ -16,6 +18,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch 
 import { errorMessage, workspaceFileUrl } from '#shared/ipc'
 import { showContextMenu, separator, type MenuItemSpec } from '~/composables/useContextMenu'
 import { promptDialog } from '~/composables/useDialog'
+import { pickLibraryImage } from '~/composables/useImageLibrary'
 import { notifyError, showToast } from '~/composables/useToasts'
 import type { PaletteColor } from '~/lib/colors'
 import {
@@ -36,6 +39,7 @@ import { stripImages } from '~/lib/editor/markup'
 import type { CodeEditRequest, EditorHost, MentionHost } from '~/lib/editor/host'
 import { refreshMentions } from '~/lib/editor/mentions'
 import { buildExtensions, minimalChange, type CursorInfo } from '~/lib/editor/setup'
+import { canWrapInTextBlock, wrapInTextBlock } from '~/lib/editor/text-blocks'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 
 const props = defineProps<{
@@ -45,8 +49,6 @@ const props = defineProps<{
   autofocus?: boolean
   /** Pasta da nota no workspace ("notes", "mindmap/Principal"). */
   assetBase?: string
-  /** Arquivo da nota no workspace ("notes/Ideias.md"); null enquanto ela não foi salva. */
-  notePath?: string | null
   /** Liga as menções a notas e tarefas (@). */
   mentions?: MentionHost
   /** A primeira linha de uma nota vazia já começa como título (Notas). */
@@ -68,13 +70,15 @@ let applyingExternal = false
 
 /** Altura da barra com a fileira de cores aberta (ela cresce para longe do texto). */
 const TOOLBAR_HEIGHT = 76
-const TOOLBAR_HALF_WIDTH = 210
+const TOOLBAR_HALF_WIDTH = 226
 const toolbar = reactive({
   visible: false,
   x: 0,
   y: 0,
   below: false,
   active: { formats: new Set<InlineFormat>(), color: null, link: null } as ActiveFormats,
+  /** A seleção pode virar bloco de texto (fora de blocos de código/texto). */
+  textBlock: false,
   /** Editando o endereço de um link: a barra fica aberta mesmo com o foco no campo. */
   linkMode: false,
   linkInitial: '',
@@ -90,8 +94,9 @@ function placeToolbar(): void {
     toolbar.linkMode = false
     return
   }
-  // Só imagens selecionadas (clique numa imagem): sem barra de formatação
-  if (!stripImages(view.state.sliceDoc(selection.from, selection.to)).trim()) {
+  // Só imagens selecionadas (clique numa imagem) ou várias ocorrências (Ctrl+D): sem barra
+  // de formatação (ela cobriria as outras seleções; os atalhos continuam valendo)
+  if (view.state.selection.ranges.length > 1 || !stripImages(view.state.sliceDoc(selection.from, selection.to)).trim()) {
     toolbar.visible = false
     toolbar.linkMode = false
     return
@@ -115,6 +120,7 @@ function placeToolbar(): void {
   toolbar.below = above < TOOLBAR_HEIGHT + 4
   toolbar.y = Math.round(toolbar.below ? Math.min(end.bottom - box.top + 8, box.height - TOOLBAR_HEIGHT - 4) : above)
   toolbar.active = activeFormats(view.state)
+  toolbar.textBlock = canWrapInTextBlock(view.state)
   toolbar.visible = true
 }
 
@@ -149,6 +155,8 @@ function run(command: (view: EditorView) => boolean): void {
 const applyInline = (format: InlineFormat) => run((v) => toggleFormat(v, format))
 const applyColor = (color: PaletteColor | null) => run((v) => (color ? toggleFormat(v, 'color', color) : clearColor(v)))
 const applyLine = (format: LineFormat) => run((v) => toggleLineFormat(v, format))
+/** "Bloco de texto": a seleção vira um bloco (só por aqui — nada vira bloco de texto sozinho). */
+const applyTextBlock = () => run(wrapInTextBlock)
 
 // ── Links (o endereço é editado na própria barra) ───────────────────────────
 
@@ -255,31 +263,19 @@ const appHost: EditorHost = {
     }
   },
   imageUrl: (path) => workspaceFileUrl(path),
-  removeImage(path, undoRemoval) {
-    if (!hasDesktopApi()) return
-    const api = desktop().attachments
-    api
-      .removeImage(path, props.notePath ?? null)
-      .then((result) => {
-        if (result === 'removed') {
-          showToast({
-            message: 'Imagem apagada',
-            icon: 'trash',
-            action: {
-              label: 'Desfazer',
-              run: async () => {
-                await api.restoreImage(path).catch(() => false)
-                undoRemoval()
-              },
-            },
-          })
-        } else if (result === 'in-use') {
-          showToast({ message: 'Imagem removida da nota. O arquivo continua, porque outra nota usa essa imagem.', icon: 'info' })
-        }
-      })
-      .catch((error) => notifyError(`Não foi possível apagar a imagem: ${errorMessage(error)}`, error))
+  async pickImage() {
+    if (!hasDesktopApi()) return null
+    const picked = await pickLibraryImage({ title: 'Inserir imagem', confirmLabel: 'Inserir' })
+    if (!picked) return null
+    try {
+      // A nota sempre aponta para a cópia da biblioteca (attachments/): a foto antiga de
+      // uma categoria pode ser trocada ou apagada junto com ela
+      return await desktop().library.adopt(picked)
+    } catch (error) {
+      notifyError(`Não foi possível usar a imagem: ${errorMessage(error)}`, error)
+      return null
+    }
   },
-  restoreImage: (path) => (hasDesktopApi() ? desktop().attachments.restoreImage(path).catch(() => false) : Promise.resolve(false)),
   openCode: (request) => {
     toolbar.visible = false
     codeRequest.value = request
@@ -427,6 +423,7 @@ defineExpose({
       :active="toolbar.active"
       :link-mode="toolbar.linkMode"
       :link-initial="toolbar.linkInitial"
+      :text-block="toolbar.textBlock"
       @inline="applyInline"
       @color="applyColor"
       @line="applyLine"
@@ -435,6 +432,7 @@ defineExpose({
       @unlink="unlink"
       @close-link="closeLink"
       @clear="run(clearFormatting)"
+      @text-block="applyTextBlock"
     />
     <CodeFullscreen v-if="codeRequest" :request="codeRequest" @close="closeCode" />
   </div>

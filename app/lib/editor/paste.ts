@@ -3,7 +3,9 @@
  *  - imagens (print da tela, arquivo de imagem) são salvas em attachments/ do
  *    workspace e entram na nota como ![](…);
  *  - um endereço web colado sobre um texto selecionado transforma o texto em link;
- *  - código vira um bloco ```linguagem (Ctrl+Shift+V cola como texto puro).
+ *  - código vira um bloco ```linguagem (Ctrl+Shift+V cola como texto puro);
+ *  - qualquer outro texto (comum, listas, trechos longos) entra como texto — nunca
+ *    num bloco de texto (esse só pela barra de formatação, text-blocks.ts).
  */
 import { syntaxTree } from '@codemirror/language'
 import type { EditorState } from '@codemirror/state'
@@ -12,14 +14,14 @@ import { detectCode, normalizeCode } from './code-detect'
 import { relativeTo } from '../files/workspace-path'
 import { editorHost } from './host'
 import { normalizeLinkUrl, setLink } from './formatting'
-import { fenceFromVsCodeMode } from './languages'
+import { fenceFromVsCodeMode, isTextBlockInfo } from './languages'
 
 const EMPTY_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?$/
 
 /** Ctrl+Shift+V acabou de ser pressionado: a próxima colagem é texto puro. */
 let plainPaste = false
 
-function isInsideCode(state: EditorState, pos: number): boolean {
+export function isInsideCode(state: EditorState, pos: number): boolean {
   for (let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(pos, -1); node; node = node.parent) {
     if (node.name === 'FencedCode' || node.name === 'CodeBlock' || node.name === 'InlineCode') return true
   }
@@ -50,6 +52,15 @@ function insertBlock(view: EditorView, text: string, at?: { from: number; to: nu
   })
 }
 
+/** Insere imagens do workspace (caminhos como "attachments/foto.png") na nota, cada uma na sua linha. */
+export function insertImagePaths(view: EditorView, paths: string[], at?: number): void {
+  const host = view.state.facet(editorHost)
+  if (!host || !paths.length) return
+  const base = host.assetBase()
+  const text = paths.map((path) => `![](${relativeTo(base, path)})`).join('\n')
+  insertBlock(view, text, at === undefined ? undefined : { from: at, to: at })
+}
+
 /** Salva as imagens no workspace e insere os links na nota. */
 async function insertImages(view: EditorView, files: File[], at?: number): Promise<void> {
   const host = view.state.facet(editorHost)
@@ -62,9 +73,25 @@ async function insertImages(view: EditorView, files: File[], at?: number): Promi
   }
   // A nota mudou enquanto salvava (trocou de aba): não cola na nota errada
   if (!saved.length || host.docKey() !== key) return
-  const base = host.assetBase()
-  const text = saved.map((path) => `![](${relativeTo(base, path)})`).join('\n')
-  insertBlock(view, text, at === undefined ? undefined : { from: at, to: at })
+  insertImagePaths(view, saved, at)
+}
+
+/**
+ * "Inserir imagem…" (menu do clique direito): escolhe na biblioteca de imagens e
+ * insere onde foi o clique (`at`; sem ele, no cursor). false = este editor não tem a biblioteca.
+ */
+export function insertImageFromLibrary(view: EditorView, at?: number): boolean {
+  const host = view.state.facet(editorHost)
+  if (!host?.pickImage) return false
+  const key = host.docKey()
+  const pos = at ?? view.state.selection.main.head
+  void host.pickImage().then((path) => {
+    // Trocou de nota enquanto escolhia: não insere na nota errada
+    if (!path || host.docKey() !== key) return
+    view.focus()
+    insertImagePaths(view, [path], Math.min(pos, view.state.doc.length))
+  })
+  return true
 }
 
 /** Linguagem do texto copiado do VS Code (ele grava isso na área de transferência). */
@@ -77,14 +104,21 @@ function vscodeMode(data: DataTransfer): string | undefined {
   }
 }
 
-/** Decide se o texto colado é código e em qual linguagem (null = colar como texto). */
+/**
+ * Decide se o texto colado é código e em qual linguagem (null = colar como texto).
+ * Só código reconhecido vira bloco: nada é colado dentro de um bloco de texto
+ * (```text) — esse só é criado pela barra de formatação.
+ */
 function codeLanguage(text: string, data: DataTransfer): string | null {
   const fromVsCode = fenceFromVsCodeMode(vscodeMode(data))
   if (fromVsCode === null) return null
+  let language: string | null
   if (fromVsCode !== undefined) {
-    return text.split('\n').filter((line) => line.trim()).length >= 2 ? fromVsCode : null
+    language = text.split('\n').filter((line) => line.trim()).length >= 2 ? fromVsCode : null
+  } else {
+    language = detectCode(text)?.language ?? null
   }
-  return detectCode(text)?.language ?? null
+  return language !== null && isTextBlockInfo(language) ? null : language
 }
 
 function insertCode(view: EditorView, text: string, language: string): void {

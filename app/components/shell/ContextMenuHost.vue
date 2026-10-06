@@ -10,7 +10,9 @@
  */
 import { redo, selectAll, undo } from '@codemirror/commands'
 import { EditorView } from '@codemirror/view'
-import { linkAtContextMenu, removeLink, selectLinkAt } from '~/lib/editor/formatting'
+import { contextMenuPosition, linkAtContextMenu, removeLink, selectLinkAt } from '~/lib/editor/formatting'
+import { editorHost } from '~/lib/editor/host'
+import { insertImageFromLibrary, isInsideCode } from '~/lib/editor/paste'
 import { nextTick, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
 import type { TextMenuRequest } from '#shared/ipc'
 import { openMenu, separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
@@ -231,6 +233,12 @@ function onWindowChange(): void {
 const mod = modKeyLabel()
 
 async function onTextMenu(request: TextMenuRequest): Promise<void> {
+  // O editor de texto (CodeMirror) tem o próprio desfazer/refazer e a biblioteca de imagens
+  const focused = document.activeElement as HTMLElement | null
+  const editor = focused?.closest('.cm-editor') ? EditorView.findFromDOM(focused.closest<HTMLElement>('.cm-editor')!) : null
+  // Onde foi o clique (a imagem entra ali, e não onde o cursor estava)
+  const clicked = contextMenuPosition()
+  const imageTarget = clicked ?? (editor ? { view: editor, pos: editor.state.selection.main.head } : null)
   const items: MenuItemSpec[] = []
   if (request.misspelledWord) {
     for (const word of request.suggestions) items.push({ id: `replace:${word}`, label: word })
@@ -248,6 +256,10 @@ async function onTextMenu(request: TextMenuRequest): Promise<void> {
       separator,
       { id: 'selectAll', label: 'Selecionar tudo', hint: `${mod}+A` },
     )
+    // Imagem da biblioteca (fora dos blocos de código)
+    if (imageTarget?.view.state.facet(editorHost)?.pickImage && !isInsideCode(imageTarget.view.state, imageTarget.pos)) {
+      items.push(separator, { id: 'insert-image', label: 'Inserir imagem…' })
+    }
   } else if (request.hasSelection) {
     items.push({ id: 'copy', label: 'Copiar', hint: `${mod}+C` })
   }
@@ -268,15 +280,13 @@ async function onTextMenu(request: TextMenuRequest): Promise<void> {
   }
   if (!items.length) return
 
-  // O editor de texto (CodeMirror) tem o próprio desfazer/refazer
-  const focused = document.activeElement as HTMLElement | null
-  const editor = focused?.closest('.cm-editor') ? EditorView.findFromDOM(focused.closest<HTMLElement>('.cm-editor')!) : null
   const choice = await showContextMenu(items)
   if (!choice) return
   const api = desktop()
   if (choice.startsWith('replace:')) return api.menu.runTextAction('replace', choice.slice('replace:'.length))
   if (choice === 'learn') return api.menu.runTextAction('learn', request.misspelledWord)
   if (choice === 'open-link' && request.linkURL) return void api.shell.openExternal(request.linkURL)
+  if (choice === 'insert-image' && imageTarget) return void insertImageFromLibrary(imageTarget.view, imageTarget.pos)
   if (editorLink && choice.startsWith('link-')) {
     const { view, link } = editorLink
     const url = link.url ?? ''

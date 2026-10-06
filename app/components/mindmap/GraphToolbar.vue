@@ -1,17 +1,21 @@
 <script setup lang="ts">
-/** Barra flutuante do mapa: mapa aberto, busca, nova nota e ajustes. */
+/**
+ * Barra flutuante do mapa: mapa aberto, busca, nova nota, reorganizar o mapa e o
+ * atalho para as configurações do mapa (Configurações › Módulos › Mapa Mental).
+ */
 import { computed, ref, watch } from 'vue'
 import { toPlainText } from '~/lib/editor/markup'
 import { modKeyLabel } from '~/lib/platform'
+import { useAppStore } from '~/stores/app'
 import { useMindmapStore, type PermanentNote } from '~/stores/mindmap'
 
 const emit = defineEmits<{ new: []; relayout: [] }>()
 const mindmap = useMindmapStore()
+const app = useAppStore()
 const mod = modKeyLabel()
 const input = ref<HTMLInputElement>()
 const focused = ref(false)
 const activeIndex = ref(0)
-const settingsOpen = ref(false)
 
 const results = computed(() => mindmap.searchResults.value.slice(0, 8))
 watch(results, () => (activeIndex.value = 0))
@@ -86,19 +90,25 @@ defineExpose({ focusSearch: () => input.value?.focus() })
     <button class="btn btn-primary btn-sm new-btn" @click="emit('new')">
       <AppIcon name="plus" :size="15" /> Nova nota
     </button>
-    <div class="settings-wrap">
-      <button
-        class="icon-btn tool-btn"
-        :class="{ 'is-active': settingsOpen }"
-        data-settings-toggle
-        data-tip="Ajustes do mapa"
-        aria-label="Ajustes do mapa"
-        @click="settingsOpen = !settingsOpen"
-      >
-        <AppIcon name="settings" :size="17" />
-      </button>
-      <GraphSettings v-if="settingsOpen" @close="settingsOpen = false" @relayout="emit('relayout')" />
-    </div>
+    <button
+      class="icon-btn tool-btn"
+      data-action="relayout"
+      data-tip="Reorganizar o mapa (evita cruzar as linhas)"
+      aria-label="Reorganizar o mapa"
+      :disabled="!mindmap.state.notes.length"
+      @click="emit('relayout')"
+    >
+      <AppIcon name="refresh" :size="17" />
+    </button>
+    <button
+      class="icon-btn tool-btn"
+      data-action="map-settings"
+      data-tip="Configurações do mapa"
+      aria-label="Configurações do mapa"
+      @click="app.openSettings('modules', 'mindmap')"
+    >
+      <AppIcon name="settings" :size="17" />
+    </button>
   </div>
 </template>
 
@@ -202,9 +212,6 @@ defineExpose({ focusSearch: () => input.value?.focus() })
 }
 .new-btn {
   height: 32px;
-}
-.settings-wrap {
-  position: relative;
 }
 .tool-btn {
   width: 32px;

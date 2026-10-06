@@ -11,14 +11,15 @@
  *   nome ou de pasta ele só avisa (lib/note-events.ts), para as menções
  *   continuarem certas (stores/mentions.ts).
  */
-import { computed, reactive } from 'vue'
-import { errorCode, errorMessage, type FileEntry, type PickedImage } from '#shared/ipc'
+import { computed, reactive, watch } from 'vue'
+import { errorCode, errorMessage, type FileEntry } from '#shared/ipc'
 import { notifyError, showToast } from '~/composables/useToasts'
 import type { PaletteColor } from '~/lib/colors'
 import { basename, nameKey, sanitizeFileName, stripExtension, uniqueName, UNTITLED } from '~/lib/files/filename'
 import {
   categoryDir,
   categoryImageName,
+  categoryImagePath,
   categoryNameProblem,
   categoryOfDir,
   categoryOfPath,
@@ -26,8 +27,9 @@ import {
   noteDirOf,
   type NoteCategory,
 } from '~/lib/notes/categories'
+import { matchCategory, titleLineFinished } from '~/lib/notes/auto-category'
 import { rebaseLinks } from '~/lib/notes/mention-links'
-import { notesRepository as repo } from '~/lib/notes/repository'
+import { DEFAULT_NOTES_SETTINGS, notesRepository as repo, type NotesSettings } from '~/lib/notes/repository'
 import { deriveTitle } from '~/lib/notes/title'
 import { createJsonWriter } from '~/lib/storage/json-file'
 import { emitNoteChange } from '~/lib/note-events'
@@ -55,6 +57,11 @@ export interface QuickNote {
    * arquivo, não aparece na lista e fechar a aba simplesmente a descarta.
    */
   template?: string
+  /**
+   * Nota nova criada fora das categorias, nesta sessão: com a "categoria automática
+   * pelo título" ligada, vai para a categoria em comum quando o título fica pronto.
+   */
+  autoCategory?: boolean
 }
 
 const SAVE_DELAY = 600
@@ -75,6 +82,8 @@ const state = reactive({
   openFolders: [] as string[],
   /** Muda quando a imagem de uma categoria é trocada (a lista recarrega a imagem). */
   imageVersion: 0,
+  /** Configurações das Notas (Configurações › Módulos), guardadas em .4notes/notes.json. */
+  settings: { ...DEFAULT_NOTES_SETTINGS } as NotesSettings,
 })
 
 const queue = new SerialQueue()
@@ -137,8 +146,14 @@ function persistUi(): void {
       sidebarOpen: state.sidebarOpen,
       collapsedCategories: state.collapsedCategories,
       openFolders: state.openFolders,
+      settings: state.settings,
     }
   })
+}
+
+function updateSettings(patch: Partial<NotesSettings>): void {
+  Object.assign(state.settings, patch)
+  persistUi()
 }
 
 // ── Carregamento ────────────────────────────────────────────────────────────
@@ -192,6 +207,7 @@ async function load(): Promise<void> {
   state.sidebarOpen = ui.sidebarOpen
   state.collapsedCategories = ui.collapsedCategories
   state.openFolders = ui.openFolders
+  state.settings = ui.settings
   const ids: string[] = []
   for (const path of ui.openTabs) {
     const note = findByPath(path)
@@ -215,19 +231,23 @@ function openNote(id: string): void {
  * Nota nova (vazia ou com `content`) na categoria `category` (null = sem categoria).
  * `template: true` = `content` é só o começo sugerido (ex.: o título da pasta): a nota
  * só vira arquivo quando você escrever algo além dele.
+ * `autoCategory: true` = criada por você fora das categorias: pode ir sozinha para a
+ * categoria em comum (se a configuração estiver ligada).
  */
-function createNote(content = '', category: string | null = null, options: { template?: boolean } = {}): QuickNote {
+function createNote(content = '', category: string | null = null, options: { template?: boolean; autoCategory?: boolean } = {}): QuickNote {
   const template = options.template === true && !!content
+  const target = findCategory(category)?.name ?? null
   const note: QuickNote = {
     id: createId('n'),
     path: null,
-    dir: categoryDir(findCategory(category)?.name ?? null),
+    dir: categoryDir(target),
     content,
     savedContent: '',
     mtimeMs: Date.now(),
     status: content && !template ? 'dirty' : 'saved',
     error: null,
     template: template ? content : undefined,
+    autoCategory: !target && options.autoCategory === true ? true : undefined,
   }
   state.notes.push(note)
   openNote(note.id)
@@ -262,6 +282,7 @@ async function closeTab(id: string): Promise<void> {
   } else {
     closedTabs.push(id)
     if (closedTabs.length > 30) closedTabs.shift()
+    void considerAutoCategory(id, true)
   }
 }
 
@@ -342,7 +363,42 @@ function updateContent(id: string, content: string): void {
   note.content = content
   if (note.status !== 'saving') note.status = isBlankNote(note) || (note.path && content === note.savedContent) ? 'saved' : 'dirty'
   scheduleSave(id)
+  if (note.autoCategory && titleLineFinished(content)) void considerAutoCategory(id)
 }
+
+// ── Categoria automática pelo título ────────────────────────────────────────
+
+/**
+ * Nota nova sem categoria: quando o título fica pronto (Enter depois dele, ou ao
+ * sair da nota), vai para a categoria que já tem notas com o mesmo começo de título
+ * — se a configuração estiver ligada. Decide uma vez só.
+ */
+async function considerAutoCategory(id: string, leaving = false): Promise<void> {
+  const note = findNote(id)
+  if (!note?.autoCategory || isBlankNote(note)) return
+  if (!state.settings.autoCategory || !sameDir(note.dir, ROOT)) {
+    note.autoCategory = undefined
+    return
+  }
+  const title = deriveTitle(note.content)
+  if (!title || (!leaving && !titleLineFinished(note.content))) return
+  note.autoCategory = undefined
+  const groups = state.categories.map((category) => {
+    const dir = categoryDir(category.name)
+    const titles = state.notes.filter((other) => other.id !== id && !isBlankNote(other) && sameDir(other.dir, dir)).map((other) => deriveTitle(other.content))
+    return { category: category.name, titles: titles.filter(Boolean) }
+  })
+  const target = matchCategory(title, groups)
+  if (target) await moveToCategory(id, target, { auto: true })
+}
+
+// Saiu de uma nota nova (outra aba, outra nota): o título dela está pronto
+watch(
+  () => state.activeId,
+  (_current, previous) => {
+    if (previous) void considerAutoCategory(previous, true)
+  },
+)
 
 /**
  * Reescreve o texto das notas com `transform` (recebe o texto e a pasta da nota;
@@ -534,7 +590,16 @@ const structural = <T>(task: () => Promise<T>) => queue.run('§categories', task
 async function relocate(note: QuickNote, toDir: string): Promise<boolean> {
   const fromDir = note.dir
   if (!note.path) {
+    // Ainda sem arquivo: só a pasta muda — mas os links e imagens dela já precisam acompanhar
     note.dir = toDir
+    const rebased = rebaseLinks(note.content, fromDir, toDir)
+    if (rebased !== null && rebased !== note.content) {
+      note.content = rebased
+      if (!isBlankNote(note)) {
+        note.status = 'dirty'
+        scheduleSave(note.id)
+      }
+    }
     return true
   }
   timers.get(note.id)?.cancel()
@@ -570,8 +635,8 @@ async function relocate(note: QuickNote, toDir: string): Promise<boolean> {
   return true
 }
 
-/** Coloca a nota na categoria `category` (null = sem categoria). */
-async function moveToCategory(id: string, category: string | null, options: { undo?: boolean } = {}): Promise<boolean> {
+/** Coloca a nota na categoria `category` (null = sem categoria). `auto` = pela categoria automática pelo título. */
+async function moveToCategory(id: string, category: string | null, options: { undo?: boolean; auto?: boolean } = {}): Promise<boolean> {
   const note = findNote(id)
   const target = category ? findCategory(category) : null
   if (!note || (category && !target)) return false
@@ -582,7 +647,7 @@ async function moveToCategory(id: string, category: string | null, options: { un
   const moved = await structural(() => queue.run(id, () => relocate(note, toDir)))
   if (moved && options.undo !== false) {
     showToast({
-      message: target ? `“${noteTitle(note)}” foi para ${target.name}` : `“${noteTitle(note)}” ficou sem categoria`,
+      message: target ? `“${noteTitle(note)}” foi para ${target.name}${options.auto ? ' (categoria em comum)' : ''}` : `“${noteTitle(note)}” ficou sem categoria`,
       icon: 'folder',
       action: { label: 'Desfazer', run: () => void moveToCategory(id, previous, { undo: false }) },
     })
@@ -612,8 +677,8 @@ export interface CategoryInput {
   color: PaletteColor
   /** Ícone pronto (lib/category-icons.ts) ou null (sem ícone: a inicial do nome). */
   icon?: string | null
-  /** Imagem nova (escolhida agora), null = sem imagem, undefined = manter a atual. */
-  image?: PickedImage | null
+  /** Imagem escolhida na biblioteca (caminho no workspace), null = sem imagem, undefined = manter a atual. */
+  image?: string | null
 }
 
 /** Problema no nome de uma categoria (ou null). `except` = categoria sendo editada. */
@@ -624,17 +689,33 @@ function categoryProblem(name: string, except?: string): string | null {
   )
 }
 
-async function writeCategoryImage(category: NoteCategory, image: PickedImage | null): Promise<void> {
+/** A imagem que sai da categoria continua na biblioteca (attachments/) para ser usada de novo. */
+async function keepInLibrary(path: string | null): Promise<void> {
+  if (path) await repo.keepInLibrary(path).catch((error) => console.warn('[4notes] Não foi possível guardar a imagem na biblioteca:', error))
+}
+
+/**
+ * Foto da categoria: uma cópia da imagem escolhida na biblioteca fica na pasta da
+ * categoria, com o nome dela ("notes/Dev/Dev.png"). null = sem foto.
+ */
+async function writeCategoryImage(category: NoteCategory, image: string | null): Promise<void> {
   const dir = categoryDir(category.name)
-  const previous = category.image
+  const previous = category.image ? `${dir}/${category.image}` : null
   if (image) {
-    const file = categoryImageName(category.name, image.extension)
-    await repo.writeImage(`${dir}/${file}`, image.data)
+    const file = categoryImageName(category.name, imageExtension(image))
+    const target = `${dir}/${file}`
+    if (!previous || nameKey(image) !== nameKey(previous)) {
+      await keepInLibrary(previous)
+      await repo.copyImage(image, target)
+      if (previous && nameKey(previous) !== nameKey(target)) await repo.trash(previous).catch(() => undefined)
+    }
     category.image = file
-    if (previous && nameKey(previous) !== nameKey(file)) await repo.trash(`${dir}/${previous}`).catch(() => undefined)
   } else {
     category.image = null
-    if (previous) await repo.trash(`${dir}/${previous}`).catch(() => undefined)
+    if (previous) {
+      await keepInLibrary(previous)
+      await repo.trash(previous).catch(() => undefined)
+    }
   }
   state.imageVersion++
 }
@@ -759,6 +840,7 @@ async function deleteCategory(name: string): Promise<boolean> {
       },
     )
     if (!moved) return false
+    await keepInLibrary(categoryImagePath(category))
     try {
       const leftovers = (await repo.listAll(dir)).filter((file) => !category.image || nameKey(file.name) !== nameKey(category.image))
       if (!leftovers.length) await repo.trash(dir)
@@ -785,16 +867,6 @@ function revealCategory(name: string): void {
   const category = findCategory(name)
   if (!category) return
   void ensureFolder(category).then(() => repo.reveal(categoryDir(category.name)))
-}
-
-/** Escolhe uma imagem no seletor do sistema (null = cancelado ou erro). */
-async function pickImage(): Promise<PickedImage | null> {
-  try {
-    return await repo.pickImage()
-  } catch (error) {
-    notifyError(errorMessage(error), error)
-    return null
-  }
 }
 
 // ── Sincronização com mudanças feitas fora do app ───────────────────────────
@@ -887,7 +959,7 @@ export function useNotesStore() {
     updateCategory,
     deleteCategory,
     revealCategory,
-    pickImage,
+    updateSettings,
     refreshFromDisk,
   }
 }
