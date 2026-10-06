@@ -2,8 +2,8 @@
 /**
  * Tutoriais: um painel ao lado do menu lateral, por cima do módulo — sem fundo
  * escurecido, para ler e já testar. Abre no tutorial do módulo atual ("?" do menu ou
- * F1) e acompanha a troca de módulo; as abas no topo mostram os outros e o "Geral".
- * Fecha com ×, "?", F1 ou Esc.
+ * F1) e acompanha a troca de módulo pelo teclado; as abas no topo mostram os outros
+ * (na ordem do menu) e o "Geral". Fecha com ×, "?", F1, Esc ou clicando fora dele.
  *
  * O conteúdo vem de lib/modules.ts (cada módulo tem o seu tutorial): um módulo
  * novo aparece aqui sozinho.
@@ -12,7 +12,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { registerShortcut } from '~/composables/useShortcuts'
 import { closeTutorial, tutorial, type TutorialTopic } from '~/composables/useTutorial'
-import { GENERAL_TUTORIAL, MODULES, moduleById, moduleForPath, type ModuleTutorial } from '~/lib/modules'
+import { GENERAL_TUTORIAL, moduleById, moduleForPath, type ModuleTutorial } from '~/lib/modules'
 import { modKeyLabel } from '~/lib/platform'
 import { useModulesStore } from '~/stores/modules'
 
@@ -22,7 +22,7 @@ const mod = modKeyLabel()
 const panel = ref<HTMLElement>()
 
 const topics = computed(() => [
-  ...MODULES.map((module) => ({ id: module.id as TutorialTopic, label: module.label, icon: module.icon, enabled: modules.isEnabled(module.id) })),
+  ...modules.ordered.value.map((module) => ({ id: module.id as TutorialTopic, label: module.label, icon: module.icon, enabled: modules.isEnabled(module.id) })),
   { id: 'general' as TutorialTopic, label: 'Geral', icon: 'sparkle', enabled: true },
 ])
 
@@ -52,6 +52,8 @@ watch(
 
 let previousFocus: HTMLElement | null = null
 let disposeEscape: (() => void) | null = null
+/** Quantas vezes o painel abriu (para saber se um clique o fechou e reabriu). */
+let openCount = 0
 
 function isTypingOutside(target: Element | null): boolean {
   if (!target || panel.value?.contains(target)) return false
@@ -63,11 +65,13 @@ watch(
   async (open) => {
     disposeEscape?.()
     disposeEscape = null
+    listenOutside(open)
     if (!open) {
       // Volta para onde você estava (se o foco tinha ido para o painel)
       if (panel.value?.contains(document.activeElement)) previousFocus?.focus()
       return
     }
+    openCount++
     previousFocus = document.activeElement as HTMLElement | null
     disposeEscape = registerShortcut(
       'escape',
@@ -85,7 +89,49 @@ watch(
   () => tutorial.topic,
   () => void nextTick(() => panel.value?.querySelector<HTMLElement>('.tp-body')?.scrollTo({ top: 0 })),
 )
-onBeforeUnmount(() => disposeEscape?.())
+onBeforeUnmount(() => {
+  disposeEscape?.()
+  listenOutside(false)
+})
+
+// ── Clique fora fecha (como o painel da tarefa e o da nota do mapa) ──────────
+
+/** O clique começou fora do painel (arrastar a partir de dentro não conta). */
+let pressedOutside = false
+
+function isOutside(target: EventTarget | null): boolean {
+  if (!(target instanceof Element) || panel.value?.contains(target)) return false
+  // Quem abre/fecha o tutorial ("?", Configurações) cuida dele sozinho
+  return !target.closest('[data-tutorial-toggle]')
+}
+
+function onPointerDown(event: PointerEvent): void {
+  pressedOutside = event.button === 0 && isOutside(event.target)
+}
+
+function onClick(event: MouseEvent): void {
+  const outside = pressedOutside
+  pressedOutside = false
+  // detail 0 = Enter/Espaço num botão (não é clicar fora); is-sorting = fim de um
+  // arraste para reorganizar os módulos (não é um clique)
+  if (!outside || event.detail === 0 || !isOutside(event.target) || document.documentElement.classList.contains('is-sorting')) return
+  const session = openCount
+  // O clique faz o que ele faz normalmente; se ele mesmo fechou e reabriu o tutorial, fica aberto
+  setTimeout(() => {
+    if (tutorial.open && openCount === session) closeTutorial()
+  })
+}
+
+function listenOutside(on: boolean): void {
+  pressedOutside = false
+  if (on) {
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('click', onClick, true)
+  } else {
+    window.removeEventListener('pointerdown', onPointerDown, true)
+    window.removeEventListener('click', onClick, true)
+  }
+}
 </script>
 
 <template>
@@ -131,6 +177,13 @@ onBeforeUnmount(() => disposeEscape?.())
             <h3 class="tp-label">O que dá para fazer</h3>
             <ul class="tp-list">
               <li v-for="item in content.tutorial.features" :key="item">{{ item }}</li>
+            </ul>
+          </section>
+
+          <section v-if="content.tutorial.contextMenu.length">
+            <h3 class="tp-label">Botão direito</h3>
+            <ul class="tp-list menu">
+              <li v-for="item in content.tutorial.contextMenu" :key="item">{{ item }}</li>
             </ul>
           </section>
 
@@ -311,6 +364,10 @@ section {
   height: 5px;
   border-radius: 50%;
   background: var(--primary);
+}
+.tp-list.menu li::before {
+  border-radius: 1.5px;
+  background: color-mix(in srgb, var(--primary) 55%, var(--text-3));
 }
 .tp-list.tips li::before {
   background: var(--accent-strong);

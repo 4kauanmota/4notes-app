@@ -1,12 +1,12 @@
 /**
  * Preferências dos módulos, guardadas no workspace (.4notes/app.json):
- *  - quais módulos estão ativos (aparecem no menu lateral);
+ *  - quais módulos estão ativos (aparecem no menu lateral) e em que ordem;
  *  - como o menu lateral mostra os módulos (ícone e nome, ou só o ícone);
  *  - o último módulo aberto.
  *
- * Desativar um módulo é só uma preferência de exibição: o store dele continua
- * carregando, salvando e acompanhando os arquivos normalmente (nada é apagado), e
- * ao ativar de novo ele volta com tudo como estava.
+ * Desativar ou reorganizar um módulo é só uma preferência de exibição: o store dele
+ * continua carregando, salvando e acompanhando os arquivos normalmente (nada é
+ * apagado), e ao ativar de novo ele volta com tudo como estava.
  */
 import { computed, reactive } from 'vue'
 import { showToast } from '~/composables/useToasts'
@@ -17,12 +17,16 @@ import {
   isEnabledIn,
   isModuleId,
   moduleById,
+  movedBy,
   normalizePrefs,
+  orderedModules,
+  reorderedIds,
   withModuleEnabled,
   type ModuleId,
   type ModulePrefs,
   type NavStyle,
 } from '~/lib/modules'
+import { playModuleSound } from '~/lib/sounds'
 import { createJsonWriter, readJsonFile } from '~/lib/storage/json-file'
 import { DATA_PATHS } from '~/lib/storage/paths'
 
@@ -35,10 +39,15 @@ export interface ModuleEffect {
 }
 
 /** Duração das animações (o módulo desligado continua no menu até a dele acabar). */
-export const EFFECT_MS = { connect: 1300, disconnect: 900 } as const
+export const EFFECT_MS = { connect: 2200, disconnect: 1400 } as const
+/**
+ * Quando o som toca, dentro da animação (NavRail.vue): ligando, no "encaixe" do ícone
+ * (o anel de luz); desligando, quando o ícone se solta.
+ */
+export const SOUND_AT_MS = { connect: 860, disconnect: 480 } as const
 
 const state = reactive({
-  prefs: { ...DEFAULT_PREFS, disabled: [] } as ModulePrefs,
+  prefs: { disabled: [], order: [...DEFAULT_PREFS.order], navStyle: DEFAULT_PREFS.navStyle } as ModulePrefs,
   lastModule: 'notes' as ModuleId,
   effects: [] as ModuleEffect[],
 })
@@ -49,7 +58,11 @@ let seq = 0
 const writer = createJsonWriter(DATA_PATHS.appUiState, 250)
 
 function save(): void {
-  writer.save(() => ({ ...extra, lastModule: state.lastModule, modules: { disabled: state.prefs.disabled, navStyle: state.prefs.navStyle } }))
+  writer.save(() => ({
+    ...extra,
+    lastModule: state.lastModule,
+    modules: { disabled: state.prefs.disabled, order: state.prefs.order, navStyle: state.prefs.navStyle },
+  }))
 }
 
 async function load(): Promise<void> {
@@ -61,6 +74,8 @@ async function load(): Promise<void> {
 }
 
 const enabled = computed(() => enabledModules(state.prefs))
+/** Todos os módulos, na ordem do menu (as Configurações listam assim). */
+const ordered = computed(() => orderedModules(state.prefs))
 const isEnabled = (id: ModuleId) => isEnabledIn(state.prefs, id)
 
 /** O último módulo aberto, se ainda estiver ativo; senão, o primeiro ativo. */
@@ -75,9 +90,18 @@ function remember(module: ModuleId): void {
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 function playEffect(id: ModuleId, kind: ModuleEffect['kind']): void {
-  if (reducedMotion()) return
+  const sound = kind === 'connect' ? 'connect' : 'disconnect'
+  if (reducedMotion()) {
+    // Sem animação: o som toca na hora
+    playModuleSound(sound)
+    return
+  }
   const effect: ModuleEffect = { id, kind, seq: ++seq }
   state.effects = [...state.effects.filter((item) => item.id !== id), effect]
+  // O som acompanha a animação (se ela foi trocada por outra antes, não toca)
+  setTimeout(() => {
+    if (state.effects.some((item) => item.seq === effect.seq)) playModuleSound(sound)
+  }, SOUND_AT_MS[kind])
   setTimeout(() => {
     // Pelo número: dentro do estado reativo a animação é outro objeto (proxy do Vue)
     state.effects = state.effects.filter((item) => item.seq !== effect.seq)
@@ -95,6 +119,25 @@ function setEnabled(id: ModuleId, on: boolean): boolean {
   playEffect(id, on ? 'connect' : 'disconnect')
   save()
   return true
+}
+
+/**
+ * Nova ordem de uma parte dos módulos (os do menu, arrastando; ou todos, nas
+ * Configurações): os outros ficam onde estavam. Devolve true se mudou.
+ */
+function setOrder(ids: readonly string[]): boolean {
+  const order = reorderedIds(state.prefs.order, ids)
+  if (!order) return false
+  state.prefs = { ...state.prefs, order }
+  save()
+  return true
+}
+
+/** Sobe (−1) ou desce (+1) o módulo entre os do menu lateral (botão direito). */
+function moveModule(id: ModuleId, delta: number): boolean {
+  const visible = enabled.value.map((module) => module.id)
+  const moved = movedBy(visible, id, delta)
+  return moved ? setOrder(moved) : false
 }
 
 function setNavStyle(navStyle: NavStyle): void {
@@ -127,6 +170,7 @@ export function useModulesStore() {
   return {
     state,
     enabled,
+    ordered,
     startModule,
     load,
     flush: () => writer.flush(),
@@ -134,6 +178,8 @@ export function useModulesStore() {
     isEnabled,
     canDisable: (id: ModuleId) => canDisable(state.prefs, id),
     setEnabled,
+    setOrder,
+    moveModule,
     setNavStyle,
     requireModule,
   }

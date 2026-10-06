@@ -31,6 +31,7 @@ import { matchCategory, titleLineFinished } from '~/lib/notes/auto-category'
 import { rebaseLinks } from '~/lib/notes/mention-links'
 import { DEFAULT_NOTES_SETTINGS, notesRepository as repo, type NotesSettings } from '~/lib/notes/repository'
 import { deriveTitle } from '~/lib/notes/title'
+import { previousVersion } from '~/lib/notes/versions'
 import { createJsonWriter } from '~/lib/storage/json-file'
 import { emitNoteChange } from '~/lib/note-events'
 import { DATA_PATHS } from '~/lib/storage/paths'
@@ -134,6 +135,17 @@ const filteredNotes = computed(() => {
 
 const openTabs = computed(() => state.openIds.map((id) => findNote(id)).filter((note): note is QuickNote => !!note))
 const activeNote = computed(() => findNote(state.activeId) ?? null)
+
+/**
+ * Versão anterior da nota ("4notes 1.4.1" → "4notes 1.4.0"), entre as notas da mesma
+ * categoria (ou entre as sem categoria) — regras em lib/notes/versions.ts. null = não há.
+ */
+function previousVersionOf(note: QuickNote): { note: QuickNote; label: string } | null {
+  if (isBlankNote(note)) return null
+  const siblings = visibleNotes.value.filter((other) => other.id !== note.id && sameDir(other.dir, note.dir))
+  const found = previousVersion(noteTitle(note), siblings, noteTitle)
+  return found ? { note: found.item, label: found.version.label } : null
+}
 
 // ── Estado da interface (abas abertas, lista lateral) ───────────────────────
 
@@ -931,6 +943,7 @@ export function useNotesStore() {
     findByPath,
     findCategory,
     categoryOf,
+    previousVersionOf,
     isBlank: isBlankNote,
     load,
     createNote,

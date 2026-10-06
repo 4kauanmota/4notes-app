@@ -8,12 +8,20 @@ import {
   MODULE_IDS,
   MODULES,
   moduleForPath,
+  movedBy,
   normalizePrefs,
+  orderedModules,
+  reorderedIds,
   withModuleEnabled,
   type ModulePrefs,
 } from '~/lib/modules'
 
-const prefs = (disabled: string[], navStyle: ModulePrefs['navStyle'] = 'icon-label'): ModulePrefs => ({ disabled, navStyle })
+const prefs = (disabled: string[], navStyle: ModulePrefs['navStyle'] = 'icon-label', order: string[] = [...MODULE_IDS]): ModulePrefs => ({
+  disabled,
+  order,
+  navStyle,
+})
+const ids = (list: { id: string }[]) => list.map((module) => module.id)
 
 describe('registro dos módulos', () => {
   it('ids, rotas e teclas dos atalhos não se repetem', () => {
@@ -29,9 +37,11 @@ describe('registro dos módulos', () => {
       expect(tutorial.purpose.length, name).toBeGreaterThan(10)
       expect(tutorial.purpose.length, name).toBeLessThan(140)
       expect(tutorial.features.length, name).toBeGreaterThanOrEqual(2)
+      // O que está no botão direito também é ensinado
+      expect(tutorial.contextMenu.length, name).toBeGreaterThanOrEqual(1)
       expect(tutorial.shortcuts.length, name).toBeGreaterThanOrEqual(1)
       // Curto: cada item cabe numa ou duas linhas do painel
-      for (const line of [...tutorial.features, ...tutorial.tips]) expect(line.length, line).toBeLessThan(100)
+      for (const line of [...tutorial.features, ...tutorial.contextMenu, ...tutorial.tips]) expect(line.length, line).toBeLessThan(100)
       for (const shortcut of tutorial.shortcuts) expect(shortcut.keys.length, shortcut.label).toBeGreaterThan(0)
     }
   })
@@ -77,6 +87,38 @@ describe('preferências dos módulos (.4notes/app.json)', () => {
     // Sem mudança: null
     expect(withModuleEnabled(start, 'links', true)).toBeNull()
     expect(withModuleEnabled(prefs(['links']), 'links', false)).toBeNull()
+  })
+
+  it('a ordem do menu: guardada, completa e tolerante', () => {
+    const saved = normalizePrefs({ modules: { order: ['links', 'notes', 'links', 7] } })
+    // Os que faltam entram no fim, na ordem padrão
+    expect(saved.order).toEqual(['links', 'notes', 'tasks', 'mindmap'])
+    expect(ids(orderedModules(saved))).toEqual(['links', 'notes', 'tasks', 'mindmap'])
+    // Módulo de outra versão do 4notes: fica guardado no lugar, mas não aparece
+    const future = normalizePrefs({ modules: { order: ['agenda', 'mindmap'] } })
+    expect(future.order).toEqual(['agenda', 'mindmap', 'notes', 'tasks', 'links'])
+    expect(ids(orderedModules(future))).toEqual(['mindmap', 'notes', 'tasks', 'links'])
+    // Os ativos seguem a ordem
+    expect(ids(enabledModules(prefs(['tasks'], 'icon-label', ['links', 'tasks', 'notes', 'mindmap'])))).toEqual(['links', 'notes', 'mindmap'])
+    // Todos desativados: volta o primeiro do menu
+    expect(ids(enabledModules(normalizePrefs({ modules: { disabled: [...MODULE_IDS], order: ['mindmap'] } })))).toEqual(['mindmap'])
+  })
+
+  it('reorganizar só os do menu deixa os desativados no lugar', () => {
+    const order = ['notes', 'tasks', 'mindmap', 'links']
+    // "tasks" desativado: o menu mostra notes, mindmap, links → links, notes, mindmap
+    expect(reorderedIds(order, ['links', 'notes', 'mindmap'])).toEqual(['links', 'tasks', 'notes', 'mindmap'])
+    expect(reorderedIds(order, ['notes', 'mindmap'])).toBeNull()
+    expect(reorderedIds(order, ['links', 'links'])).toBeNull()
+    expect(reorderedIds(order, ['agenda', 'notes'])).toBeNull()
+  })
+
+  it('mover para cima/baixo', () => {
+    expect(movedBy(['a', 'b', 'c'], 'c', -1)).toEqual(['a', 'c', 'b'])
+    expect(movedBy(['a', 'b', 'c'], 'a', 1)).toEqual(['b', 'a', 'c'])
+    expect(movedBy(['a', 'b', 'c'], 'a', -1)).toBeNull()
+    expect(movedBy(['a', 'b', 'c'], 'c', 1)).toBeNull()
+    expect(movedBy(['a', 'b', 'c'], 'x', 1)).toBeNull()
   })
 
   it('o último módulo ativo não pode ser desligado', () => {

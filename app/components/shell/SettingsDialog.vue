@@ -14,6 +14,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { errorMessage, type LaunchAtLogin, type ThemePreference } from '#shared/ipc'
 import { useRoute } from 'vue-router'
 import { openImageLibrary } from '~/composables/useImageLibrary'
+import { useSortableList } from '~/composables/useSortableList'
 import { notifyError } from '~/composables/useToasts'
 import { useTheme } from '~/composables/useTheme'
 import { openTutorial } from '~/composables/useTutorial'
@@ -108,6 +109,16 @@ function setEnabled(id: ModuleId, on: boolean) {
 
 const effectOf = (id: ModuleId) => modules.state.effects.find((effect) => effect.id === id)?.kind ?? null
 
+/** Reorganizar arrastando os cards (a mesma ordem do menu lateral). */
+const moduleList = ref<HTMLElement>()
+const sortable = useSortableList({
+  container: moduleList,
+  itemSelector: '.module-card',
+  ignoreSelector: '.module-switch',
+  keyOf: (el) => el.dataset.moduleToggle ?? '',
+  onReorder: (keys) => modules.setOrder(keys),
+})
+
 const navStyle = computed({
   get: () => modules.state.prefs.navStyle,
   set: (value: NavStyle) => modules.setNavStyle(value),
@@ -116,6 +127,12 @@ const NAV_STYLES: { value: NavStyle; label: string }[] = [
   { value: 'icon-label', label: 'Ícone e nome' },
   { value: 'icon', label: 'Só o ícone' },
 ]
+
+/**
+ * Na aba Módulos, o fundo escurecido cobre só a área de conteúdo: a barra de cima
+ * (workspace) e o menu lateral ficam nítidos — dá para ver as mudanças no menu na hora.
+ */
+const scrimInset = computed(() => (tab.value === 'modules' ? 'var(--titlebar-h) 0 0 var(--rail-w)' : undefined))
 
 /** Tutoriais: abre o do módulo atual, por cima do módulo (as Configurações fecham). */
 function showTutorials() {
@@ -142,7 +159,7 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
 </script>
 
 <template>
-  <UiModal :open="app.state.settingsOpen" :width="640" label="Configurações" @close="app.closeSettings()">
+  <UiModal :open="app.state.settingsOpen" :width="640" label="Configurações" :scrim-inset="scrimInset" @close="app.closeSettings()">
     <div class="settings">
       <header class="settings-head">
         <h2>Configurações</h2>
@@ -178,7 +195,7 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
           <section>
             <h3 class="section-label">Ajuda</h3>
             <SettingRow label="Tutoriais e atalhos" help="Um resumo bem curto de cada módulo: para que serve, o que dá para fazer e os atalhos.">
-              <button class="btn btn-sm" data-action="tutorials" @click="showTutorials"><AppIcon name="help" :size="14" /> Abrir <kbd class="kbd">F1</kbd></button>
+              <button class="btn btn-sm" data-action="tutorials" data-tutorial-toggle @click="showTutorials"><AppIcon name="help" :size="14" /> Abrir <kbd class="kbd">F1</kbd></button>
             </SettingRow>
           </section>
 
@@ -243,17 +260,21 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
           <!-- Configurações gerais dos módulos -->
           <section class="module" data-module="general">
             <h3 class="module-title"><AppIcon name="layers" :size="16" /> Geral</h3>
-            <SettingRow label="Módulos ativos" help="Desativar só tira o módulo do menu lateral: as notas, tarefas, mapas e links dele continuam guardados.">
+            <SettingRow
+              label="Módulos ativos"
+              help="Desativar só tira o módulo do menu lateral: as notas, tarefas, mapas e links dele continuam guardados. Arraste para mudar a ordem do menu."
+            >
               <span class="enabled-count">{{ modules.enabled.value.length }} de {{ MODULES.length }}</span>
             </SettingRow>
-            <ul class="module-list" aria-label="Módulos ativos">
+            <ul ref="moduleList" class="module-list" aria-label="Módulos ativos (arraste para mudar a ordem)" @pointerdown="sortable.onPointerDown">
               <li
-                v-for="item in MODULES"
+                v-for="item in modules.ordered.value"
                 :key="item.id"
                 class="module-card"
                 :class="{ off: !modules.isEnabled(item.id), [effectOf(item.id) ?? '']: !!effectOf(item.id) }"
                 :data-module-toggle="item.id"
               >
+                <span class="module-grip" data-tip="Arraste para mudar a ordem" data-tip-pos="left" aria-hidden="true"><AppIcon name="grip" :size="16" /></span>
                 <span class="module-tile"><AppIcon :name="item.icon" :size="18" /></span>
                 <span class="module-text">
                   <span class="module-name">{{ item.name }}</span>
@@ -459,10 +480,12 @@ section .section-label {
   list-style: none;
 }
 .module-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 12px;
+  padding: 9px 12px 9px 6px;
+  cursor: grab;
   border-radius: var(--r-lg);
   border: 1px solid var(--border);
   background: var(--surface-2);
@@ -470,6 +493,24 @@ section .section-label {
     background var(--t-med),
     border-color var(--t-med),
     opacity var(--t-med);
+}
+.module-card.is-sorting-item {
+  z-index: 2;
+  background: var(--elevated);
+  box-shadow: var(--shadow-md);
+}
+.module-grip {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  margin-right: -4px;
+  color: var(--text-3);
+  opacity: 0.6;
+  transition: opacity var(--t-fast);
+}
+.module-card:hover .module-grip {
+  opacity: 1;
 }
 .module-card.off {
   background: transparent;

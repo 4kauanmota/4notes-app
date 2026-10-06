@@ -7,16 +7,22 @@
  *   até os outros módulos, o ícone encaixa (com um "clique" de luz) e um sinal corre
  *   pelo fio até cada módulo, que responde. Desligar faz o caminho contrário: os
  *   outros mandam o sinal, o fio do módulo se solta, o ícone sai e o espaço fecha.
- * - Com as Configurações abertas em "Módulos", o menu fica por cima do fundo
- *   escurecido (só para ver as mudanças ao vivo; não dá para clicar nele ali).
- * - Botão direito no menu: ligar/desligar módulos e mostrar ou não os nomes.
+ *   A animação leva ~2 s (ligar) e ~1,4 s (desligar), com um som curto no encaixe e
+ *   no desencaixe (lib/sounds.ts, disparado por stores/modules.ts).
+ * - A ordem é a do usuário: arraste um módulo para cima ou para baixo
+ *   (composables/useSortableList.ts) ou use "Mover para cima/baixo" no botão direito.
+ * - Com as Configurações abertas em "Módulos", o fundo escurecido cobre só a área de
+ *   conteúdo (SettingsDialog): o menu fica nítido, para ver as mudanças ao vivo.
+ * - Botão direito no menu: mover/desativar o módulo clicado, ligar/desligar módulos e
+ *   mostrar ou não os nomes.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { useSortableList } from '~/composables/useSortableList'
 import { useTheme } from '~/composables/useTheme'
 import { toggleTutorial, tutorial } from '~/composables/useTutorial'
-import { MODULES, moduleForPath, type ModuleDefinition, type ModuleId } from '~/lib/modules'
+import { isModuleId, moduleById, moduleForPath, type ModuleDefinition, type ModuleId } from '~/lib/modules'
 import { modKeyLabel } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
 import { EFFECT_MS, useModulesStore, type ModuleEffect } from '~/stores/modules'
@@ -39,9 +45,9 @@ watchEffect(() => document.documentElement.style.setProperty('--rail-w', labels.
 const effects = computed(() => modules.state.effects)
 const effectOf = (id: ModuleId) => effects.value.find((effect) => effect.id === id) ?? null
 
-/** Módulos no menu: os ativos e, até a animação acabar, o que está sendo desligado. */
+/** Módulos no menu, na ordem do usuário: os ativos e, até a animação acabar, o que está sendo desligado. */
 const items = computed(() =>
-  MODULES.filter((module) => modules.isEnabled(module.id) || effectOf(module.id)?.kind === 'disconnect'),
+  modules.ordered.value.filter((module) => modules.isEnabled(module.id) || effectOf(module.id)?.kind === 'disconnect'),
 )
 const current = computed(() => moduleForPath(route.path))
 
@@ -60,9 +66,10 @@ const indicatorY = ref(0)
 const following = ref(false)
 let frame = 0
 
+/** Posição do módulo aberto na tela (inclusive arrastado ou animando). */
 function measure(): void {
   const active = list.value?.querySelector<HTMLElement>('.rail-item.active')
-  if (active) indicatorY.value = active.offsetTop
+  if (active && list.value) indicatorY.value = active.getBoundingClientRect().top - list.value.getBoundingClientRect().top
 }
 
 function follow(until: number): void {
@@ -89,6 +96,24 @@ watch(labels, () => follow(performance.now() + 320))
 onMounted(measure)
 onBeforeUnmount(() => cancelAnimationFrame(frame))
 
+// ── Reorganizar: arrastar um módulo ──────────────────────────────────────────
+
+const sortable = useSortableList({
+  container: list,
+  itemSelector: '.rail-item',
+  keyOf: (el) => el.dataset.module ?? '',
+  onReorder: (keys) => modules.setOrder(keys),
+  // Durante a animação de ligar/desligar, a posição dos itens está mudando
+  enabled: () => !effects.value.length,
+})
+// O indicador do módulo aberto vai junto enquanto você arrasta (e até o item assentar)
+watch(sortable.dragging, (key) => (key ? follow(Number.POSITIVE_INFINITY) : follow(performance.now() + 280)))
+
+function move(id: ModuleId, delta: number) {
+  void sortable.flip(() => modules.moveModule(id, delta))
+  follow(performance.now() + 300)
+}
+
 // ── Fios da animação (um conjunto por módulo sendo ligado/desligado) ─────────
 
 interface Wire {
@@ -100,10 +125,13 @@ interface Wire {
   pulses: { id: ModuleId; from: number; dy: number; delay: number; duration: number }[]
 }
 
-/** Velocidade do sinal no fio (px por ms) e quando ele sai. */
-const SPEED = 0.32
-const CONNECT_SIGNAL_AT = 640
-const DISCONNECT_SIGNAL_AT = 60
+/**
+ * Velocidade do sinal no fio (px por ms) e quando ele sai. A viagem leva entre 220 e
+ * 700 ms, para caber na animação (stores/modules.ts › EFFECT_MS) com qualquer número de módulos.
+ */
+const SPEED = 0.26
+const CONNECT_SIGNAL_AT = 940
+const DISCONNECT_SIGNAL_AT = 100
 
 const wires = computed<Wire[]>(() =>
   effects.value.flatMap((effect) => {
@@ -113,7 +141,7 @@ const wires = computed<Wire[]>(() =>
     const origin = ys[index]!
     const top = ys[0]!
     const height = Math.max(0, ys.at(-1)! - top)
-    const travel = (distance: number) => Math.max(150, Math.round(distance / SPEED))
+    const travel = (distance: number) => Math.min(700, Math.max(220, Math.round(distance / SPEED)))
     const branches = items.value.map((item, i) => {
       const distance = Math.abs(ys[i]! - origin)
       // Ligando: o sinal sai do módulo novo e chega aos outros; desligando: sai dos outros
@@ -127,7 +155,7 @@ const wires = computed<Wire[]>(() =>
         const duration = travel(Math.abs(y - origin))
         return effect.kind === 'connect'
           ? { id: item.id, from: origin, dy: y - origin, delay: CONNECT_SIGNAL_AT, duration }
-          : { id: item.id, from: y, dy: origin - y, delay: DISCONNECT_SIGNAL_AT + 120, duration }
+          : { id: item.id, from: y, dy: origin - y, delay: DISCONNECT_SIGNAL_AT + 180, duration }
       })
     return [{ effect, origin, top, height, branches, pulses }]
   }),
@@ -153,11 +181,25 @@ function itemClasses(item: ModuleDefinition) {
   }
 }
 
-// ── Botão direito: ligar/desligar módulos e os nomes ─────────────────────────
+// ── Botão direito: o módulo clicado, ligar/desligar módulos e os nomes ───────
 
-async function railMenu(): Promise<void> {
-  const items: MenuItemSpec[] = [
-    ...MODULES.map((module) => ({
+async function railMenu(event: MouseEvent): Promise<void> {
+  // Botão direito num módulo: mover e desativar aquele módulo
+  const key = (event.target as HTMLElement | null)?.closest<HTMLElement>('.rail-item')?.dataset.module
+  const clicked = isModuleId(key) && modules.isEnabled(key) ? key : null
+  const visible = modules.enabled.value.map((module) => module.id)
+  const position = clicked ? visible.indexOf(clicked) : -1
+  const own: MenuItemSpec[] = clicked
+    ? [
+        { id: 'up', label: 'Mover para cima', enabled: position > 0 },
+        { id: 'down', label: 'Mover para baixo', enabled: position < visible.length - 1 },
+        { id: 'disable', label: `Desativar ${moduleById(clicked).name}`, enabled: modules.canDisable(clicked) },
+        separator,
+      ]
+    : []
+  const menu: MenuItemSpec[] = [
+    ...own,
+    ...modules.ordered.value.map((module) => ({
       id: `module:${module.id}`,
       label: module.name,
       type: 'checkbox' as const,
@@ -171,9 +213,13 @@ async function railMenu(): Promise<void> {
     { id: 'settings', label: 'Configurações dos módulos…' },
     { id: 'tutorial', label: 'Tutorial', hint: 'F1' },
   ]
-  const choice = await showContextMenu(items)
+  const choice = await showContextMenu(menu)
   if (!choice) return
-  if (choice.startsWith('module:')) {
+  if (clicked && (choice === 'up' || choice === 'down')) {
+    move(clicked, choice === 'up' ? -1 : 1)
+  } else if (clicked && choice === 'disable') {
+    modules.setEnabled(clicked, false)
+  } else if (choice.startsWith('module:')) {
     const id = choice.slice('module:'.length) as ModuleId
     modules.setEnabled(id, !modules.isEnabled(id))
   } else if (choice === 'labels') {
@@ -185,9 +231,6 @@ async function railMenu(): Promise<void> {
   }
 }
 
-/** Configurações abertas em "Módulos": o menu aparece por cima do fundo, para ver as mudanças. */
-const preview = computed(() => app.state.settingsOpen && app.state.settingsTab === 'modules')
-
 function toggleTheme(event: MouseEvent) {
   const next = theme.resolved === 'dark' ? 'light' : 'dark'
   void setTheme(next, { x: event.clientX, y: event.clientY })
@@ -195,8 +238,8 @@ function toggleTheme(event: MouseEvent) {
 </script>
 
 <template>
-  <nav class="rail" :class="{ labels, icons: !labels, preview }" aria-label="Módulos" @contextmenu.prevent="railMenu">
-    <div ref="list" class="rail-items">
+  <nav class="rail" :class="{ labels, icons: !labels }" aria-label="Módulos" @contextmenu.prevent="railMenu">
+    <div ref="list" class="rail-items" @pointerdown="sortable.onPointerDown">
       <span
         v-if="current && items.some((item) => item.id === current!.id)"
         class="rail-indicator"
@@ -242,6 +285,8 @@ function toggleTheme(event: MouseEvent) {
         data-tip-pos="right"
         :aria-label="item.name"
         :tabindex="effectOf(item.id)?.kind === 'disconnect' ? -1 : undefined"
+        draggable="false"
+        @dragstart.prevent
       >
         <span class="rail-icon">
           <AppIcon :name="item.icon" :size="21" />
@@ -257,6 +302,18 @@ function toggleTheme(event: MouseEvent) {
     <div class="rail-bottom">
       <button
         class="rail-button"
+        :data-tip="theme.resolved === 'dark' ? 'Tema claro' : 'Tema escuro'"
+        data-tip-pos="right"
+        aria-label="Alternar tema"
+        @click="toggleTheme"
+      >
+        <Transition name="spin" mode="out-in">
+          <AppIcon :key="theme.resolved" :name="theme.resolved === 'dark' ? 'sun' : 'moon'" :size="19" />
+        </Transition>
+      </button>
+      <!-- Tutorial logo abaixo do tema (e acima das configurações) -->
+      <button
+        class="rail-button"
         :class="{ on: tutorial.open }"
         data-tutorial-toggle
         :data-tip="`Tutorial${current ? ` de ${current.name}` : ''}  ·  F1`"
@@ -266,17 +323,6 @@ function toggleTheme(event: MouseEvent) {
         @click="toggleTutorial(current?.id ?? 'general')"
       >
         <AppIcon name="help" :size="19" />
-      </button>
-      <button
-        class="rail-button"
-        :data-tip="theme.resolved === 'dark' ? 'Tema claro' : 'Tema escuro'"
-        data-tip-pos="right"
-        aria-label="Alternar tema"
-        @click="toggleTheme"
-      >
-        <Transition name="spin" mode="out-in">
-          <AppIcon :key="theme.resolved" :name="theme.resolved === 'dark' ? 'sun' : 'moon'" :size="19" />
-        </Transition>
       </button>
       <button class="rail-button" :data-tip="`Configurações  ·  ${mod}+,`" data-tip-pos="right" aria-label="Configurações" @click="app.openSettings()">
         <AppIcon name="settings" :size="19" />
@@ -302,14 +348,6 @@ function toggleTheme(event: MouseEvent) {
 .rail.icons {
   --item-h: 46px;
   --icon-y: 23px;
-}
-/* Configurações › Módulos abertas: o menu fica por cima do fundo escurecido */
-.rail.preview {
-  position: relative;
-  z-index: 950;
-  pointer-events: none;
-  border-radius: 0 0 16px 0;
-  box-shadow: 1px 0 0 var(--border);
 }
 .rail-items {
   position: relative;
@@ -475,36 +513,50 @@ function toggleTheme(event: MouseEvent) {
 /* Ligando: o espaço abre, o ícone entra de lado e encaixa, o anel "clica", o nome aparece */
 .rail-item.connecting {
   pointer-events: none;
-  animation: slot-open 300ms var(--ease-out) both;
+  animation: slot-open 420ms var(--ease-out) both;
 }
 .rail-item.connecting .rail-icon {
-  animation: plug-in 480ms 220ms var(--ease-spring) both;
+  animation: plug-in 680ms 320ms var(--ease-spring) both;
 }
 .rail-item.connecting .plug-ring {
-  animation: ring-snap 620ms 600ms var(--ease-out) both;
+  animation: ring-snap 900ms 860ms var(--ease-out) both;
 }
 .rail-item.connecting .rail-label {
-  animation: label-in 260ms 560ms var(--ease-out) both;
+  animation: label-in 360ms 820ms var(--ease-out) both;
 }
 
 /* Desligando: o anel fecha, o ícone se solta para o lado, o espaço fecha */
 .rail-item.disconnecting {
   pointer-events: none;
-  animation: slot-close 260ms 620ms var(--ease-in-out) both;
+  animation: slot-close 380ms 1000ms var(--ease-in-out) both;
 }
 .rail-item.disconnecting .plug-ring {
-  animation: ring-release 420ms 200ms var(--ease-out) both;
+  animation: ring-release 640ms 300ms var(--ease-out) both;
 }
 .rail-item.disconnecting .rail-icon {
-  animation: unplug 380ms 330ms cubic-bezier(0.5, 0, 0.75, 0) both;
+  animation: unplug 560ms 520ms cubic-bezier(0.5, 0, 0.75, 0) both;
 }
 .rail-item.disconnecting .rail-label {
-  animation: label-out 200ms 260ms ease-in both;
+  animation: label-out 300ms 420ms ease-in both;
+}
+
+/* Reorganizando: o módulo arrastado fica "levantado" */
+.rail-item.is-sorting-item {
+  cursor: grabbing;
+}
+.rail-item.is-sorting-item::before {
+  content: '';
+  position: absolute;
+  inset: 0 6px;
+  z-index: -1;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--primary-soft-2);
 }
 
 /* Os outros módulos respondem ao sinal */
 .rail-item.pinged .rail-icon {
-  animation: ping 420ms var(--ping, 0ms) var(--ease-out) both;
+  animation: ping 560ms var(--ping, 0ms) var(--ease-out) both;
 }
 
 .wires {
@@ -545,13 +597,13 @@ function toggleTheme(event: MouseEvent) {
   animation: branch-plug var(--total) var(--ease-out) both;
 }
 .wires.connect .branch:not(.self) {
-  animation: branch-flash 520ms var(--delay) var(--ease-out) both;
+  animation: branch-flash 560ms var(--delay) var(--ease-out) both;
 }
 .wires.disconnect .branch.self {
   animation: branch-unplug var(--total) var(--ease-in-out) both;
 }
 .wires.disconnect .branch:not(.self) {
-  animation: branch-flash 520ms var(--delay) var(--ease-out) both;
+  animation: branch-flash 560ms var(--delay) var(--ease-out) both;
 }
 /* O sinal que corre pelo fio */
 .pulse {
@@ -657,18 +709,19 @@ function toggleTheme(event: MouseEvent) {
     transform: none;
   }
 }
+/* Os tempos em % são da animação inteira (--total = EFFECT_MS: 2,2 s ligando, 1,4 s desligando) */
 @keyframes bus-draw {
   0% {
     opacity: 0;
     transform: scaleY(0);
   }
-  12% {
+  10% {
     opacity: 1;
   }
-  48% {
+  34% {
     transform: scaleY(1);
   }
-  78% {
+  82% {
     opacity: 1;
     transform: scaleY(1);
   }
@@ -682,12 +735,16 @@ function toggleTheme(event: MouseEvent) {
     opacity: 0;
     transform: scaleY(1);
   }
-  15% {
+  12% {
     opacity: 1;
   }
-  60% {
+  64% {
     opacity: 1;
     transform: scaleY(1);
+  }
+  92% {
+    opacity: 0.5;
+    transform: scaleY(0);
   }
   100% {
     opacity: 0;
@@ -696,18 +753,18 @@ function toggleTheme(event: MouseEvent) {
 }
 @keyframes branch-plug {
   0%,
-  22% {
+  20% {
     opacity: 0;
     transform: scaleX(0);
   }
-  26% {
+  24% {
     opacity: 1;
   }
-  46% {
+  38% {
     opacity: 1;
     transform: scaleX(1);
   }
-  80% {
+  82% {
     opacity: 1;
     transform: scaleX(1);
   }
@@ -721,15 +778,15 @@ function toggleTheme(event: MouseEvent) {
     opacity: 0;
     transform: scaleX(1);
   }
-  15% {
+  12% {
     opacity: 1;
     transform: scaleX(1);
   }
-  40% {
+  50% {
     opacity: 1;
     transform: scaleX(1);
   }
-  65% {
+  72% {
     opacity: 0.6;
     transform: scaleX(0);
   }

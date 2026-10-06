@@ -6,7 +6,9 @@
  * (o tutorial é obrigatório) — ele aparece em todos esses lugares.
  *
  * Também ficam aqui as regras puras das preferências dos módulos (quais estão
- * ativos e como aparecem no menu), guardadas em .4notes/app.json (stores/modules.ts).
+ * ativos, em que ordem e como aparecem no menu), guardadas em .4notes/app.json
+ * (stores/modules.ts). A ordem de MODULES é a ordem padrão do menu; os atalhos
+ * Ctrl+1…4 continuam presos a cada módulo, qualquer que seja a ordem.
  */
 
 export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links'
@@ -17,12 +19,14 @@ export interface TutorialShortcut {
   label: string
 }
 
-/** Tutorial curtinho de um módulo (ou do 4notes em geral). */
+/** Tutorial curtinho de um módulo (ou do 4notes em geral). Frases bem curtas. */
 export interface ModuleTutorial {
   /** Para que serve, numa frase. */
   purpose: string
   /** O que dá para fazer (as funções principais). */
   features: string[]
+  /** O que tem no botão direito (menus de contexto). */
+  contextMenu: string[]
   /** O que pode passar despercebido. */
   tips: string[]
   shortcuts: TutorialShortcut[]
@@ -56,27 +60,41 @@ export const MODULES: readonly ModuleDefinition[] = [
     tutorial: {
       purpose: 'Anotações rápidas em abas, como um Bloco de Notas organizado. Cada nota é um arquivo .md no seu workspace.',
       features: [
-        'Selecione um texto para formatar: negrito, cores, listas, link, bloco de texto…',
-        'Organize em categorias com cor, ícone ou foto (botão direito na nota).',
+        'Selecione um texto para formatar: negrito, marca-texto, listas, link, bloco de texto…',
         'Cole prints e código: viram imagem e bloco de código.',
-        'Mencione notas, tarefas e links com @.',
+        'Blocos de código e de texto: copiar, remover e tela cheia.',
+        'Categorias com cor, ícone ou foto: arraste a nota até uma delas.',
+        'Mencione notas, tarefas e links com @ (clique na menção para abrir).',
+        'Arraste as abas para mudar a ordem.',
+      ],
+      contextMenu: [
+        'Nota ou aba: categoria, duplicar, exportar TXT/PDF, Explorador, excluir.',
+        'Aba: fechar a aba ou as outras.',
+        'Categoria: nova nota nela, editar, recolher, excluir.',
+        'Pasta: nova nota já dentro dela.',
+        'Texto: inserir imagem, corretor, abrir/editar/remover link.',
       ],
       tips: [
         'A primeira linha é o título — e o nome do arquivo.',
-        'Notas que começam com as mesmas palavras se agrupam em pastas na lista.',
+        'Títulos que começam igual viram pastas na lista (“4notes 1.4.0”, “4notes 1.4.1”).',
+        'Versão no título (“4notes 1.4.1”)? O botão no fim das abas abre a anterior.',
         'Tudo salva sozinho; fechar a aba não apaga a nota.',
-        'Botão direito na nota: exportar como TXT ou PDF.',
+        'Excluir manda o arquivo para a Lixeira.',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Nova nota' },
         { keys: ['Mod', 'W'], label: 'Fechar a aba' },
-        { keys: ['Mod', 'Tab'], label: 'Próxima aba' },
+        { keys: ['Mod', 'Tab'], label: 'Próxima aba (com Shift: anterior)' },
         { keys: ['Mod', 'Shift', 'T'], label: 'Reabrir a aba fechada' },
+        { keys: ['Mod', '\\'], label: 'Mostrar/esconder a lista' },
         { keys: ['Mod', 'F'], label: 'Procurar na nota' },
-        { keys: ['Mod', 'D'], label: 'Selecionar a próxima ocorrência (edita todas juntas)' },
+        { keys: ['Mod', 'D'], label: 'Próxima ocorrência (edita todas juntas)' },
         { keys: ['Mod', 'B / I / U'], label: 'Negrito / itálico / sublinhado' },
-        { keys: ['Mod', 'K'], label: 'Transformar a seleção em link' },
+        { keys: ['Mod', 'Shift', 'X / H'], label: 'Tachado / marca-texto' },
+        { keys: ['Mod', 'E'], label: 'Código na linha' },
+        { keys: ['Mod', 'K'], label: 'Link' },
         { keys: ['Mod', 'Shift', 'V'], label: 'Colar sem formatação' },
+        { keys: ['Mod', 'Clique'], label: 'Abrir o link no navegador' },
       ],
     },
   },
@@ -92,15 +110,18 @@ export const MODULES: readonly ModuleDefinition[] = [
       purpose: 'Sua lista de tarefas, com categorias, datas e tarefas que se repetem.',
       features: [
         'Digite na barra de cima e aperte Enter para criar.',
-        'Clique numa tarefa para editar no painel ao lado.',
+        '“Mais opções”: data, recorrência e categoria antes de criar.',
+        'Clique numa tarefa para editar ao lado; clicar fora fecha.',
         'Recorrentes voltam sozinhas na próxima data.',
+        'Categorias na lateral: filtre e arraste para mudar a ordem.',
         'Mencione notas com @ no título ou nos detalhes.',
       ],
+      contextMenu: ['Tarefa: editar, concluir, pular, mover de categoria, excluir.', 'Categoria: editar ou excluir.'],
       tips: [
         '“Revisar amanhã #estudos” já define a data e a categoria.',
         'Concluídas e agendadas ficam nos links discretos no fim da lista.',
         '“Pular” avança uma recorrente sem marcar como feita.',
-        'Funciona com o app fechado: o que venceu aparece ao abrir.',
+        'O que venceu com o app fechado aparece ao abrir.',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Nova tarefa' },
@@ -123,19 +144,27 @@ export const MODULES: readonly ModuleDefinition[] = [
       features: [
         'Cada nó é uma nota: clique para abrir e editar ao lado.',
         'Shift + arrastar de uma nota até outra cria uma conexão.',
-        'Vários mapas: troque e crie pelo seletor no canto.',
+        'Soltar a conexão no vazio cria uma nota já ligada.',
+        'Vários mapas: crie, renomeie e troque pelo seletor no canto.',
         '“Reorganizar” arruma o mapa sem cruzamentos.',
+        'Mencione notas e tarefas com @ dentro das notas.',
+      ],
+      contextMenu: [
+        'Nota: abrir, renomear, nova nota conectada, cor, Explorador, excluir.',
+        'Vazio: nova nota ali ou reorganizar o mapa.',
+        'Conexão: remover.',
       ],
       tips: [
-        'Soltar a conexão no vazio cria uma nota já ligada.',
         'Duplo clique no vazio cria uma nota ali.',
         'Clique numa conexão e use o × para removê-la.',
-        'Botão direito no nó: cor, renomear, nova nota conectada.',
+        'Clicar no vazio tira a seleção e fecha a nota.',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Nova nota' },
         { keys: ['Mod', 'K'], label: 'Buscar no mapa' },
         { keys: ['Shift', 'Arrastar'], label: 'Conectar notas' },
+        { keys: ['Arrastar o fundo'], label: 'Mover o mapa' },
+        { keys: ['Roda do mouse'], label: 'Zoom' },
         { keys: ['Delete'], label: 'Excluir a nota ou a conexão selecionada' },
         { keys: ['Esc'], label: 'Fechar a nota / tirar a seleção' },
       ],
@@ -156,10 +185,16 @@ export const MODULES: readonly ModuleDefinition[] = [
         'O título e o ícone do site aparecem sozinhos.',
         'Arraste um link até uma categoria para movê-lo.',
         'Importe os favoritos do navegador (Chrome, Edge, Brave, Opera, Firefox, Zen…).',
+        'Busque por título ou endereço; ordene por recentes, A–Z ou URL.',
+      ],
+      contextMenu: [
+        'Link: abrir, copiar endereço, editar, mover, atualizar título e ícone, excluir.',
+        'Categoria: editar ou excluir.',
       ],
       tips: [
         'Arrastar um link do navegador para a lista também salva.',
-        'Ordene por recentes, A–Z ou URL.',
+        'Arraste as categorias para mudar a ordem.',
+        'O ⋯ do link abre o mesmo menu do botão direito.',
         'Links salvos podem ser mencionados nas notas com @.',
       ],
       shortcuts: [
@@ -168,6 +203,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         { keys: ['Mod', 'F'], label: 'Buscar' },
         { keys: ['↑ / ↓'], label: 'Escolher um link' },
         { keys: ['Enter'], label: 'Abrir no navegador' },
+        { keys: ['Mod', 'C'], label: 'Copiar o endereço' },
         { keys: ['F2'], label: 'Editar' },
         { keys: ['Delete'], label: 'Excluir' },
       ],
@@ -179,12 +215,20 @@ export const MODULES: readonly ModuleDefinition[] = [
 export const GENERAL_TUTORIAL: ModuleTutorial = {
   purpose: 'Tudo fica no seu workspace: uma pasta comum, fácil de copiar e de fazer backup.',
   features: [
-    'Ative ou desative módulos em Configurações › Módulos (ou botão direito no menu lateral).',
-    'Troque de workspace pelo nome no canto superior esquerdo.',
-    'Tema claro ou escuro pelo botão do sol/lua.',
+    'Abra ou crie workspaces pelo nome no canto superior esquerdo.',
+    'Arraste os módulos do menu lateral para mudar a ordem.',
+    'Ative, desative e ajuste módulos em Configurações › Módulos.',
+    'Tema claro ou escuro pelo sol/lua do menu lateral.',
+    'Biblioteca de imagens e “Iniciar com o computador” em Configurações › Geral.',
+  ],
+  contextMenu: [
+    'Módulo no menu lateral: mover para cima/baixo ou desativar.',
+    'Menu lateral: ligar/desligar módulos e mostrar os nomes.',
+    'Texto: desfazer, copiar, colar e sugestões do corretor.',
   ],
   tips: [
-    'Desativar um módulo só o esconde: os dados dele continuam guardados.',
+    'Desativar um módulo só o esconde: os dados continuam guardados.',
+    'Backup: basta copiar a pasta do workspace.',
     'Editou um arquivo em outro programa? O 4notes relê ao voltar para a janela.',
   ],
   shortcuts: [
@@ -221,26 +265,65 @@ export interface ModulePrefs {
    * outra versão do 4notes) são mantidos.
    */
   disabled: string[]
+  /**
+   * Ordem do menu lateral (ids). Sempre tem todos os módulos: um módulo novo entra no
+   * fim. Ids desconhecidos (de outra versão do 4notes) são mantidos no lugar.
+   */
+  order: string[]
   navStyle: NavStyle
 }
 
-export const DEFAULT_PREFS: ModulePrefs = { disabled: [], navStyle: 'icon-label' }
+export const DEFAULT_PREFS: Readonly<ModulePrefs> = { disabled: [], order: [...MODULE_IDS], navStyle: 'icon-label' }
+
+const idList = (value: unknown): string[] =>
+  Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && !!id))] : []
 
 /** Lê as preferências do app.json, tolerando arquivos editados à mão. */
 export function normalizePrefs(raw: unknown): ModulePrefs {
   const data = (raw && typeof raw === 'object' ? raw : {}) as { modules?: unknown }
-  const modules = (data.modules && typeof data.modules === 'object' ? data.modules : {}) as { disabled?: unknown; navStyle?: unknown }
-  const disabled = Array.isArray(modules.disabled) ? [...new Set(modules.disabled.filter((id): id is string => typeof id === 'string' && !!id))] : []
-  // Todos desativados (arquivo editado à mão): o primeiro volta a ficar ativo
-  const usable = MODULE_IDS.some((id) => !disabled.includes(id)) ? disabled : disabled.filter((id) => id !== MODULE_IDS[0])
-  return { disabled: usable, navStyle: modules.navStyle === 'icon' ? 'icon' : 'icon-label' }
+  const modules = (data.modules && typeof data.modules === 'object' ? data.modules : {}) as { disabled?: unknown; order?: unknown; navStyle?: unknown }
+  const saved = idList(modules.order)
+  const order = [...saved, ...MODULE_IDS.filter((id) => !saved.includes(id))]
+  const disabled = idList(modules.disabled)
+  // Todos desativados (arquivo editado à mão): o primeiro do menu volta a ficar ativo
+  const first = order.find(isModuleId)!
+  const usable = MODULE_IDS.some((id) => !disabled.includes(id)) ? disabled : disabled.filter((id) => id !== first)
+  return { disabled: usable, order, navStyle: modules.navStyle === 'icon' ? 'icon' : 'icon-label' }
 }
 
 export const isEnabledIn = (prefs: ModulePrefs, id: ModuleId) => !prefs.disabled.includes(id)
 
+/** Todos os módulos, na ordem do menu (ativos ou não). */
+export function orderedModules(prefs: ModulePrefs): ModuleDefinition[] {
+  return prefs.order.filter(isModuleId).map(moduleById)
+}
+
 /** Módulos ativos, na ordem do menu. */
 export function enabledModules(prefs: ModulePrefs): ModuleDefinition[] {
-  return MODULES.filter((module) => isEnabledIn(prefs, module.id))
+  return orderedModules(prefs).filter((module) => isEnabledIn(prefs, module.id))
+}
+
+/**
+ * A ordem completa depois de reorganizar só uma parte dos módulos (ex.: os do menu):
+ * os lugares ocupados pelos ids de `moved` recebem esses ids na nova ordem; os outros
+ * (desativados, desconhecidos) ficam onde estavam. null = não muda.
+ */
+export function reorderedIds(order: readonly string[], moved: readonly string[]): string[] | null {
+  const set = new Set(moved)
+  if (set.size !== moved.length || order.filter((id) => set.has(id)).length !== moved.length) return null
+  let next = 0
+  const result = order.map((id) => (set.has(id) ? moved[next++]! : id))
+  return result.some((id, i) => id !== order[i]) ? result : null
+}
+
+/** Ids de `list` com `id` andando `delta` posições (−1 = para cima). null = não dá. */
+export function movedBy(list: readonly string[], id: string, delta: number): string[] | null {
+  const from = list.indexOf(id)
+  const to = from + delta
+  if (from < 0 || to < 0 || to >= list.length || to === from) return null
+  const result = [...list]
+  result.splice(to, 0, ...result.splice(from, 1))
+  return result
 }
 
 /** Dá para desativar? Pelo menos um módulo continua ativo. */

@@ -398,3 +398,10 @@ input[type='date']::-webkit-calendar-picker-indicator {
     transition-duration: 1ms !important;
   }
 }
+
+/* Arrastando um item para reorganizar (composables/useSortableList.ts) */
+html.is-sorting,
+html.is-sorting * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}

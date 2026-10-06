@@ -4,8 +4,10 @@
  * — ou até uma categoria da lista lateral, para colocar a nota nela.
  * A aba de uma nota com categoria é marcada com a cor da categoria.
  * Com muitas abas, a faixa rola na horizontal (roda do mouse ou barra fina no topo).
+ * No fim da faixa, quando a nota aberta tem uma versão anterior ("4notes 1.4.1" →
+ * "4notes 1.4.0", na mesma categoria), um botão discreto abre essa versão.
  */
-import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { choiceDialog } from '~/composables/useDialog'
 import { separator, showContextMenu } from '~/composables/useContextMenu'
 import { exportSubmenu, handleExportChoice } from '~/composables/useNoteExport'
@@ -20,6 +22,9 @@ const mod = modKeyLabel()
 const scroller = ref<HTMLElement>()
 const dragIndex = ref<number | null>(null)
 const dropIndex = ref<number | null>(null)
+
+/** Versão anterior da nota aberta (lib/notes/versions.ts). */
+const previous = computed(() => (notes.activeNote.value ? notes.previousVersionOf(notes.activeNote.value) : null))
 
 // ── Rolagem horizontal ──────────────────────────────────────────────────────
 
@@ -226,6 +231,21 @@ async function openMenu(note: QuickNote) {
     <button class="tab-new" :data-tip="`Nova nota (${mod}+N)`" aria-label="Nova nota" @click="emit('new')">
       <AppIcon name="plus" :size="16" />
     </button>
+
+    <Transition name="pop">
+      <button
+        v-if="previous"
+        class="prev-version"
+        data-prev-version
+        :data-tip="`Abrir a versão anterior\n${noteTitle(previous.note)}`"
+        data-tip-pos="left"
+        :aria-label="`Abrir a versão anterior: ${noteTitle(previous.note)}`"
+        @click="notes.openNote(previous.note.id)"
+      >
+        <AppIcon name="history" :size="14" :stroke="1.9" />
+        <span class="prev-label">{{ previous.label }}</span>
+      </button>
+    </Transition>
   </div>
 </template>
 
@@ -238,6 +258,36 @@ async function openMenu(note: QuickNote) {
   padding: 0 8px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
+}
+.prev-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  height: 26px;
+  margin: 0 0 7px auto;
+  padding: 0 9px 0 7px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast);
+}
+.prev-version:hover {
+  background: var(--hover);
+  color: var(--primary-text);
+}
+.prev-label {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sidebar-toggle {
   margin-bottom: 4px;

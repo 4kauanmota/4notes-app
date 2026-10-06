@@ -43,6 +43,8 @@ function hide() {
 }
 
 function onOver(event: PointerEvent) {
+  // Arrastando para reorganizar (useSortableList): sem dicas pelo caminho
+  if (document.documentElement.classList.contains('is-sorting')) return hide()
   const el = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-tip]')
   if (el === current) return
   hide()
