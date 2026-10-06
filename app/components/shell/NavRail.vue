@@ -1,28 +1,192 @@
 <script setup lang="ts">
-/** Barra lateral de navegação entre os módulos + tema + configurações. */
-import { computed } from 'vue'
+/**
+ * Barra lateral de navegação entre os módulos + tutorial + tema + configurações.
+ *
+ * - Mostra só os módulos ativos (stores/modules.ts), com ícone e nome ou só o ícone.
+ * - Ligar um módulo "conecta" ele ao 4notes: o espaço dele abre, um fio sai dele
+ *   até os outros módulos, o ícone encaixa (com um "clique" de luz) e um sinal corre
+ *   pelo fio até cada módulo, que responde. Desligar faz o caminho contrário: os
+ *   outros mandam o sinal, o fio do módulo se solta, o ícone sai e o espaço fecha.
+ * - Com as Configurações abertas em "Módulos", o menu fica por cima do fundo
+ *   escurecido (só para ver as mudanças ao vivo; não dá para clicar nele ali).
+ * - Botão direito no menu: ligar/desligar módulos e mostrar ou não os nomes.
+ */
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
+import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
 import { useTheme } from '~/composables/useTheme'
+import { toggleTutorial, tutorial } from '~/composables/useTutorial'
+import { MODULES, moduleForPath, type ModuleDefinition, type ModuleId } from '~/lib/modules'
 import { modKeyLabel } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
+import { EFFECT_MS, useModulesStore, type ModuleEffect } from '~/stores/modules'
 import { useTasksStore } from '~/stores/tasks'
 
 const route = useRoute()
 const app = useAppStore()
+const modules = useModulesStore()
 const tasks = useTasksStore()
 const { theme, setTheme } = useTheme()
 const mod = modKeyLabel()
 
 const dueCount = computed(() => tasks.progress.value.total - tasks.progress.value.done)
+const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : 0)
 
-const items = computed(() => [
-  { to: '/notes', label: 'Notas', icon: 'notes', key: '1', badge: 0 },
-  { to: '/tasks', label: 'Tarefas', icon: 'tasks', key: '2', badge: dueCount.value },
-  { to: '/mindmap', label: 'Mapa', icon: 'graph', key: '3', badge: 0 },
-  { to: '/links', label: 'Links', icon: 'link', key: '4', badge: 0 },
-])
+const labels = computed(() => modules.state.prefs.navStyle === 'icon-label')
+// A largura do menu é de todo o app (a logo da barra de título se alinha com ele)
+watchEffect(() => document.documentElement.style.setProperty('--rail-w', labels.value ? '64px' : '54px'))
 
-const activeIndex = computed(() => items.value.findIndex((item) => route.path.startsWith(item.to)))
+const effects = computed(() => modules.state.effects)
+const effectOf = (id: ModuleId) => effects.value.find((effect) => effect.id === id) ?? null
+
+/** Módulos no menu: os ativos e, até a animação acabar, o que está sendo desligado. */
+const items = computed(() =>
+  MODULES.filter((module) => modules.isEnabled(module.id) || effectOf(module.id)?.kind === 'disconnect'),
+)
+const current = computed(() => moduleForPath(route.path))
+
+// ── Geometria (igual ao CSS) ────────────────────────────────────────────────
+
+const geometry = computed(() =>
+  labels.value ? { height: 58, gap: 6, iconY: 21 } : { height: 46, gap: 6, iconY: 23 },
+)
+/** Centro do ícone do item `index` (com o menu já arrumado). */
+const iconY = (index: number) => index * (geometry.value.height + geometry.value.gap) + geometry.value.iconY
+
+// ── Indicador do módulo aberto: acompanha o item (também durante as animações) ──
+
+const list = ref<HTMLElement>()
+const indicatorY = ref(0)
+const following = ref(false)
+let frame = 0
+
+function measure(): void {
+  const active = list.value?.querySelector<HTMLElement>('.rail-item.active')
+  if (active) indicatorY.value = active.offsetTop
+}
+
+function follow(until: number): void {
+  cancelAnimationFrame(frame)
+  following.value = true
+  const step = () => {
+    measure()
+    if (performance.now() < until) frame = requestAnimationFrame(step)
+    else following.value = false
+  }
+  frame = requestAnimationFrame(step)
+}
+
+watch([() => route.path, items, labels], () => void nextTick(measure), { immediate: true })
+watch(
+  () => effects.value.map((effect) => effect.seq).join(),
+  () => {
+    const longest = Math.max(0, ...effects.value.map((effect) => EFFECT_MS[effect.kind]))
+    if (longest) follow(performance.now() + longest + 50)
+  },
+)
+// Trocar entre "ícone e nome" e "só o ícone" anima a altura dos itens
+watch(labels, () => follow(performance.now() + 320))
+onMounted(measure)
+onBeforeUnmount(() => cancelAnimationFrame(frame))
+
+// ── Fios da animação (um conjunto por módulo sendo ligado/desligado) ─────────
+
+interface Wire {
+  effect: ModuleEffect
+  origin: number
+  top: number
+  height: number
+  branches: { id: ModuleId; y: number; self: boolean; delay: number }[]
+  pulses: { id: ModuleId; from: number; dy: number; delay: number; duration: number }[]
+}
+
+/** Velocidade do sinal no fio (px por ms) e quando ele sai. */
+const SPEED = 0.32
+const CONNECT_SIGNAL_AT = 640
+const DISCONNECT_SIGNAL_AT = 60
+
+const wires = computed<Wire[]>(() =>
+  effects.value.flatMap((effect) => {
+    const index = items.value.findIndex((item) => item.id === effect.id)
+    if (index < 0) return []
+    const ys = items.value.map((_, i) => iconY(i))
+    const origin = ys[index]!
+    const top = ys[0]!
+    const height = Math.max(0, ys.at(-1)! - top)
+    const travel = (distance: number) => Math.max(150, Math.round(distance / SPEED))
+    const branches = items.value.map((item, i) => {
+      const distance = Math.abs(ys[i]! - origin)
+      // Ligando: o sinal sai do módulo novo e chega aos outros; desligando: sai dos outros
+      const delay = effect.kind === 'connect' ? CONNECT_SIGNAL_AT + travel(distance) : DISCONNECT_SIGNAL_AT
+      return { id: item.id, y: ys[i]!, self: item.id === effect.id, delay }
+    })
+    const pulses = items.value
+      .map((item, i) => ({ item, y: ys[i]! }))
+      .filter(({ item }) => item.id !== effect.id)
+      .map(({ item, y }) => {
+        const duration = travel(Math.abs(y - origin))
+        return effect.kind === 'connect'
+          ? { id: item.id, from: origin, dy: y - origin, delay: CONNECT_SIGNAL_AT, duration }
+          : { id: item.id, from: y, dy: origin - y, delay: DISCONNECT_SIGNAL_AT + 120, duration }
+      })
+    return [{ effect, origin, top, height, branches, pulses }]
+  }),
+)
+
+/** Os outros módulos respondem quando o sinal chega (ligando) ou quando o mandam (desligando). */
+function pingOf(id: ModuleId): { delay: number } | null {
+  for (const wire of wires.value) {
+    if (wire.effect.id === id) continue
+    const branch = wire.branches.find((item) => item.id === id)
+    if (branch) return { delay: branch.delay }
+  }
+  return null
+}
+
+function itemClasses(item: ModuleDefinition) {
+  const effect = effectOf(item.id)
+  return {
+    active: current.value?.id === item.id,
+    connecting: effect?.kind === 'connect',
+    disconnecting: effect?.kind === 'disconnect',
+    pinged: !effect && !!pingOf(item.id),
+  }
+}
+
+// ── Botão direito: ligar/desligar módulos e os nomes ─────────────────────────
+
+async function railMenu(): Promise<void> {
+  const items: MenuItemSpec[] = [
+    ...MODULES.map((module) => ({
+      id: `module:${module.id}`,
+      label: module.name,
+      type: 'checkbox' as const,
+      checked: modules.isEnabled(module.id),
+      // O último módulo ativo não sai
+      enabled: !modules.isEnabled(module.id) || modules.canDisable(module.id),
+    })),
+    separator,
+    { id: 'labels', label: 'Mostrar os nomes', type: 'checkbox', checked: labels.value },
+    separator,
+    { id: 'settings', label: 'Configurações dos módulos…' },
+    { id: 'tutorial', label: 'Tutorial', hint: 'F1' },
+  ]
+  const choice = await showContextMenu(items)
+  if (!choice) return
+  if (choice.startsWith('module:')) {
+    const id = choice.slice('module:'.length) as ModuleId
+    modules.setEnabled(id, !modules.isEnabled(id))
+  } else if (choice === 'labels') {
+    modules.setNavStyle(labels.value ? 'icon' : 'icon-label')
+  } else if (choice === 'settings') {
+    app.openSettings('modules')
+  } else if (choice === 'tutorial') {
+    toggleTutorial(current.value?.id ?? 'general')
+  }
+}
+
+/** Configurações abertas em "Módulos": o menu aparece por cima do fundo, para ver as mudanças. */
+const preview = computed(() => app.state.settingsOpen && app.state.settingsTab === 'modules')
 
 function toggleTheme(event: MouseEvent) {
   const next = theme.resolved === 'dark' ? 'light' : 'dark'
@@ -31,27 +195,59 @@ function toggleTheme(event: MouseEvent) {
 </script>
 
 <template>
-  <nav class="rail" aria-label="Módulos">
-    <div class="rail-items">
+  <nav class="rail" :class="{ labels, icons: !labels, preview }" aria-label="Módulos" @contextmenu.prevent="railMenu">
+    <div ref="list" class="rail-items">
       <span
-        v-if="activeIndex >= 0"
+        v-if="current && items.some((item) => item.id === current!.id)"
         class="rail-indicator"
-        :style="{ transform: `translateY(${activeIndex * 64}px)` }"
+        :class="{ following }"
+        :style="{ transform: `translateY(${indicatorY}px)` }"
         aria-hidden="true"
       />
+
+      <!-- Fios da animação de ligar/desligar (por trás dos ícones) -->
+      <div
+        v-for="wire in wires"
+        :key="wire.effect.seq"
+        class="wires"
+        :class="wire.effect.kind"
+        :style="{ '--origin': `${wire.origin}px`, '--total': `${EFFECT_MS[wire.effect.kind]}ms` }"
+        aria-hidden="true"
+      >
+        <span class="bus" :style="{ top: `${wire.top}px`, height: `${wire.height}px`, transformOrigin: `50% ${wire.origin - wire.top}px` }" />
+        <span
+          v-for="branch in wire.branches"
+          :key="branch.id"
+          class="branch"
+          :class="{ self: branch.self }"
+          :style="{ top: `${branch.y}px`, '--delay': `${branch.delay}ms` }"
+        />
+        <span
+          v-for="pulse in wire.pulses"
+          :key="pulse.id"
+          class="pulse"
+          :style="{ top: `${pulse.from}px`, '--dy': `${pulse.dy}px`, '--delay': `${pulse.delay}ms`, '--travel': `${pulse.duration}ms` }"
+        />
+      </div>
+
       <NuxtLink
         v-for="item in items"
-        :key="item.to"
-        :to="item.to"
+        :key="item.id"
+        :to="item.route"
         class="rail-item"
-        :class="{ active: route.path.startsWith(item.to) }"
-        :data-tip="`${item.label}  ·  ${mod}+${item.key}`"
+        :class="itemClasses(item)"
+        :style="pingOf(item.id) ? { '--ping': `${pingOf(item.id)!.delay}ms` } : undefined"
+        :data-module="item.id"
+        :data-tip="`${item.name}  ·  ${mod}+${item.key}`"
         data-tip-pos="right"
+        :aria-label="item.name"
+        :tabindex="effectOf(item.id)?.kind === 'disconnect' ? -1 : undefined"
       >
         <span class="rail-icon">
           <AppIcon :name="item.icon" :size="21" />
+          <span class="plug-ring" aria-hidden="true" />
           <Transition name="pop">
-            <span v-if="item.badge > 0" class="rail-badge">{{ item.badge > 99 ? '99+' : item.badge }}</span>
+            <span v-if="badgeOf(item.id) > 0" class="rail-badge">{{ badgeOf(item.id) > 99 ? '99+' : badgeOf(item.id) }}</span>
           </Transition>
         </span>
         <span class="rail-label">{{ item.label }}</span>
@@ -59,6 +255,18 @@ function toggleTheme(event: MouseEvent) {
     </div>
 
     <div class="rail-bottom">
+      <button
+        class="rail-button"
+        :class="{ on: tutorial.open }"
+        data-tutorial-toggle
+        :data-tip="`Tutorial${current ? ` de ${current.name}` : ''}  ·  F1`"
+        data-tip-pos="right"
+        aria-label="Tutorial do módulo"
+        :aria-expanded="tutorial.open"
+        @click="toggleTutorial(current?.id ?? 'general')"
+      >
+        <AppIcon name="help" :size="19" />
+      </button>
       <button
         class="rail-button"
         :data-tip="theme.resolved === 'dark' ? 'Tema claro' : 'Tema escuro'"
@@ -79,52 +287,85 @@ function toggleTheme(event: MouseEvent) {
 
 <style scoped>
 .rail {
+  /* Geometria dos itens (a mesma de `geometry` no script) */
+  --item-h: 58px;
+  --item-gap: 6px;
+  --icon-y: 21px;
   display: flex;
   flex-direction: column;
   align-items: center;
   width: var(--rail-w);
   padding: 6px 0 12px;
   background: var(--chrome);
+  transition: width 260ms var(--ease-out);
+}
+.rail.icons {
+  --item-h: 46px;
+  --icon-y: 23px;
+}
+/* Configurações › Módulos abertas: o menu fica por cima do fundo escurecido */
+.rail.preview {
+  position: relative;
+  z-index: 950;
+  pointer-events: none;
+  border-radius: 0 0 16px 0;
+  box-shadow: 1px 0 0 var(--border);
 }
 .rail-items {
   position: relative;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 .rail-indicator {
   position: absolute;
   top: 0;
   left: 6px;
-  width: 52px;
-  height: 58px;
+  width: calc(var(--rail-w) - 12px);
+  height: var(--item-h);
   border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
-  transition: transform 320ms var(--ease-spring);
+  transition:
+    transform 320ms var(--ease-spring),
+    height 260ms var(--ease-out),
+    width 260ms var(--ease-out);
+}
+.rail-indicator.following {
+  transition:
+    height 260ms var(--ease-out),
+    width 260ms var(--ease-out);
 }
 .rail-indicator::before {
   content: '';
   position: absolute;
   left: -6px;
-  top: 19px;
+  top: calc(var(--item-h) / 2 - 10px);
   width: 3px;
   height: 20px;
   border-radius: 0 3px 3px 0;
   background: var(--accent-strong);
+  transition: top 260ms var(--ease-out);
 }
 .rail-item {
   position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  width: 64px;
-  height: 58px;
-  margin-bottom: 6px;
+  width: 100%;
+  height: var(--item-h);
+  margin-bottom: var(--item-gap);
   color: var(--text-3);
   text-decoration: none;
-  transition: color var(--t-med);
+  transition:
+    color var(--t-med),
+    height 260ms var(--ease-out);
+}
+.icons .rail-item {
+  gap: 0;
 }
 .rail-item:hover {
   color: var(--text);
@@ -142,9 +383,18 @@ function toggleTheme(event: MouseEvent) {
   transform: scale(0.88);
 }
 .rail-label {
+  max-height: 16px;
+  overflow: hidden;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.01em;
+  transition:
+    opacity 180ms var(--ease-out),
+    max-height 260ms var(--ease-out);
+}
+.icons .rail-label {
+  max-height: 0;
+  opacity: 0;
 }
 .rail-badge {
   position: absolute;
@@ -184,6 +434,10 @@ function toggleTheme(event: MouseEvent) {
   background: var(--hover);
   color: var(--text);
 }
+.rail-button.on {
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
 .rail-button:active {
   transform: scale(0.9);
 }
@@ -199,5 +453,329 @@ function toggleTheme(event: MouseEvent) {
 .spin-leave-to {
   transform: rotate(90deg) scale(0.6);
   opacity: 0;
+}
+
+/* ── Ligar / desligar um módulo ─────────────────────────────────────────── */
+
+/* Anel de luz em volta do ícone (o "clique" do encaixe) */
+.plug-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 12px var(--primary-soft-2);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Ligando: o espaço abre, o ícone entra de lado e encaixa, o anel "clica", o nome aparece */
+.rail-item.connecting {
+  pointer-events: none;
+  animation: slot-open 300ms var(--ease-out) both;
+}
+.rail-item.connecting .rail-icon {
+  animation: plug-in 480ms 220ms var(--ease-spring) both;
+}
+.rail-item.connecting .plug-ring {
+  animation: ring-snap 620ms 600ms var(--ease-out) both;
+}
+.rail-item.connecting .rail-label {
+  animation: label-in 260ms 560ms var(--ease-out) both;
+}
+
+/* Desligando: o anel fecha, o ícone se solta para o lado, o espaço fecha */
+.rail-item.disconnecting {
+  pointer-events: none;
+  animation: slot-close 260ms 620ms var(--ease-in-out) both;
+}
+.rail-item.disconnecting .plug-ring {
+  animation: ring-release 420ms 200ms var(--ease-out) both;
+}
+.rail-item.disconnecting .rail-icon {
+  animation: unplug 380ms 330ms cubic-bezier(0.5, 0, 0.75, 0) both;
+}
+.rail-item.disconnecting .rail-label {
+  animation: label-out 200ms 260ms ease-in both;
+}
+
+/* Os outros módulos respondem ao sinal */
+.rail-item.pinged .rail-icon {
+  animation: ping 420ms var(--ping, 0ms) var(--ease-out) both;
+}
+
+.wires {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+/* O fio que liga todos os módulos, na borda do menu */
+.bus {
+  position: absolute;
+  left: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, var(--primary), var(--accent-strong), var(--primary));
+  box-shadow: 0 0 6px var(--primary-soft-2);
+}
+.wires.connect .bus {
+  animation: bus-draw var(--total) var(--ease-out) both;
+}
+.wires.disconnect .bus {
+  animation: bus-release var(--total) var(--ease-in-out) both;
+}
+/* A ligação de cada módulo com o fio */
+.branch {
+  position: absolute;
+  left: 4px;
+  width: calc(var(--rail-w) / 2 - 17px);
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--primary), var(--accent-strong));
+  transform-origin: left center;
+  transform: scaleX(0);
+  opacity: 0;
+}
+.wires.connect .branch.self {
+  animation: branch-plug var(--total) var(--ease-out) both;
+}
+.wires.connect .branch:not(.self) {
+  animation: branch-flash 520ms var(--delay) var(--ease-out) both;
+}
+.wires.disconnect .branch.self {
+  animation: branch-unplug var(--total) var(--ease-in-out) both;
+}
+.wires.disconnect .branch:not(.self) {
+  animation: branch-flash 520ms var(--delay) var(--ease-out) both;
+}
+/* O sinal que corre pelo fio */
+.pulse {
+  position: absolute;
+  left: 1px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow:
+    0 0 6px 1px var(--accent),
+    0 0 12px var(--primary-soft-2);
+  opacity: 0;
+  animation: pulse-travel var(--travel) var(--delay) cubic-bezier(0.45, 0, 0.25, 1) both;
+}
+
+@keyframes slot-open {
+  from {
+    height: 0;
+    margin-bottom: 0;
+  }
+}
+@keyframes slot-close {
+  to {
+    height: 0;
+    margin-bottom: 0;
+  }
+}
+@keyframes plug-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px) scale(0.5);
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes unplug {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  to {
+    transform: translateX(20px) scale(0.5) rotate(8deg);
+    opacity: 0;
+  }
+}
+@keyframes ring-snap {
+  /* Invisível até o encaixe (o primeiro quadro vale durante a espera) */
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  8% {
+    opacity: 0.95;
+    transform: scale(0.65);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+@keyframes ring-release {
+  0% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+@keyframes label-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+@keyframes label-out {
+  to {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+@keyframes ping {
+  0% {
+    transform: none;
+  }
+  35% {
+    transform: scale(1.16);
+    color: var(--primary-text);
+    filter: drop-shadow(0 0 5px var(--primary-soft-2));
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes bus-draw {
+  0% {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+  12% {
+    opacity: 1;
+  }
+  48% {
+    transform: scaleY(1);
+  }
+  78% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(1);
+  }
+}
+@keyframes bus-release {
+  0% {
+    opacity: 0;
+    transform: scaleY(1);
+  }
+  15% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+}
+@keyframes branch-plug {
+  0%,
+  22% {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  26% {
+    opacity: 1;
+  }
+  46% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  80% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+@keyframes branch-unplug {
+  0% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+  15% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  40% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  65% {
+    opacity: 0.6;
+    transform: scaleX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+}
+@keyframes branch-flash {
+  0% {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  35% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+@keyframes pulse-travel {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(calc(var(--dy) * 0.08)) scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(var(--dy)) scale(0.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail,
+  .rail-item,
+  .rail-indicator,
+  .rail-label {
+    transition: none;
+  }
 }
 </style>

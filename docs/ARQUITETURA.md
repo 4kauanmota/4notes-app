@@ -66,7 +66,7 @@ Mapa Mental  → stores/mindmap.ts → lib/mindmap/ → mindmap/<mapa>/*.md + ma
 Links        → stores/links.ts   → lib/links/   → links/links.json + links/icons/ (ícones dos sites)
 ```
 
-Os módulos não importam uns aos outros. Eles compartilham **infraestrutura** (editor de Markdown, ícones, diálogos, a API de arquivos) e `stores/app.ts` conhece os quatro só para tarefas gerais: carregar tudo ao abrir, salvar tudo antes de fechar e reler os arquivos quando você volta para a janela.
+Os módulos não importam uns aos outros. Eles compartilham **infraestrutura** (editor de Markdown, ícones, diálogos, a API de arquivos) e `stores/app.ts` conhece os quatro só para tarefas gerais: carregar tudo ao abrir, salvar tudo antes de fechar e reler os arquivos quando você volta para a janela. A **lista dos módulos** (nome, ícone, rota, atalho e tutorial) fica num lugar só, `lib/modules.ts`, e quais estão ativos em `stores/modules.ts` (item 16).
 
 A **única ligação** entre módulos é a que foi pedida: **menções** — tarefas mencionam notas (1.1.0); notas das Notas mencionam notas (1.1.1) e tarefas (1.2.0); notas do Mapa Mental mencionam notas e tarefas (1.2.0); notas (das Notas e do Mapa) mencionam **links salvos** (1.3.1). Ela é explícita e fica num lugar só (ver item 10):
 
@@ -216,7 +216,7 @@ Pessoal/
     ├── notes.json              abas abertas, aba ativa, lista lateral, categorias recolhidas, pastas abertas e as configurações das Notas
     ├── mindmap.json            mapa aberto, posições dos nós de cada mapa e as configurações do Mapa Mental
     ├── links.json              ordem da lista de links (recentes, A–Z ou URL)
-    ├── app.json                último módulo aberto
+    ├── app.json                último módulo aberto, módulos ativos e como aparecem no menu lateral
     └── backups/                tasks-segunda.json … tasks-domingo.json e links-segunda.json … (7 dias) e conversões do mapa
 ```
 
@@ -702,11 +702,11 @@ Toda imagem enviada ao 4notes fica em **`attachments/`** — coladas nas notas, 
 
 ## 13. Configurações (e iniciar com o computador)
 
-`components/shell/SettingsDialog.vue`, em três abas (`app.openSettings(aba, módulo)`):
+`components/shell/SettingsDialog.vue`, em duas abas (`app.openSettings(aba, módulo)`):
 
-- **Geral**: tema; **Iniciar com o computador**; workspace (pasta, abrir/criar outro) e a biblioteca de imagens.
-- **Módulos**: os ajustes de cada módulo que fazem sentido como configuração permanente, guardados **no workspace** (no arquivo de estado do módulo em `.4notes/`): Notas (`NotesSettings.vue`: categoria automática pelo título, exibição das pastas pelo título), Mapa Mental (`GraphSettings.vue`: notas sem conexões, estilo dos nós, nomes), e Tarefas e Links com "Sem nenhuma configuração disponível no momento.". **Critério**: o que se usa toda hora fica na tela do próprio módulo — ordenar os links, as opções de criação das tarefas, reorganizar o mapa.
-- **Atalhos** de teclado.
+- **Geral**: tema; **Tutoriais e atalhos** (abre o painel do item 16); **Iniciar com o computador**; workspace (pasta, abrir/criar outro) e a biblioteca de imagens.
+- **Módulos**: primeiro as **configurações gerais dos módulos** (1.4.0, item 16) — módulos ativos e **Menu lateral** (ícone e nome / só o ícone). Depois, os ajustes de cada módulo **ativo** que fazem sentido como configuração permanente, guardados **no workspace** (no arquivo de estado do módulo em `.4notes/`): Notas (`NotesSettings.vue`: categoria automática pelo título, exibição das pastas pelo título), Mapa Mental (`GraphSettings.vue`: notas sem conexões, estilo dos nós, nomes), e Tarefas e Links com "Sem nenhuma configuração disponível no momento.". As de um módulo desativado somem da lista (continuam guardadas). **Critério**: o que se usa toda hora fica na tela do próprio módulo — ordenar os links, as opções de criação das tarefas, reorganizar o mapa.
+- Os **atalhos** de teclado saíram das Configurações (até a 1.3.2 havia uma aba "Atalhos"): ficam nos tutoriais de cada módulo (item 16).
 
 Cada configuração é um `components/ui/SettingRow.vue`: nome, o **?** com uma explicação bem curta (balão ao passar o mouse ou focar com o teclado) e o controle.
 
@@ -757,6 +757,32 @@ Para gerar o instalador em outra máquina (para desenvolver lá), instale o Node
 
 ---
 
+## 16. Módulos: ativar, desativar, menu lateral e tutoriais (1.4.0)
+
+Arquivos: `app/lib/modules.ts` (lista dos módulos + tutoriais + regras puras das preferências), `app/stores/modules.ts` (preferências no workspace), `components/shell/NavRail.vue` (menu lateral e animação), `components/shell/TutorialPanel.vue` + `composables/useTutorial.ts` (tutoriais), `SettingsDialog.vue` (configurações gerais dos módulos).
+
+**Uma lista só** (`MODULES` em `lib/modules.ts`): id, nome curto (menu) e completo, ícone, rota, tecla do atalho (`Ctrl+1…4`), uma linha de descrição e o **tutorial** (obrigatório no tipo). O menu lateral, os atalhos do `app.vue`, as Configurações, o título e os Tutoriais leem essa lista — um módulo novo entra em todos esses lugares (inclusive no atalho "Ir para …" do tutorial Geral) só sendo acrescentado ali.
+
+**Ativar/desativar = preferência de exibição**, guardada em `.4notes/app.json` (o mesmo arquivo do último módulo aberto, agora de `stores/modules.ts`):
+
+```json
+{ "lastModule": "notes", "modules": { "disabled": ["links"], "navStyle": "icon-label" } }
+```
+
+- Guarda só os **desativados**: um módulo novo começa ativo; ids desconhecidos (de outra versão) e outras chaves do arquivo são mantidos. Pelo menos um módulo fica ativo (`canDisable`; um arquivo editado à mão com todos desligados reativa o primeiro).
+- **Nada muda nos dados**: todos os stores continuam carregando, salvando e relendo os arquivos (menções, biblioteca de imagens e "salvar antes de fechar" seguem iguais). O módulo só sai do menu; ao ativar, volta com tudo.
+- Módulo aberto desativado → `app.vue` vai para o último módulo ativo (ou o primeiro). Ao abrir o app, idem.
+- `Ctrl+<n>` ou uma **menção** para um módulo desativado não abre uma tela fora do menu: um aviso oferece **Ativar** (`requireModule`), que ativa e segue para o que foi pedido.
+- Onde mudar: **Configurações › Módulos › Geral** (switches por módulo) ou **botão direito no menu lateral** (caixas por módulo, "Mostrar os nomes", "Configurações dos módulos…", "Tutorial").
+
+**Menu lateral** (`NavRail.vue`): **Ícone e nome** (padrão, 64 px) ou **Só o ícone** (54 px; o nome fica no balão). A largura é a variável `--rail-w` do app inteiro, então a logo da barra de título continua centralizada sobre o menu. O indicador do módulo aberto segue o item medindo a posição dele (também durante as animações). Com as Configurações abertas em **Módulos**, o menu sobe por cima do fundo escurecido (`.preview`, sem receber cliques) para mostrar as mudanças ao vivo.
+
+**Animação de ligar** (~1,3 s, `stores/modules.ts › EFFECT_MS`): o espaço do módulo abre; um **fio** (roxo→amarelo, na borda do menu) cresce a partir dele até o primeiro e o último módulo; a ligação dele com o fio se estende até o ícone, que entra de lado e **encaixa** com um anel de luz; um **sinal** (ponto amarelo) corre pelo fio até cada um dos outros módulos, que respondem (a ligação deles pisca e o ícone dá um leve pulo); tudo some. **Desligar** (~0,9 s) é o contrário: os outros mandam o sinal até ele, o anel se fecha, a ligação se solta, o ícone sai de lado e o espaço fecha. Só CSS (keyframes com variáveis por item: posição, atraso, distância), sem travar o uso; com "reduzir movimento" do sistema, não há animação. Nas Configurações, o card do módulo também "encaixa".
+
+**Tutoriais** (`TutorialPanel.vue`): o **?** no fim do menu lateral ou **F1** (também com o cursor no editor) abre um painel ao lado do menu, por cima do módulo e **sem fundo escurecido** — dá para ler e testar. Abre no módulo atual e acompanha a troca de módulo; abas para os outros módulos (os desativados aparecem apagados, com **Ativar**) e o **Geral**. Cada tutorial: para que serve, o que dá para fazer, "Você sabia?" e os atalhos (`Mod` vira Ctrl/⌘). Fecha com ×, **?**, F1 ou Esc (o Esc não fecha se você estiver digitando fora do painel). Também em Configurações › Geral › Tutoriais e atalhos.
+
+---
+
 ## Decisões de arquitetura (resumo)
 
 | Decisão | Escolha | Motivo |
@@ -782,7 +808,9 @@ Para gerar o instalador em outra máquina (para desenvolver lá), instale o Node
 | Imagens removidas | Saem só da nota (ou da categoria); o arquivo fica na biblioteca até ser excluído por lá, sem uso | Uma imagem enviada pode ser usada de novo em qualquer lugar; nada some sem você pedir. |
 | Biblioteca de imagens | `attachments/` + o uso calculado na hora (notas, `categorias.json`, `links.json`), sem cadastro paralelo | Continua uma pasta comum de imagens; nada a manter sincronizado. As fotos das categorias das Notas continuam dentro da pasta da categoria (cópia), como antes. |
 | Exportar | TXT e PDF montados pela interface com as regras do editor; o PDF impresso por uma janela escondida (`printToPDF`) | Sai o que você vê, sem dependência nova; imagens embutidas e nada buscado na internet. |
-| Configurações | Abas Geral / Módulos / Atalhos; as dos módulos no workspace (`.4notes/`), "iniciar com o computador" na máquina | Cada workspace com os seus ajustes; o que se usa toda hora continua na tela do módulo. |
+| Configurações | Abas Geral / Módulos; as dos módulos no workspace (`.4notes/`), "iniciar com o computador" na máquina | Cada workspace com os seus ajustes; o que se usa toda hora continua na tela do módulo. |
+| Módulos | Lista única em `lib/modules.ts` (com o tutorial de cada um); ativos/menu em `.4notes/app.json` guardando só os desativados | Ativar/desativar nunca toca nos dados; um módulo novo aparece no menu, nos atalhos, nas Configurações e nos tutoriais sem mais nada. |
+| Tutoriais | Painel ao lado do menu (`?`/F1), não modal, com os atalhos de cada módulo | Ajuda rápida sem sair do módulo; os atalhos ficam junto do módulo, num lugar só. |
 | Recorrência | Data da próxima ocorrência + regra, calculado ao abrir | Funciona com o app fechado, sem processo em segundo plano. |
 | Estado da interface | `.4notes/` | Separado dos dados; pode ser apagado. |
 | Editor | CodeMirror 6 | Editor de Markdown "de verdade" (o mesmo motor do Obsidian), com busca, desfazer e prévia ao vivo da formatação, listas, código e imagens. |
@@ -794,9 +822,9 @@ Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 
 
 ## Testes
 
-- `npm test` — testes unitários das regras puras (datas, recorrência, tarefas, títulos, nomes de arquivo, formatação, marcação de listas/tarefas, níveis e numeração automática das listas, blocos de código e detecção de linguagem, caminhos das imagens, menções em tarefas e notas (inclusive a tarefas), links refeitos ao mover uma nota de pasta, categorias e `categorias.json`, pastas pelo título, primeira linha como título, nomes de workspace, `mapa.json`, conversão da 1.0.0, grafo, layout sem cruzamentos e compactação, marcação escondida (proteção, formatos guardados, marcações válidas, links), endereços e links repetidos, título e ícone de páginas, favoritos do Chromium/Opera e HTML, `links.json` e plano da importação; na 1.3.1: categoria automática pelo título, exportar TXT e PDF, biblioteca de imagens (uso, cópias iguais, adotar, excluir), favoritos do Firefox/Zen — `profiles.ini`, `places.sqlite`, `.jsonlz4` com LZ4 —, foto das categorias dos Links e ordem pela URL; na 1.3.2: bloco de texto — linhas próprias, formatos cortados, listas, cerca maior, dentro de blocos — e `Ctrl+D` — maiúsculas, palavra inteira, volta ao começo, partes escondidas, só o `Ctrl+D` cria seleções — em `tests/text-blocks-and-multiselect.test.ts`).
+- `npm test` — testes unitários das regras puras (datas, recorrência, tarefas, títulos, nomes de arquivo, formatação, marcação de listas/tarefas, níveis e numeração automática das listas, blocos de código e detecção de linguagem, caminhos das imagens, menções em tarefas e notas (inclusive a tarefas), links refeitos ao mover uma nota de pasta, categorias e `categorias.json`, pastas pelo título, primeira linha como título, nomes de workspace, `mapa.json`, conversão da 1.0.0, grafo, layout sem cruzamentos e compactação, marcação escondida (proteção, formatos guardados, marcações válidas, links), endereços e links repetidos, título e ícone de páginas, favoritos do Chromium/Opera e HTML, `links.json` e plano da importação; na 1.3.1: categoria automática pelo título, exportar TXT e PDF, biblioteca de imagens (uso, cópias iguais, adotar, excluir), favoritos do Firefox/Zen — `profiles.ini`, `places.sqlite`, `.jsonlz4` com LZ4 —, foto das categorias dos Links e ordem pela URL; na 1.3.2: bloco de texto — linhas próprias, formatos cortados, listas, cerca maior, dentro de blocos — e `Ctrl+D` — maiúsculas, palavra inteira, volta ao começo, partes escondidas, só o `Ctrl+D` cria seleções — em `tests/text-blocks-and-multiselect.test.ts`; na 1.4.0: lista dos módulos e tutoriais completos, preferências dos módulos — leitura tolerante, só desativados, nunca todos desligados — em `tests/modules.test.ts`).
 - `npm run typecheck` — TypeScript estrito na interface e no Electron.
-- Durante o desenvolvimento, o app também foi testado de ponta a ponta dirigindo o Electron real (workspaces, notas, abas, formatação, listas, checklists e numeração automática, código e imagens colados e apagados, menus do clique direito, tarefas recorrentes com datas simuladas e app fechado, menções em tarefas e notas depois de reabrir, categorias criadas/renomeadas/excluídas com imagem e cor nas abas, notas arrastadas para categorias, pastas pelo título, menções a tarefas nas Notas e no Mapa, mapas mentais com conversão da 1.0.0, conexões e notas novas por arraste, cores, vários mapas, layout salvo, fechamento seguro; na 1.3.0: ícones nas categorias, + nas pastas pelo título, fechar notas de categoria sem pergunta, Markdown escondido com teclado, mouse e acentos compostos, links e blocos de código no editor, e o módulo Links inteiro com sites locais de teste e perfis falsos do Brave/Opera; na 1.3.1: as abas das Configurações com o "?", iniciar com o computador (simulado), configurações dos módulos gravadas no workspace, categoria automática pelo título, CAIXA ALTA nas pastas, exportar TXT/PDF (conferido com `pdftotext`), biblioteca de imagens — enviar, escolher, inserir, remover da nota, excluir, `Esc` com modais empilhados —, fotos nas categorias das Notas e dos Links, "Sem categoria", ordem pela URL, importação de perfis falsos do Zen — `places.sqlite` com `-wal` — e do Firefox — só a cópia `.jsonlz4` —, menções a links com o ícone do site, e o tema escuro; na 1.3.2: bloco de texto pela barra — cartão, copiar, editar no cartão, tela cheia, remover e desfazer, listas e negrito, bloco grande com rolagem, tema escuro —, colar texto/listas/trechos longos sem virar bloco (e código continuando a virar), `Ctrl+D` com duplo clique, digitação, `Ctrl+Z`, `Esc`, `Ctrl+clique` e `Ctrl+B`, nas Notas e no Mapa Mental, e o painel das Tarefas fechando ao clicar fora — com os casos que não podem fechar). O instalador do Windows foi testado no Wine (tela "Atalhos", reinstalação e desinstalação).
+- Durante o desenvolvimento, o app também foi testado de ponta a ponta dirigindo o Electron real (workspaces, notas, abas, formatação, listas, checklists e numeração automática, código e imagens colados e apagados, menus do clique direito, tarefas recorrentes com datas simuladas e app fechado, menções em tarefas e notas depois de reabrir, categorias criadas/renomeadas/excluídas com imagem e cor nas abas, notas arrastadas para categorias, pastas pelo título, menções a tarefas nas Notas e no Mapa, mapas mentais com conversão da 1.0.0, conexões e notas novas por arraste, cores, vários mapas, layout salvo, fechamento seguro; na 1.3.0: ícones nas categorias, + nas pastas pelo título, fechar notas de categoria sem pergunta, Markdown escondido com teclado, mouse e acentos compostos, links e blocos de código no editor, e o módulo Links inteiro com sites locais de teste e perfis falsos do Brave/Opera; na 1.3.1: as abas das Configurações com o "?", iniciar com o computador (simulado), configurações dos módulos gravadas no workspace, categoria automática pelo título, CAIXA ALTA nas pastas, exportar TXT/PDF (conferido com `pdftotext`), biblioteca de imagens — enviar, escolher, inserir, remover da nota, excluir, `Esc` com modais empilhados —, fotos nas categorias das Notas e dos Links, "Sem categoria", ordem pela URL, importação de perfis falsos do Zen — `places.sqlite` com `-wal` — e do Firefox — só a cópia `.jsonlz4` —, menções a links com o ícone do site, e o tema escuro; na 1.3.2: bloco de texto pela barra — cartão, copiar, editar no cartão, tela cheia, remover e desfazer, listas e negrito, bloco grande com rolagem, tema escuro —, colar texto/listas/trechos longos sem virar bloco (e código continuando a virar), `Ctrl+D` com duplo clique, digitação, `Ctrl+Z`, `Esc`, `Ctrl+clique` e `Ctrl+B`, nas Notas e no Mapa Mental, e o painel das Tarefas fechando ao clicar fora — com os casos que não podem fechar; na 1.4.0: ligar/desligar módulos pelo botão direito e pelas Configurações (quadros da animação, prévia do menu por cima do fundo, último módulo não desliga), dados intactos, `app.json`, "só o ícone", desligar o módulo aberto, `Ctrl+2` e menção para módulo desligado com "Ativar", tutoriais por F1, "?", Configurações e trocando de módulo, tema escuro e reinício do app). O instalador do Windows foi testado no Wine (tela "Atalhos", reinstalação e desinstalação).
 
 ## Onde mexer para…
 
@@ -820,6 +848,10 @@ Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 
 | Mudar a biblioteca de imagens | `electron/library.ts` (listar, uso, enviar, excluir), `app/components/shell/ImageLibraryDialog.vue`, `app/composables/useImageLibrary.ts` |
 | Mudar o TXT/PDF exportado | `app/lib/notes/export.ts` (texto, HTML e estilo do PDF), `electron/export.ts` (salvar, imprimir), `app/composables/useNoteExport.ts` (menu) |
 | Mudar as Configurações | `app/components/shell/SettingsDialog.vue`, `app/components/ui/SettingRow.vue`, `NotesSettings.vue`, `GraphSettings.vue`; iniciar com o computador: `electron/system.ts` |
+| Acrescentar um módulo / mudar nome, ícone, atalho ou tutorial | `app/lib/modules.ts` (e a página em `app/pages/`, o store e o repositório do módulo) |
+| Mudar quais módulos estão ativos / como ficam guardados | `app/stores/modules.ts`, regras em `app/lib/modules.ts` (`normalizePrefs`, `canDisable`) |
+| Mudar o menu lateral ou a animação de ligar/desligar | `app/components/shell/NavRail.vue` (tempos em `EFFECT_MS`, `stores/modules.ts`) |
+| Mudar o painel dos tutoriais | `app/components/shell/TutorialPanel.vue`, `app/composables/useTutorial.ts` |
 | Mudar a categoria automática pelo título | `app/lib/notes/auto-category.ts` (regra), `app/stores/notes.ts` (`considerAutoCategory`) |
 | Mudar as menções | `app/lib/tasks/mentions.ts` (tarefas), `app/lib/editor/mentions.ts` + `app/lib/notes/mention-links.ts` (notas), `app/stores/mentions.ts` (ponte) |
 | Mudar Tab/Shift+Tab ou a numeração das listas | `app/lib/editor/lists.ts` |

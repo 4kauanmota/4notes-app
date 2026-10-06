@@ -131,9 +131,14 @@ Toda imagem enviada ao 4notes — colada numa nota, enviada pela biblioteca ou e
 
 `Ctrl+,` (ou o ícone de ajustes na barra lateral). Toda configuração tem um **?** com uma explicação curta.
 
-- **Geral**: tema; **Iniciar com o computador** (abre o 4notes quando você entra no Windows — no app instalado); workspace e a biblioteca de imagens.
-- **Módulos**: os ajustes de cada módulo, guardados no workspace (`.4notes/`). **Notas**: categoria automática pelo título e exibição das pastas pelo título. **Mapa Mental**: notas sem conexões, estilo dos nós (círculos ou cards) e quando mostrar os nomes. Tarefas e Links ainda não têm configurações. O que se usa toda hora continua na tela do próprio módulo: ordenar os links, as opções de criação das tarefas, **Reorganizar o mapa** (barra do mapa ou botão direito no fundo do mapa).
-- **Atalhos**: a lista de atalhos de teclado.
+- **Geral**: tema; **Tutoriais e atalhos**; **Iniciar com o computador** (abre o 4notes quando você entra no Windows — no app instalado); workspace e a biblioteca de imagens.
+- **Módulos**: primeiro a seção **Geral** — **Módulos ativos** (ligue ou desligue Notas, Tarefas, Mapa Mental e Links) e **Menu lateral** (**Ícone e nome** ou **Só o ícone**, que deixa o menu mais estreito). Depois, os ajustes de cada módulo ativo, guardados no workspace (`.4notes/`). **Notas**: categoria automática pelo título e exibição das pastas pelo título. **Mapa Mental**: notas sem conexões, estilo dos nós (círculos ou cards) e quando mostrar os nomes. Tarefas e Links ainda não têm configurações. O que se usa toda hora continua na tela do próprio módulo: ordenar os links, as opções de criação das tarefas, **Reorganizar o mapa** (barra do mapa ou botão direito no fundo do mapa).
+
+## Módulos e tutoriais
+
+- **Ativar e desativar módulos**: em **Configurações → Módulos** ou com o **botão direito no menu lateral**. Desativar **só tira o módulo do menu**: as notas, tarefas, mapas e links dele continuam no workspace, e ao ativar de novo ele volta com tudo como estava. Pelo menos um módulo fica ativo. Ao ligar, o módulo se "conecta" ao menu — um fio sai dele até os outros, o ícone encaixa e um sinal corre até cada módulo; ao desligar, o contrário. Com as Configurações abertas em **Módulos**, o menu lateral fica visível por cima do fundo escurecido, para você ver as mudanças na hora.
+- Um atalho (`Ctrl+2`…) ou uma menção para um módulo desativado avisa e oferece **Ativar**.
+- **Tutoriais**: o **?** no fim do menu lateral (ou **`F1`**) abre um painel ao lado do menu com o tutorial do módulo em que você está — para que serve, o que dá para fazer, dicas que passam despercebidas e os atalhos dele. Ele fica aberto enquanto você usa o módulo e acompanha a troca de módulo; as abas no topo mostram os outros e o **Geral**. Fecha com ×, `F1`, o **?** ou `Esc`. Os atalhos de cada módulo ficam ali (a antiga aba **Atalhos** das Configurações saiu).
 
 **Vindo da 1.0.0?** Na primeira abertura da 1.0.1, as notas do Mapa Mental vão para o mapa `Principal`, os `[[links]]` viram conexões no `mapa.json` e saem do texto. Uma cópia das notas originais fica em `.4notes/backups/mindmap-1.0.0-<data>/`.
 
@@ -166,6 +171,7 @@ A configuração do app (qual workspace abrir, tema, tamanho da janela) fica sep
 | `↑` `↓` `Enter` `F2` `Delete` (Links) | Escolher, abrir, editar e excluir links  |
 | `@` (numa nota)               | Mencionar uma nota, tarefa ou link salvo         |
 | `Ctrl+,`                      | Configurações                                    |
+| `F1`                          | Tutorial do módulo atual (com os atalhos dele)   |
 | `Ctrl++` / `Ctrl+-` / `Ctrl+0`| Zoom da interface                                |
 
 Os menus do clique direito (notas, abas, tarefas, mapa, links e o de copiar/colar do editor, com as sugestões do corretor) seguem o tema do 4notes, no claro e no escuro.

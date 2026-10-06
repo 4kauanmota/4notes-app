@@ -1,25 +1,31 @@
 <script setup lang="ts">
 /**
- * Configurações, em três abas:
- *  - Geral: tema, iniciar com o computador, workspace (pasta de dados) e a
- *    biblioteca de imagens;
- *  - Módulos: as configurações de cada módulo que fazem sentido como ajuste
- *    permanente (guardadas no workspace). O que se usa toda hora — ordenar,
- *    reorganizar, criar — continua na tela do próprio módulo;
- *  - Atalhos de teclado.
+ * Configurações, em duas abas:
+ *  - Geral: tema, iniciar com o computador, workspace (pasta de dados), a
+ *    biblioteca de imagens e os tutoriais;
+ *  - Módulos: primeiro as configurações gerais dos módulos (quais estão ativos e
+ *    como aparecem no menu lateral); depois as de cada módulo ativo que fazem
+ *    sentido como ajuste permanente. Tudo guardado no workspace. O que se usa toda
+ *    hora — ordenar, reorganizar, criar — continua na tela do próprio módulo.
+ * Os atalhos de teclado ficam nos Tutoriais (F1), junto de cada módulo.
  * Toda configuração tem um "?" com uma explicação curta (SettingRow).
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { errorMessage, type LaunchAtLogin, type ThemePreference } from '#shared/ipc'
+import { useRoute } from 'vue-router'
 import { openImageLibrary } from '~/composables/useImageLibrary'
 import { notifyError } from '~/composables/useToasts'
 import { useTheme } from '~/composables/useTheme'
-import { desktop, modKeyLabel } from '~/lib/platform'
-import { useAppStore, type ModuleId, type SettingsTab } from '~/stores/app'
+import { openTutorial } from '~/composables/useTutorial'
+import { MODULES, moduleForPath, type ModuleId, type NavStyle } from '~/lib/modules'
+import { desktop } from '~/lib/platform'
+import { useAppStore, type SettingsTab } from '~/stores/app'
+import { useModulesStore } from '~/stores/modules'
 
 const app = useAppStore()
+const modules = useModulesStore()
+const route = useRoute()
 const { theme, setTheme } = useTheme()
-const mod = modKeyLabel()
 const changing = ref(false)
 const body = ref<HTMLElement>()
 
@@ -31,7 +37,6 @@ const tab = computed({
 const TABS: { id: SettingsTab; label: string; icon: string }[] = [
   { id: 'general', label: 'Geral', icon: 'settings' },
   { id: 'modules', label: 'Módulos', icon: 'layers' },
-  { id: 'shortcuts', label: 'Atalhos', icon: 'keyboard' },
 ]
 
 const themeModel = computed({
@@ -91,14 +96,32 @@ async function runWorkspace(action: () => Promise<boolean>) {
 
 // ── Módulos ─────────────────────────────────────────────────────────────────
 
-const MODULE_SECTIONS: { id: ModuleId; label: string; icon: string }[] = [
-  { id: 'notes', label: 'Notas', icon: 'notes' },
-  { id: 'tasks', label: 'Tarefas', icon: 'tasks' },
-  { id: 'mindmap', label: 'Mapa Mental', icon: 'graph' },
-  { id: 'links', label: 'Links', icon: 'link' },
-]
 /** Módulos que têm configurações aqui (os outros mostram o aviso). */
 const WITH_SETTINGS = new Set<ModuleId>(['notes', 'mindmap'])
+
+/** Configurações de cada módulo: só dos ativos (as dos desativados continuam guardadas). */
+const moduleSections = computed(() => modules.enabled.value)
+
+function setEnabled(id: ModuleId, on: boolean) {
+  modules.setEnabled(id, on)
+}
+
+const effectOf = (id: ModuleId) => modules.state.effects.find((effect) => effect.id === id)?.kind ?? null
+
+const navStyle = computed({
+  get: () => modules.state.prefs.navStyle,
+  set: (value: NavStyle) => modules.setNavStyle(value),
+})
+const NAV_STYLES: { value: NavStyle; label: string }[] = [
+  { value: 'icon-label', label: 'Ícone e nome' },
+  { value: 'icon', label: 'Só o ícone' },
+]
+
+/** Tutoriais: abre o do módulo atual, por cima do módulo (as Configurações fecham). */
+function showTutorials() {
+  app.closeSettings()
+  openTutorial(moduleForPath(route.path)?.id ?? 'general')
+}
 
 // Aberto já num módulo (ex.: o botão de ajustes do mapa): rola até ele
 watch(
@@ -114,26 +137,6 @@ watch(
     }
   },
 )
-
-const shortcuts = [
-  { keys: [mod, '1 / 2 / 3 / 4'], label: 'Ir para Notas / Tarefas / Mapa Mental / Links' },
-  { keys: [mod, 'N'], label: 'Nova nota, tarefa, nó ou link (no módulo atual)' },
-  { keys: [mod, 'W'], label: 'Fechar a aba de nota atual' },
-  { keys: [mod, 'Tab'], label: 'Próxima aba de nota' },
-  { keys: [mod, 'Shift', 'T'], label: 'Reabrir a última aba fechada' },
-  { keys: [mod, 'S'], label: 'Salvar agora (o salvamento já é automático)' },
-  { keys: [mod, 'F'], label: 'Procurar dentro da nota' },
-  { keys: [mod, 'D'], label: 'Selecionar também a próxima ocorrência do texto selecionado (edita todas juntas; Esc volta a um cursor)' },
-  { keys: [mod, 'B / I / U'], label: 'Negrito / itálico / sublinhado (selecione o texto para ver todas as opções)' },
-  { keys: [mod, 'K'], label: 'Transformar o texto selecionado em link' },
-  { keys: [mod, 'Shift', 'V'], label: 'Colar sem formatação (código não vira bloco)' },
-  { keys: [mod, 'Clique'], label: 'Abrir um endereço web' },
-  { keys: ['@'], label: 'Mencionar uma nota, tarefa ou link salvo (dentro de uma nota)' },
-  { keys: ['Shift', 'Arrastar'], label: 'Conectar notas no mapa (soltar no vazio cria uma nota)' },
-  { keys: ['Delete'], label: 'Excluir a nota ou a conexão selecionada no mapa' },
-  { keys: [mod, ','], label: 'Abrir as configurações' },
-  { keys: [mod, '+ / −'], label: 'Aumentar / diminuir o zoom da interface' },
-]
 
 const version = computed(() => app.state.bootstrap?.appVersion ?? '')
 </script>
@@ -169,6 +172,13 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
             <h3 class="section-label">Aparência</h3>
             <SettingRow label="Tema" help="“Sistema” acompanha o modo claro/escuro do Windows.">
               <UiSegmented v-model="themeModel" :options="themeOptions" />
+            </SettingRow>
+          </section>
+
+          <section>
+            <h3 class="section-label">Ajuda</h3>
+            <SettingRow label="Tutoriais e atalhos" help="Um resumo bem curto de cada módulo: para que serve, o que dá para fazer e os atalhos.">
+              <button class="btn btn-sm" data-action="tutorials" @click="showTutorials"><AppIcon name="help" :size="14" /> Abrir <kbd class="kbd">F1</kbd></button>
             </SettingRow>
           </section>
 
@@ -229,29 +239,56 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
             Ajustes que valem para o workspace <strong>{{ app.workspaceName() }}</strong>. O que você usa toda hora (ordenar, reorganizar, criar) fica
             na tela de cada módulo.
           </p>
-          <section v-for="section in MODULE_SECTIONS" :key="section.id" class="module" :data-module="section.id">
-            <h3 class="module-title"><AppIcon :name="section.icon" :size="16" /> {{ section.label }}</h3>
-            <div v-if="WITH_SETTINGS.has(section.id)" class="module-rows">
-              <NotesSettings v-if="section.id === 'notes'" />
-              <GraphSettings v-else-if="section.id === 'mindmap'" />
-            </div>
-            <p v-else class="no-settings">Sem nenhuma configuração disponível no momento.</p>
-          </section>
-        </template>
 
-        <!-- Atalhos -->
-        <section v-else class="shortcuts-section">
-          <div class="shortcuts">
-            <div v-for="item in shortcuts" :key="item.label" class="shortcut">
-              <span class="keys">
-                <template v-for="(key, index) in item.keys" :key="key">
-                  <span v-if="index" class="plus">+</span><kbd class="kbd">{{ key }}</kbd>
-                </template>
-              </span>
-              <span class="shortcut-label">{{ item.label }}</span>
-            </div>
-          </div>
-        </section>
+          <!-- Configurações gerais dos módulos -->
+          <section class="module" data-module="general">
+            <h3 class="module-title"><AppIcon name="layers" :size="16" /> Geral</h3>
+            <SettingRow label="Módulos ativos" help="Desativar só tira o módulo do menu lateral: as notas, tarefas, mapas e links dele continuam guardados.">
+              <span class="enabled-count">{{ modules.enabled.value.length }} de {{ MODULES.length }}</span>
+            </SettingRow>
+            <ul class="module-list" aria-label="Módulos ativos">
+              <li
+                v-for="item in MODULES"
+                :key="item.id"
+                class="module-card"
+                :class="{ off: !modules.isEnabled(item.id), [effectOf(item.id) ?? '']: !!effectOf(item.id) }"
+                :data-module-toggle="item.id"
+              >
+                <span class="module-tile"><AppIcon :name="item.icon" :size="18" /></span>
+                <span class="module-text">
+                  <span class="module-name">{{ item.name }}</span>
+                  <span class="module-desc">{{ item.description }}</span>
+                </span>
+                <span
+                  class="module-switch"
+                  :data-tip="modules.isEnabled(item.id) && !modules.canDisable(item.id) ? 'Pelo menos um módulo fica ativo' : undefined"
+                  data-tip-pos="left"
+                >
+                  <UiSwitch
+                    :model-value="modules.isEnabled(item.id)"
+                    :label="`Módulo ${item.name}`"
+                    :disabled="modules.isEnabled(item.id) && !modules.canDisable(item.id)"
+                    @update:model-value="(on: boolean) => setEnabled(item.id, on)"
+                  />
+                </span>
+              </li>
+            </ul>
+            <SettingRow label="Menu lateral" help="Como os módulos aparecem no menu da esquerda. Só o ícone deixa o menu mais estreito; o nome aparece ao passar o mouse.">
+              <UiSegmented v-model="navStyle" size="sm" :options="NAV_STYLES" aria-label="Menu lateral" />
+            </SettingRow>
+          </section>
+
+          <TransitionGroup name="module-section">
+            <section v-for="section in moduleSections" :key="section.id" class="module" :data-module="section.id">
+              <h3 class="module-title"><AppIcon :name="section.icon" :size="16" /> {{ section.name }}</h3>
+              <div v-if="WITH_SETTINGS.has(section.id)" class="module-rows">
+                <NotesSettings v-if="section.id === 'notes'" />
+                <GraphSettings v-else-if="section.id === 'mindmap'" />
+              </div>
+              <p v-else class="no-settings">Sem nenhuma configuração disponível no momento.</p>
+            </section>
+          </TransitionGroup>
+        </template>
       </div>
     </div>
   </UiModal>
@@ -409,31 +446,128 @@ section .section-label {
   color: var(--text-3);
   font-size: 13px;
 }
-.shortcuts-section {
-  border-bottom: none;
+.enabled-count {
+  font-size: 12.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
-.shortcuts {
+.module-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+  margin: 4px 0 14px;
+  padding: 0;
+  list-style: none;
 }
-.shortcut {
+.module-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  font-size: 13px;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition:
+    background var(--t-med),
+    border-color var(--t-med),
+    opacity var(--t-med);
 }
-.keys {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  min-width: 176px;
+.module-card.off {
+  background: transparent;
+  border-style: dashed;
 }
-.plus {
+.module-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  transition:
+    background var(--t-med),
+    color var(--t-med);
+}
+.off .module-tile {
+  background: var(--surface-3);
   color: var(--text-3);
-  font-size: 11px;
 }
-.shortcut-label {
+/* Ligou: o ícone "encaixa" com um anel de luz (o mesmo do menu lateral) */
+.module-tile::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 13px;
+  border: 2px solid var(--primary);
+  opacity: 0;
+  pointer-events: none;
+}
+.connect .module-tile {
+  animation: tile-plug 520ms var(--ease-spring);
+}
+.connect .module-tile::after {
+  animation: tile-ring 620ms 180ms var(--ease-out);
+}
+.disconnect .module-tile {
+  animation: tile-unplug 420ms var(--ease-out);
+}
+.module-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.module-name {
+  font-weight: 600;
+}
+.off .module-name {
   color: var(--text-2);
+}
+.module-desc {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.module-switch {
+  flex: none;
+  display: inline-flex;
+}
+.module-section-enter-active,
+.module-section-leave-active {
+  transition: opacity 200ms var(--ease-out);
+}
+.module-section-enter-from,
+.module-section-leave-to {
+  opacity: 0;
+}
+@keyframes tile-plug {
+  0% {
+    transform: translateX(8px) scale(0.8);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes tile-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+@keyframes tile-unplug {
+  0% {
+    transform: none;
+  }
+  45% {
+    transform: translateX(6px) scale(0.9);
+  }
+  100% {
+    transform: none;
+  }
 }
 .about {
   display: flex;

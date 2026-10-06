@@ -1,22 +1,27 @@
 <script setup lang="ts">
 /**
  * Casca do aplicativo: barra de título, navegação e a página do módulo atual.
- * A inicialização (carregar a pasta de dados) fica em stores/app.ts.
+ * A inicialização (carregar a pasta de dados) fica em stores/app.ts; os módulos
+ * (rotas, atalhos Ctrl+1…4, quais estão ativos) vêm de lib/modules.ts e stores/modules.ts.
  */
 import { nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useShortcuts } from '~/composables/useShortcuts'
+import { toggleTutorial } from '~/composables/useTutorial'
+import { MODULES, moduleById, moduleForPath, type ModuleId } from '~/lib/modules'
 import { desktop, hasDesktopApi } from '~/lib/platform'
-import { isModuleId, useAppStore } from '~/stores/app'
+import { useAppStore } from '~/stores/app'
+import { useModulesStore } from '~/stores/modules'
 
 const app = useAppStore()
+const modules = useModulesStore()
 const route = useRoute()
 const router = useRouter()
 
 onMounted(async () => {
   await app.startApp()
-  // Abre o último módulo usado (a rota "/" não tem tela própria)
-  if (app.state.phase === 'ready' && route.path === '/') await router.replace(`/${app.state.lastModule}`)
+  // Abre o último módulo usado (ou o primeiro ativo) — a rota "/" não tem tela própria
+  if (app.state.phase === 'ready' && route.path === '/') await router.replace(moduleById(modules.startModule.value).route)
   await nextTick()
   // Dois quadros depois do primeiro desenho, pede ao Electron para mostrar a janela
   // (assim ela já aparece pronta, sem "piscar").
@@ -26,24 +31,43 @@ onMounted(async () => {
 watch(
   () => route.path,
   (path) => {
-    const module = path.split('/')[1]
-    if (isModuleId(module)) app.rememberModule(module)
+    const module = moduleForPath(path)
+    if (module && modules.isEnabled(module.id)) app.rememberModule(module.id)
   },
 )
 
-const go = (path: string) => () => {
-  if (app.state.phase === 'ready') void router.push(path)
+// Módulo aberto foi desativado (ou a rota veio de outro lugar): vai para um módulo ativo
+watch(
+  () => [route.path, modules.state.prefs.disabled, app.state.phase] as const,
+  ([path, , phase]) => {
+    const module = phase === 'ready' ? moduleForPath(path) : null
+    if (module && !modules.isEnabled(module.id)) void router.replace(moduleById(modules.startModule.value).route)
+  },
+)
+
+/** Ctrl+1…4: abre o módulo (desativado: avisa e oferece "Ativar"). */
+function openModule(id: ModuleId) {
+  if (app.state.phase !== 'ready') return
+  const go = () => void router.push(moduleById(id).route)
+  if (modules.requireModule(id, go)) go()
 }
 
 useShortcuts({
-  'mod+1': go('/notes'),
-  'mod+2': go('/tasks'),
-  'mod+3': go('/mindmap'),
-  'mod+4': go('/links'),
+  ...Object.fromEntries(MODULES.map((module) => [`mod+${module.key}`, () => openModule(module.id)])),
   'mod+,': () => {
     if (app.state.phase === 'ready') app.openSettings()
   },
 })
+// F1: tutorial do módulo atual (também com o cursor num campo de texto)
+useShortcuts(
+  {
+    f1: () => {
+      if (app.state.phase !== 'ready') return false
+      toggleTutorial(moduleForPath(route.path)?.id ?? 'general')
+    },
+  },
+  { allowInInputs: true },
+)
 
 function reload() {
   window.location.reload()
@@ -83,6 +107,7 @@ function reload() {
 
     <SettingsDialog v-if="app.state.phase === 'ready'" />
     <ImageLibraryDialog v-if="app.state.phase === 'ready'" />
+    <TutorialPanel v-if="app.state.phase === 'ready'" />
     <DialogHost />
     <ToastHost />
     <ContextMenuHost />

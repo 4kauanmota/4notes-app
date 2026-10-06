@@ -116,7 +116,8 @@ watchEffect(() => {
   align-items: center;
   gap: 10px;
   height: var(--titlebar-h);
-  padding: 0 14px 0 20px;
+  /* A logo fica centralizada sobre o menu lateral (que estreita com "só o ícone") */
+  padding: 0 14px 0 calc(var(--rail-w) / 2 - 12px);
   /* Reserva o espaço dos botões nativos (Window Controls Overlay) */
   padding-right: calc(100% - env(titlebar-area-width, 100%) + 14px);
   background: var(--chrome);
@@ -124,6 +125,7 @@ watchEffect(() => {
   font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
+  transition: padding-left 260ms var(--ease-out);
 }
 .titlebar.platform-darwin {
   padding-left: 84px;

@@ -7,7 +7,8 @@
  *   links Markdown dentro do texto (lib/notes/mention-links.ts). Um link salvo é um
  *   link comum, com o ícone do site na frente.
  * - Lista o que pode ser mencionado e abre o que foi mencionado (vai para o
- *   módulo certo, troca de mapa se precisar).
+ *   módulo certo, troca de mapa se precisar). Módulo desativado: avisa e oferece
+ *   "Ativar" (stores/modules.ts) em vez de abrir uma tela que não está no menu.
  * - Quando uma nota, uma categoria ou um mapa muda de nome no app
  *   (lib/note-events.ts), ou uma tarefa muda de título, corrige as menções — nas
  *   tarefas, nas Notas, no mapa aberto e nos arquivos dos outros mapas — para
@@ -28,6 +29,7 @@ import type { NoteRef } from '~/lib/tasks/mentions'
 import type { Task } from '~/lib/tasks/model'
 import { debounce } from '~/lib/utils/async'
 import { useLinksStore } from './links'
+import { useModulesStore } from './modules'
 import { useMindmapStore } from './mindmap'
 import { noteTitle, useNotesStore } from './notes'
 import { useTasksStore } from './tasks'
@@ -113,6 +115,7 @@ export function filterCandidates(list: MentionCandidate[], query: string, limit 
 
 /** Abre a nota da menção no módulo dela. */
 export async function openMention(ref: NoteRef): Promise<void> {
+  if (!useModulesStore().requireModule(ref.kind === 'note' ? 'notes' : 'mindmap', () => void openMention(ref))) return
   const missing = () => {
     showToast({ message: `A nota “${ref.title}” não foi encontrada (foi apagada ou renomeada fora do app).`, icon: 'alert', tone: 'error' })
   }
@@ -236,7 +239,8 @@ export function openMentionPath(path: string): void {
       showToast({ message: 'A tarefa não foi encontrada (foi excluída).', icon: 'alert', tone: 'error' })
       return
     }
-    void Promise.resolve(navigateTo('/tasks')).then(() => tasks.openEditor(taskId))
+    const open = () => void Promise.resolve(navigateTo('/tasks')).then(() => tasks.openEditor(taskId))
+    if (useModulesStore().requireModule('tasks', open)) open()
     return
   }
   const ref = refFromPath(path)

@@ -4,6 +4,7 @@ import { desktop, hasDesktopApi } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
 import { useLinksStore } from '~/stores/links'
 import { useMindmapStore } from '~/stores/mindmap'
+import { useModulesStore } from '~/stores/modules'
 import { useNotesStore } from '~/stores/notes'
 import { useTasksStore } from '~/stores/tasks'
 
@@ -15,5 +16,6 @@ export default defineNuxtPlugin(() => {
     tasks: useTasksStore(),
     mindmap: useMindmapStore(),
     links: useLinksStore(),
+    modules: useModulesStore(),
   }
 })

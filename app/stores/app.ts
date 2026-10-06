@@ -4,34 +4,32 @@
  * Esta parte conhece os quatro módulos ao mesmo tempo só para tarefas de
  * infraestrutura (carregar, salvar tudo antes de fechar, sincronizar ao voltar para
  * a janela). A única ligação entre os módulos são as menções (stores/mentions.ts).
+ * Quais módulos estão ativos (e o último aberto) fica em stores/modules.ts: todos
+ * os módulos carregam e salvam os dados, ativos ou não.
  */
 import { reactive } from 'vue'
 import { errorCode, errorMessage, workspaceNameProblem, type BootstrapInfo, type DataDirStatus } from '#shared/ipc'
 import { choiceDialog, confirmDialog, promptDialog } from '~/composables/useDialog'
 import { notifyError, showToast } from '~/composables/useToasts'
 import { desktop, hasDesktopApi } from '~/lib/platform'
-import { createJsonWriter, readJsonFile } from '~/lib/storage/json-file'
-import { DATA_PATHS } from '~/lib/storage/paths'
+import type { ModuleId } from '~/lib/modules'
 import { useLinksStore } from './links'
 import { flushMentionUpdates, installMentionTracking } from './mentions'
 import { useMindmapStore } from './mindmap'
+import { useModulesStore } from './modules'
 import { useNotesStore } from './notes'
 import { useTasksStore } from './tasks'
 
 export type AppPhase = 'booting' | 'no-desktop' | 'setup' | 'ready' | 'error'
-/** Abas das Configurações. */
-export type SettingsTab = 'general' | 'modules' | 'shortcuts'
-export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links'
-
-export const MODULES: readonly ModuleId[] = ['notes', 'tasks', 'mindmap', 'links']
-export const isModuleId = (value: unknown): value is ModuleId => typeof value === 'string' && (MODULES as readonly string[]).includes(value)
+/** Abas das Configurações (os atalhos ficam nos Tutoriais, F1). */
+export type SettingsTab = 'general' | 'modules'
+export { isModuleId, type ModuleId } from '~/lib/modules'
 
 const state = reactive({
   phase: 'booting' as AppPhase,
   bootstrap: null as BootstrapInfo | null,
   dataDir: null as DataDirStatus | null,
   error: null as string | null,
-  lastModule: 'notes' as ModuleId,
   settingsOpen: false,
   settingsTab: 'general' as SettingsTab,
   /** Módulo a mostrar ao abrir a aba Módulos (ex.: o botão de ajustes do mapa leva ao Mapa Mental). */
@@ -49,32 +47,26 @@ const notes = useNotesStore()
 const tasks = useTasksStore()
 const mindmap = useMindmapStore()
 const links = useLinksStore()
-const appUiWriter = createJsonWriter(DATA_PATHS.appUiState)
+const modules = useModulesStore()
 
 async function loadModules(): Promise<void> {
   installMentionTracking()
-  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), readLastModule()])
+  // Todos os módulos carregam (ativos ou não): desativar só tira o módulo do menu
+  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), modules.load()])
   const failure = results.find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined
   if (failure) throw failure.reason
 }
 
-async function readLastModule(): Promise<void> {
-  const result = await readJsonFile(DATA_PATHS.appUiState)
-  const value = result.status === 'ok' ? (result.data as { lastModule?: unknown })?.lastModule : null
-  if (isModuleId(value)) state.lastModule = value
-}
-
+/** Guarda o último módulo aberto (só depois de carregar o workspace). */
 export function rememberModule(module: ModuleId): void {
-  if (state.phase !== 'ready' || state.lastModule === module) return
-  state.lastModule = module
-  appUiWriter.save(() => ({ lastModule: state.lastModule }))
+  if (state.phase === 'ready') modules.remember(module)
 }
 
 /** Salva tudo que estiver pendente (chamado antes de fechar a janela). */
 export async function flushEverything(): Promise<void> {
   // Primeiro as menções que ainda estavam para ser corrigidas (elas mexem nas notas)
   await flushMentionUpdates().catch((error) => console.warn('[4notes] Falha ao atualizar menções:', error))
-  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), appUiWriter.flush()])
+  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), modules.flush()])
 }
 
 let focusTimer: ReturnType<typeof setTimeout> | null = null
