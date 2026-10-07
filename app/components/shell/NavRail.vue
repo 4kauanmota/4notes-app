@@ -417,9 +417,6 @@ function toggleTheme(event: MouseEvent) {
   place-items: center;
   transition: transform var(--t-med) var(--ease-spring);
 }
-.rail-item:active .rail-icon {
-  transform: scale(0.88);
-}
 .rail-label {
   max-height: 16px;
   overflow: hidden;
@@ -475,9 +472,6 @@ function toggleTheme(event: MouseEvent) {
 .rail-button.on {
   background: var(--primary-soft);
   color: var(--primary-text);
-}
-.rail-button:active {
-  transform: scale(0.9);
 }
 
 .spin-enter-active,

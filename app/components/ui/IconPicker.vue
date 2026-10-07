@@ -83,9 +83,6 @@ const pick = (value: string | null) => {
   background: var(--hover);
   color: var(--text);
 }
-.option:active {
-  transform: scale(0.92);
-}
 .option.active {
   background: color-mix(in srgb, var(--c) 18%, var(--surface));
   color: var(--c);

@@ -511,9 +511,6 @@ async function openMenu(note: QuickNote) {
   background: var(--hover);
   color: var(--text);
 }
-.tab-new:active {
-  transform: scale(0.88) rotate(90deg);
-}
 
 .tab-enter-active {
   transition: opacity 180ms var(--ease-out), transform 240ms var(--ease-spring);

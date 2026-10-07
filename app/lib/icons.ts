@@ -15,7 +15,10 @@ export const ICONS: Record<string, string> = {
   'chevron-right': '<path d="m9 6 6 6-6 6"/>',
   'chevron-left': '<path d="m15 6-6 6 6 6"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
-  settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  // Configurações: engrenagem (só para abrir as configurações)
+  settings: '<path d="M9.69 5.29L10.09 3A9.2 9.2 0 0 1 13.91 3L14.31 5.29A7.1 7.1 0 0 1 15.11 5.62L17.01 4.28A9.2 9.2 0 0 1 19.72 6.99L18.38 8.89A7.1 7.1 0 0 1 18.71 9.69L21 10.09A9.2 9.2 0 0 1 21 13.91L18.71 14.31A7.1 7.1 0 0 1 18.38 15.11L19.72 17.01A9.2 9.2 0 0 1 17.01 19.72L15.11 18.38A7.1 7.1 0 0 1 14.31 18.71L13.91 21A9.2 9.2 0 0 1 10.09 21L9.69 18.71A7.1 7.1 0 0 1 8.89 18.38L6.99 19.72A9.2 9.2 0 0 1 4.28 17.01L5.62 15.11A7.1 7.1 0 0 1 5.29 14.31L3 13.91A9.2 9.2 0 0 1 3 10.09L5.29 9.69A7.1 7.1 0 0 1 5.62 8.89L4.28 6.99A9.2 9.2 0 0 1 6.99 4.28L8.89 5.62A7.1 7.1 0 0 1 9.69 5.29Z"/><circle cx="12" cy="12" r="3"/>',
+  // Ajustes/opções de algo (ex.: "Mais opções" da nova tarefa)
+  sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',

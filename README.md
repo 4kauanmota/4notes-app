@@ -130,7 +130,7 @@ Toda imagem enviada ao 4notes — colada numa nota, enviada pela biblioteca ou e
 
 ## Configurações
 
-`Ctrl+,` (ou o ícone de ajustes na barra lateral). Toda configuração tem um **?** com uma explicação curta.
+`Ctrl+,` (ou a **engrenagem** no fim do menu lateral). Toda configuração tem um **?** com uma explicação curta.
 
 - **Geral**: tema; **Tutoriais e atalhos**; **Iniciar com o computador** (abre o 4notes quando você entra no Windows — no app instalado); workspace e a biblioteca de imagens.
 - **Módulos**: primeiro a seção **Geral** — **Módulos ativos** (ligue ou desligue Notas, Tarefas, Mapa Mental e Links; arraste para mudar a ordem) e **Menu lateral** (**Ícone e nome** ou **Só o ícone**, que deixa o menu mais estreito). Depois, os ajustes de cada módulo ativo, guardados no workspace (`.4notes/`). **Notas**: categoria automática pelo título e exibição das pastas pelo título. **Mapa Mental**: notas sem conexões, estilo dos nós (círculos ou cards) e quando mostrar os nomes. Tarefas e Links ainda não têm configurações. O que se usa toda hora continua na tela do próprio módulo: ordenar os links, as opções de criação das tarefas, **Reorganizar o mapa** (barra do mapa ou botão direito no fundo do mapa).
@@ -178,11 +178,13 @@ A configuração do app (qual workspace abrir, tema, tamanho da janela) fica sep
 
 Os menus do clique direito (notas, abas, tarefas, mapa, links e o de copiar/colar do editor, com as sugestões do corretor) seguem o tema do 4notes, no claro e no escuro.
 
+Clicar num ícone (botões de ícone, módulos e botões do menu lateral, abas das Configurações e do tutorial, botões das barras e dos blocos) faz o ícone "afundar" e voltar num movimento curto — o mesmo em todo o app, para ações e para o que abre menus, painéis ou módulos. Com "reduzir movimento" ligado no sistema, não há animação.
+
 Nas Tarefas, clicar fora do painel de edição (na lista, nas categorias…) fecha o painel; o clique continua fazendo o que faria (clicar em outra tarefa abre a outra). Um painel de **Nova tarefa** com algo já escrito não fecha assim, para não perder o rascunho.
 
 Na adição rápida de tarefas: `Estudar Godot amanhã #estudos` já define data e categoria (se a categoria Estudos existir). Digite **`@`** (na barra, no título ou nos detalhes da tarefa) ou use **Mencionar nota** no painel da tarefa para mencionar uma nota das Notas ou de qualquer mapa: a menção aparece na tarefa e um clique abre a nota. Ela continua funcionando depois de fechar o app e acompanha a nota se você a renomear no 4notes.
 
-No Mapa Mental: clique numa nota para abri-la (clicar no vazio tira a seleção e fecha o painel); com o mouse sobre uma nota, as setas que saem dela ficam com a cor dela; **arraste** uma nota para movê-la; **Shift + arrastar** de uma nota até outra cria uma conexão — soltando no vazio, o 4notes pede um nome e cria ali uma nota nova já conectada. Selecione uma nota ou conexão e aperte **`Delete`** para excluí-la (com **Desfazer**); clique numa conexão e use o **×** para removê-la; o **botão direito** no fundo cria uma nota ali ou **reorganiza o mapa**. **Reorganizar** (também na barra do mapa) deixa as linhas curtas e só as alonga quando é preciso para as notas não se encostarem e as linhas não se cruzarem. O botão de ajustes da barra abre as configurações do mapa (Configurações → Módulos → Mapa Mental).
+No Mapa Mental: clique numa nota para abri-la (clicar no vazio tira a seleção e fecha o painel); com o mouse sobre uma nota, as setas que saem dela ficam com a cor dela; **arraste** uma nota para movê-la; **Shift + arrastar** de uma nota até outra cria uma conexão — soltando no vazio, o 4notes pede um nome e cria ali uma nota nova já conectada. Selecione uma nota ou conexão e aperte **`Delete`** para excluí-la (com **Desfazer**); clique numa conexão e use o **×** para removê-la; o **botão direito** no fundo cria uma nota ali ou **reorganiza o mapa**. **Reorganizar** (também na barra do mapa) deixa as linhas curtas e só as alonga quando é preciso para as notas não se encostarem e as linhas não se cruzarem. As configurações do mapa ficam em Configurações → Módulos → Mapa Mental; a barra do mapa tem só o seletor de mapas, a busca (`Ctrl+K`), **Nova nota** e **Reorganizar**.
 
 ## Estrutura do projeto
 

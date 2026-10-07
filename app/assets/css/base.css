@@ -232,9 +232,6 @@ a {
   background: var(--hover);
   color: var(--text);
 }
-.icon-btn:active {
-  transform: scale(0.92);
-}
 .icon-btn.is-active {
   background: var(--active);
   color: var(--primary-text);

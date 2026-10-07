@@ -264,11 +264,10 @@ useShortcuts(
     <div v-if="hasNotes" class="map-footer" :style="{ right: `${panelWidth + 16}px` }">
       <div class="footer-info">
         <span class="map-stats">{{ stats }}</span>
-        <Transition name="fade" mode="out-in">
-          <span v-if="selectedEdge" key="edge" class="map-hint edge-hint">
+        <Transition name="fade">
+          <span v-if="selectedEdge" class="map-hint edge-hint">
             <AppIcon name="unlink" :size="13" /> Conexão selecionada — clique no × ou pressione Delete para remover
           </span>
-          <span v-else key="tip" class="map-hint">Arraste para mover · Shift + arrastar até outra nota conecta (no vazio, cria uma nota)</span>
         </Transition>
       </div>
       <div class="zoom-controls">
@@ -360,10 +359,5 @@ useShortcuts(
 .panel-leave-to {
   transform: translateX(48px);
   opacity: 0;
-}
-@media (max-width: 1100px) {
-  .map-hint:not(.edge-hint) {
-    display: none;
-  }
 }
 </style>

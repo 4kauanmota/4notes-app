@@ -107,7 +107,7 @@ defineExpose({ focus: () => input.value?.focus() })
       <MentionChip v-for="item in tasks.state.quickAddMentions" :key="refKey(item)" :mention="item" removable @remove="removeMention(item)" />
     </TransitionGroup>
     <button type="button" class="icon-btn qa-more" data-tip="Mais opções (data, recorrência…)" aria-label="Mais opções" @click="moreOptions">
-      <AppIcon name="settings" :size="16" />
+      <AppIcon name="sliders" :size="16" />
     </button>
     <NotePicker
       v-if="mentionQuery !== null && input"

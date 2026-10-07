@@ -19,7 +19,7 @@ import { syntaxTree } from '@codemirror/language'
 import { Annotation, EditorSelection, EditorState, Prec, StateField, type Extension, type Range, type Transaction } from '@codemirror/state'
 import { Decoration, EditorView, keymap, WidgetType, type Command, type DecorationSet } from '@codemirror/view'
 import { highlightTree } from '@lezer/highlight'
-import { iconSvg } from '../icons'
+import { ICONS, iconSvg } from '../icons'
 import { focusChanged, focusTracking, isFocused } from './focus'
 import { editorHost } from './host'
 import { findLanguage, isTextBlockInfo, languageLabel } from './languages'
@@ -506,12 +506,19 @@ function offsetAtPoint(code: HTMLElement, x: number, y: number): number {
   return offset
 }
 
+/** Troca o desenho do ícone do botão (o mesmo <svg>: a animação do clique continua nele). */
+function setButtonIcon(button: HTMLElement, name: string): void {
+  const svg = button.querySelector('svg')
+  if (svg) svg.innerHTML = ICONS[name] ?? ''
+  else button.innerHTML = iconSvg(name, 15)
+}
+
 function flashCopied(button: HTMLElement): void {
   button.classList.add('done')
-  button.innerHTML = iconSvg('check', 15)
+  setButtonIcon(button, 'check')
   setTimeout(() => {
     button.classList.remove('done')
-    button.innerHTML = iconSvg('copy', 15)
+    setButtonIcon(button, 'copy')
   }, 1400)
 }
 

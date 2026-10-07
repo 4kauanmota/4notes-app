@@ -1,18 +1,15 @@
 <script setup lang="ts">
 /**
- * Barra flutuante do mapa: mapa aberto, busca, nova nota, reorganizar o mapa e o
- * atalho para as configurações do mapa (Configurações › Módulos › Mapa Mental).
+ * Barra flutuante do mapa: mapa aberto, busca, nova nota e reorganizar o mapa.
+ * As configurações do mapa ficam em Configurações › Módulos › Mapa Mental; o atalho
+ * da busca (Ctrl+K) está no tutorial.
  */
 import { computed, ref, watch } from 'vue'
 import { toPlainText } from '~/lib/editor/markup'
-import { modKeyLabel } from '~/lib/platform'
-import { useAppStore } from '~/stores/app'
 import { useMindmapStore, type PermanentNote } from '~/stores/mindmap'
 
 const emit = defineEmits<{ new: []; relayout: [] }>()
 const mindmap = useMindmapStore()
-const app = useAppStore()
-const mod = modKeyLabel()
 const input = ref<HTMLInputElement>()
 const focused = ref(false)
 const activeIndex = ref(0)
@@ -65,8 +62,7 @@ defineExpose({ focusSearch: () => input.value?.focus() })
         @blur="focused = false"
         @keydown="onKeydown"
       />
-      <kbd v-if="!mindmap.state.search" class="kbd">{{ mod }} K</kbd>
-      <button v-else class="icon-btn sm" aria-label="Limpar busca" @mousedown.prevent="mindmap.state.search = ''"><AppIcon name="x" :size="13" /></button>
+      <button v-if="mindmap.state.search" class="icon-btn sm" aria-label="Limpar busca" @mousedown.prevent="mindmap.state.search = ''"><AppIcon name="x" :size="13" /></button>
       <Transition name="pop">
         <ul v-if="focused && mindmap.state.search" class="results">
           <li
@@ -99,15 +95,6 @@ defineExpose({ focusSearch: () => input.value?.focus() })
       @click="emit('relayout')"
     >
       <AppIcon name="refresh" :size="17" />
-    </button>
-    <button
-      class="icon-btn tool-btn"
-      data-action="map-settings"
-      data-tip="Configurações do mapa"
-      aria-label="Configurações do mapa"
-      @click="app.openSettings('modules', 'mindmap')"
-    >
-      <AppIcon name="settings" :size="17" />
     </button>
   </div>
 </template>
