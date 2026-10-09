@@ -1,8 +1,8 @@
 {
   "name": "4notes",
   "productName": "4notes",
-  "version": "1.4.2",
-  "description": "Aplicativo desktop pessoal de notas, tarefas, mapa mental e links — 100% local.",
+  "version": "1.5.0",
+  "description": "Aplicativo pessoal de notas, tarefas, mapa mental e links — 100% local, no computador (Windows) e no celular (Android).",
   "author": "Kauan",
   "license": "UNLICENSED",
   "private": true,
@@ -11,6 +11,13 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "nuxt generate && node scripts/build-electron.mjs",
+    "build:web": "nuxt generate",
+    "build:windows": "npm run dist:win",
+    "build:android": "node scripts/android.mjs build",
+    "build:ios": "node scripts/ios.mjs",
+    "android:sync": "node scripts/android.mjs sync",
+    "android:open": "node scripts/android.mjs open",
+    "android:run": "node scripts/android.mjs run",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
@@ -21,6 +28,11 @@
     "postinstall": "nuxt prepare"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.4",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-markdown": "^6.5.2",

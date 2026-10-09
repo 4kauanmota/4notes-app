@@ -5,14 +5,16 @@
 import type { BookmarkFolder, BrowserSource, LinkMeta } from '#shared/ipc'
 import { joinPath } from '../files/filename'
 import { desktop } from '../platform'
-import { readJsonFile, toJson } from '../storage/json-file'
+import { readJsonFile } from '../storage/json-file'
 import { DATA_PATHS } from '../storage/paths'
 import { defaultLinksData, normalizeLinksFile, serializeLinks, type LinkSort, type LinksData } from './model'
 
 export type LinksLoadResult = { status: 'ok'; data: LinksData; raw: string | null } | { status: 'invalid'; error: string }
 
-export interface LinksUiState {
-  sort: LinkSort
+/** Ordem da lista, a partir da seção "links" do settings.json (tolerante). */
+export function normalizeLinksSort(section: unknown): LinkSort {
+  const sort = section && typeof section === 'object' ? (section as { sort?: unknown }).sort : undefined
+  return sort === 'name' || sort === 'url' ? sort : 'recent'
 }
 
 const WEEKDAY_NAMES = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado']
@@ -63,11 +65,4 @@ export const linksRepository = {
 
   reveal: () => desktop().files.reveal(DATA_PATHS.linksFile),
   openExternal: (url: string) => desktop().shell.openExternal(url),
-
-  async readUiState(): Promise<LinksUiState> {
-    const result = await readJsonFile(DATA_PATHS.linksUiState)
-    const data = (result.status === 'ok' && result.data && typeof result.data === 'object' ? result.data : {}) as Record<string, unknown>
-    return { sort: data.sort === 'name' || data.sort === 'url' ? data.sort : 'recent' }
-  },
-  serializeUiState: (state: LinksUiState) => toJson(state),
 }

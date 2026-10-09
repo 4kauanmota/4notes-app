@@ -1,8 +1,9 @@
 /**
- * Preferências dos módulos, guardadas no workspace (.4notes/app.json):
- *  - quais módulos estão ativos (aparecem no menu lateral) e em que ordem;
- *  - como o menu lateral mostra os módulos (ícone e nome, ou só o ícone);
- *  - o último módulo aberto.
+ * Preferências dos módulos:
+ *  - quais módulos estão ativos (aparecem no menu lateral) e em que ordem, e como o
+ *    menu lateral mostra os módulos (ícone e nome, ou só o ícone) — configurações do
+ *    workspace (.4notes/settings.json), as mesmas no computador e no celular;
+ *  - o último módulo aberto — deste aparelho (lib/storage/device-state.ts).
  *
  * Desativar ou reorganizar um módulo é só uma preferência de exibição: o store dele
  * continua carregando, salvando e acompanhando os arquivos normalmente (nada é
@@ -27,8 +28,8 @@ import {
   type NavStyle,
 } from '~/lib/modules'
 import { playModuleSound } from '~/lib/sounds'
-import { createJsonWriter, readJsonFile } from '~/lib/storage/json-file'
-import { DATA_PATHS } from '~/lib/storage/paths'
+import { readDeviceState, writeDeviceState } from '~/lib/storage/device-state'
+import { flushSettings, onSettingsChange, settingsSection, updateSettingsSection } from './settings'
 
 /** Animação de ligar/desligar um módulo no menu lateral (NavRail.vue). */
 export interface ModuleEffect {
@@ -52,26 +53,22 @@ const state = reactive({
   effects: [] as ModuleEffect[],
 })
 
-/** Outras chaves do app.json (de outra versão do 4notes): continuam no arquivo. */
-let extra: Record<string, unknown> = {}
 let seq = 0
-const writer = createJsonWriter(DATA_PATHS.appUiState, 250)
 
 function save(): void {
-  writer.save(() => ({
-    ...extra,
-    lastModule: state.lastModule,
-    modules: { disabled: state.prefs.disabled, order: state.prefs.order, navStyle: state.prefs.navStyle },
-  }))
+  updateSettingsSection('modules', { disabled: state.prefs.disabled, order: state.prefs.order, navStyle: state.prefs.navStyle })
 }
 
 async function load(): Promise<void> {
-  const result = await readJsonFile(DATA_PATHS.appUiState)
-  const data = result.status === 'ok' && result.data && typeof result.data === 'object' ? (result.data as Record<string, unknown>) : {}
-  extra = Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'lastModule' && key !== 'modules'))
-  state.prefs = normalizePrefs(data)
-  if (isModuleId(data.lastModule)) state.lastModule = data.lastModule
+  state.prefs = normalizePrefs({ modules: settingsSection('modules') })
+  const last = readDeviceState('app')?.lastModule
+  if (isModuleId(last)) state.lastModule = last
 }
+
+// Mudou em outro aparelho (settings.json relido): vale aqui também
+onSettingsChange((changed) => {
+  if (changed.has('modules')) state.prefs = normalizePrefs({ modules: settingsSection('modules') })
+})
 
 const enabled = computed(() => enabledModules(state.prefs))
 /** Todos os módulos, na ordem do menu (as Configurações listam assim). */
@@ -84,7 +81,7 @@ const startModule = computed<ModuleId>(() => (isEnabled(state.lastModule) ? stat
 function remember(module: ModuleId): void {
   if (state.lastModule === module) return
   state.lastModule = module
-  save()
+  writeDeviceState('app', { lastModule: module })
 }
 
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -173,7 +170,7 @@ export function useModulesStore() {
     ordered,
     startModule,
     load,
-    flush: () => writer.flush(),
+    flush: flushSettings,
     remember,
     isEnabled,
     canDisable: (id: ModuleId) => canDisable(state.prefs, id),

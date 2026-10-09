@@ -131,12 +131,6 @@ export const editorTheme = EditorView.theme({
     userSelect: 'none',
     cursor: 'default',
   },
-  '.cm-codeblock-head-editing': { padding: '6px calc(var(--editor-padding-x, 28px) - 14px) 0' },
-  '.cm-codeblock-head-editing .cm-codeblock-head': { backgroundColor: 'var(--surface-3)', borderRadius: '10px 10px 0 0' },
-  // Cartão aberto (editando o código): o rodapé fecha o cartão no lugar da cerca ```
-  '.cm-codeblock-foot-editing': { padding: '0 calc(var(--editor-padding-x, 28px) - 14px) 6px' },
-  '.cm-codeblock-foot': { height: '8px', backgroundColor: 'var(--surface-3)', borderRadius: '0 0 10px 10px' },
-  '.cm-codeblock-gap': { height: '6px', backgroundColor: 'var(--surface-3)' },
   '.cm-codeblock-lang': {
     display: 'inline-flex',
     alignItems: 'center',
@@ -172,32 +166,10 @@ export const editorTheme = EditorView.theme({
   '.cm-codeblock-btn:hover': { backgroundColor: 'var(--hover)', color: 'var(--text)' },
   '.cm-codeblock-btn[data-action=remove]:hover': { color: 'var(--danger)' },
   '.cm-codeblock-btn.done': { color: 'var(--success)' },
-  '.cm-codeblock-pre': {
-    margin: '0',
-    maxHeight: 'var(--codeblock-max-height, 360px)',
-    overflow: 'auto',
-    padding: '6px 14px 8px',
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.88em',
-    lineHeight: '1.72',
-    whiteSpace: 'pre',
-    tabSize: '4',
-    color: 'var(--text)',
-  },
-  '.cm-md-codeblock.cm-md-codeblock-first': { borderTopLeftRadius: '0', borderTopRightRadius: '0' },
 
   // Blocos de texto (```text): o mesmo cartão, com a fonte do texto e linhas que quebram
   '.cm-codeblock-kind': { display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: '600', letterSpacing: '0.01em' },
   '.cm-codeblock-kind svg': { opacity: '0.8' },
-  '.cm-textblock .cm-codeblock-pre': {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '1em',
-    whiteSpace: 'pre-wrap',
-    overflowWrap: 'anywhere',
-    overflowX: 'hidden',
-  },
-  // O <code> de dentro teria a fonte monoespaçada do navegador
-  '.cm-textblock .cm-codeblock-pre code': { fontFamily: 'inherit', fontSize: 'inherit' },
   '.cm-md-codeblock.cm-md-textblock': { fontFamily: 'var(--font-ui)', fontSize: '1em' },
   // O Markdown marca o conteúdo das cercas como código (monoespaçado): no bloco de texto, não
   '.cm-md-textblock *': { fontFamily: 'inherit !important', fontSize: 'inherit !important' },
@@ -309,7 +281,9 @@ export const editorTheme = EditorView.theme({
   },
   '.cm-searchMatch': { backgroundColor: 'var(--accent-soft)', borderRadius: '2px' },
   '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--accent)', color: 'var(--on-accent)' },
-  '.cm-selectionMatch': { backgroundColor: 'var(--accent-soft)' },
+  // Outras ocorrências do texto selecionado: só um contorno, para não parecerem selecionadas
+  '.cm-selectionMatch': { backgroundColor: 'transparent', borderRadius: '3px', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--accent-strong) 70%, transparent)' },
+  '.cm-selectionMatch-main': { boxShadow: 'none' },
 
   // Menções a notas (ver mentions.ts): chip com o título da nota
   '.cm-mention': {
@@ -407,6 +381,35 @@ export const codeHighlight = HighlightStyle.define([
   { tag: t.invalid, color: 'var(--danger)' },
 ])
 
+/**
+ * Editor de dentro dos blocos de código e de texto (block-editor.ts), no cartão do
+ * bloco: altura máxima com rolagem interna. Ele fica dentro do editor da nota, cujas
+ * regras também o alcançam — por isso os seletores começam pelo próprio editor
+ * (&.cm-editor), que valem mais.
+ */
+export const blockEditorTheme = EditorView.theme({
+  '&.cm-editor': { backgroundColor: 'transparent', color: 'var(--text)', fontSize: '0.88em' },
+  '&.cm-editor.cm-focused': { outline: 'none' },
+  '&.cm-editor .cm-scroller': {
+    maxHeight: 'var(--codeblock-max-height, 360px)',
+    overflow: 'auto',
+    fontFamily: 'var(--font-mono)',
+    lineHeight: '1.72',
+    cursor: 'text',
+  },
+  '&.cm-editor .cm-content': { maxWidth: 'none', width: 'auto', minWidth: '100%', padding: '6px 0 8px', caretColor: 'var(--primary)', tabSize: '4' },
+  '&.cm-editor .cm-line': { padding: '0 14px' },
+  // A seleção e o cursor são desenhados pelo editor (drawSelection). O editor da nota
+  // mostraria a seleção e o cursor nativos de um campo focado dentro dele (este): não.
+  '&.cm-editor .cm-content .cm-line ::selection, &.cm-editor .cm-content .cm-line::selection': { backgroundColor: 'transparent !important' },
+  '&.cm-editor .cm-content:focus': { caretColor: 'transparent !important' },
+  // Fora de foco (você voltou para o texto da nota), a seleção do bloco fica mais clara
+  '&.cm-editor:not(.cm-focused) .cm-selectionBackground': { backgroundColor: 'color-mix(in srgb, var(--selection) 45%, transparent) !important' },
+  // Bloco de texto: a fonte do texto e linhas que quebram
+  '&.cm-editor.cm-block-text': { fontSize: '1em' },
+  '&.cm-editor.cm-block-text .cm-scroller': { fontFamily: 'var(--font-ui)', overflowX: 'hidden' },
+})
+
 /** Editor de código em tela cheia (CodeFullscreen.vue). */
 export const codeEditorTheme = EditorView.theme({
   '&': { height: '100%', fontSize: '14px', color: 'var(--text)', backgroundColor: 'var(--surface)' },
@@ -422,7 +425,9 @@ export const codeEditorTheme = EditorView.theme({
     backgroundColor: 'var(--selection) !important',
   },
   '.cm-matchingBracket': { backgroundColor: 'var(--primary-soft-2)', outline: 'none' },
-  '.cm-selectionMatch': { backgroundColor: 'var(--accent-soft)' },
+  // Outras ocorrências do texto selecionado: só um contorno, para não parecerem selecionadas
+  '.cm-selectionMatch': { backgroundColor: 'transparent', borderRadius: '3px', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--accent-strong) 70%, transparent)' },
+  '.cm-selectionMatch-main': { boxShadow: 'none' },
   '.cm-panels': { backgroundColor: 'var(--surface-2)', color: 'var(--text)' },
   '.cm-textfield': { border: '1px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', borderRadius: '6px' },
   '.cm-button': { backgroundImage: 'none', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text)' },
@@ -440,7 +445,9 @@ export const textEditorTheme = EditorView.theme({
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
     backgroundColor: 'var(--selection) !important',
   },
-  '.cm-selectionMatch': { backgroundColor: 'var(--accent-soft)' },
+  // Outras ocorrências do texto selecionado: só um contorno, para não parecerem selecionadas
+  '.cm-selectionMatch': { backgroundColor: 'transparent', borderRadius: '3px', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--accent-strong) 70%, transparent)' },
+  '.cm-selectionMatch-main': { boxShadow: 'none' },
   '.cm-panels': { backgroundColor: 'var(--surface-2)', color: 'var(--text)' },
   '.cm-textfield': { border: '1px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', borderRadius: '6px' },
   '.cm-button': { backgroundImage: 'none', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text)' },

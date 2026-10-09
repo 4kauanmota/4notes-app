@@ -19,6 +19,7 @@ import { errorMessage, workspaceFileUrl } from '#shared/ipc'
 import { showContextMenu, separator, type MenuItemSpec } from '~/composables/useContextMenu'
 import { promptDialog } from '~/composables/useDialog'
 import { pickLibraryImage } from '~/composables/useImageLibrary'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { notifyError, showToast } from '~/composables/useToasts'
 import type { PaletteColor } from '~/lib/colors'
 import {
@@ -35,6 +36,7 @@ import {
   type LineFormat,
 } from '~/lib/editor/formatting'
 import { languageLabel } from '~/lib/editor/languages'
+import { insertImageFromLibrary } from '~/lib/editor/paste'
 import { stripImages } from '~/lib/editor/markup'
 import type { CodeEditRequest, EditorHost, MentionHost } from '~/lib/editor/host'
 import { refreshMentions } from '~/lib/editor/mentions'
@@ -86,8 +88,27 @@ const toolbar = reactive({
 let selectingWithMouse = false
 let frame = 0
 
+/**
+ * Toque (celular): a barra fica fixa embaixo da nota — acima do teclado — enquanto você
+ * escreve, e não flutuando sobre a seleção (ali ficam as alças e o menu do Android).
+ */
+const { layout } = useLayoutSize()
+const docked = computed(() => layout.touch)
+
+function placeDockedToolbar(): void {
+  const focused = !!view && (view.hasFocus || toolbar.linkMode)
+  toolbar.visible = focused
+  if (!focused || !view) {
+    toolbar.linkMode = false
+    return
+  }
+  toolbar.active = activeFormats(view.state)
+  toolbar.textBlock = canWrapInTextBlock(view.state)
+}
+
 function placeToolbar(): void {
   frame = 0
+  if (docked.value) return placeDockedToolbar()
   const selection = view?.state.selection.main
   if (!view || !host.value || !selection || selection.empty || (!view.hasFocus && !toolbar.linkMode) || selectingWithMouse) {
     toolbar.visible = false
@@ -133,7 +154,7 @@ function onEditorUpdate(update: ViewUpdate): void {
 }
 
 function onMouseDown(event: MouseEvent): void {
-  if (event.button !== 0 || !(event.target as HTMLElement).closest('.cm-content')) return
+  if (docked.value || event.button !== 0 || !(event.target as HTMLElement).closest('.cm-content')) return
   selectingWithMouse = true
   toolbar.visible = false
   toolbar.linkMode = false
@@ -188,6 +209,23 @@ function applyLink(url: string): void {
 function unlink(): void {
   toolbar.linkMode = false
   run(removeLink)
+}
+
+/** Toque: abrir o link do cursor (no desktop é Ctrl + clique). */
+function openActiveLink(url: string): void {
+  toolbar.linkMode = false
+  if (hasDesktopApi()) void desktop().shell.openExternal(url).catch((error) => notifyError(`Não foi possível abrir o link: ${errorMessage(error)}`, error))
+}
+
+/** Toque: imagem da biblioteca (no desktop fica no botão direito do texto). */
+function insertImage(): void {
+  if (!view) return
+  insertImageFromLibrary(view)
+}
+
+function onEditorContextMenu(): void {
+  // No toque a barra fixa continua (o toque prolongado é do Android: selecionar, colar)
+  if (!docked.value) toolbar.visible = false
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -410,9 +448,10 @@ defineExpose({
   <div
     ref="host"
     class="markdown-editor"
+    :class="{ docked }"
     @mousedown.capture="onMouseDown"
     @keydown="onKeydown"
-    @contextmenu="toolbar.visible = false"
+    @contextmenu="onEditorContextMenu"
   >
     <div ref="editorParent" class="editor-parent" />
     <FormatToolbar
@@ -424,6 +463,7 @@ defineExpose({
       :link-mode="toolbar.linkMode"
       :link-initial="toolbar.linkInitial"
       :text-block="toolbar.textBlock"
+      :docked="docked"
       @inline="applyInline"
       @color="applyColor"
       @line="applyLine"
@@ -433,6 +473,8 @@ defineExpose({
       @close-link="closeLink"
       @clear="run(clearFormatting)"
       @text-block="applyTextBlock"
+      @image="insertImage"
+      @open-url="openActiveLink"
     />
     <CodeFullscreen v-if="codeRequest" :request="codeRequest" @close="closeCode" />
   </div>
@@ -448,5 +490,14 @@ defineExpose({
 .editor-parent,
 .markdown-editor :deep(.cm-editor) {
   height: 100%;
+}
+/* Toque: a barra de formatação fica embaixo da nota (acima do teclado) */
+.markdown-editor.docked {
+  display: flex;
+  flex-direction: column;
+}
+.markdown-editor.docked .editor-parent {
+  flex: 1;
+  min-height: 0;
 }
 </style>

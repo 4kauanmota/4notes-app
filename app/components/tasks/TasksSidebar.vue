@@ -6,9 +6,11 @@
 import { computed, ref } from 'vue'
 import { separator, showContextMenu } from '~/composables/useContextMenu'
 import type { Category } from '~/lib/tasks/model'
+import { canReveal } from '~/lib/platform'
 import { useTasksStore } from '~/stores/tasks'
 
 const tasks = useTasksStore()
+const reveal = canReveal()
 const dialogOpen = ref(false)
 const editing = ref<Category | null>(null)
 
@@ -28,9 +30,19 @@ function editCategory(category: Category) {
 }
 
 async function openMenu(category: Category) {
-  const choice = await showContextMenu([{ id: 'edit', label: 'Editar…' }, separator, { id: 'delete', label: 'Excluir categoria…', danger: true }])
+  const index = tasks.state.categories.findIndex((item) => item.id === category.id)
+  const last = tasks.state.categories.length - 1
+  const choice = await showContextMenu([
+    { id: 'edit', label: 'Editar…' },
+    // Mudar a ordem sem arrastar (no toque, arrastar rola a lista)
+    { id: 'up', label: 'Mover para cima', enabled: index > 0 },
+    { id: 'down', label: 'Mover para baixo', enabled: index >= 0 && index < last },
+    separator,
+    { id: 'delete', label: 'Excluir categoria…', danger: true },
+  ])
   if (choice === 'edit') editCategory(category)
-  if (choice === 'delete') void tasks.requestDeleteCategory(category.id)
+  else if (choice === 'up' || choice === 'down') tasks.moveCategory(index, index + (choice === 'up' ? -1 : 1))
+  else if (choice === 'delete') void tasks.requestDeleteCategory(category.id)
 }
 
 // Reordenar categorias arrastando
@@ -98,7 +110,7 @@ function onDrop(index: number) {
       <button v-if="!tasks.state.categories.length" class="empty-cats" @click="newCategory">+ Criar a primeira categoria</button>
     </div>
 
-    <footer class="sidebar-foot">
+    <footer v-if="reveal" class="sidebar-foot">
       <button class="foot-link" @click="tasks.revealFile()"><AppIcon name="folder" :size="13" /> tasks.json</button>
     </footer>
 
@@ -144,6 +156,10 @@ function onDrop(index: number) {
   text-align: left;
   cursor: pointer;
   transition: background var(--t-fast), color var(--t-fast);
+}
+html[data-touch] .nav-item {
+  height: 44px;
+  font-size: 15px;
 }
 .nav-item:hover {
   background: var(--hover);

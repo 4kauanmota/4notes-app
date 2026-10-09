@@ -25,21 +25,14 @@ import {
   type BrowserSource,
   type PlacesRow,
 } from '../shared/bookmarks'
+import { decodeDataUrl } from '../shared/files'
 import type { LinkMeta } from '../shared/ipc'
-import { declaredCharset, iconFileBase, iconUrls, parseHead, sniffImage, type IconFormat } from '../shared/link-meta'
+import { fetchLinkMetaWith, iconFileBase, sniffImage, validLinkUrl, type Fetched, type IconFormat } from '../shared/link-meta'
 import { AppError, resolveInside } from './files'
 
 export const LINK_ICONS_DIR = 'links/icons'
 
 const USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome ?? '140.0.0.0'} Safari/537.36`
-const PAGE_LIMIT = 768 * 1024
-const ICON_LIMIT = 1024 * 1024
-
-interface Fetched {
-  url: string
-  contentType: string
-  body: Uint8Array
-}
 
 /** Busca um endereço (com limite de tempo e de tamanho). */
 async function fetchLimited(url: string, accept: string, limit: number, timeout: number): Promise<Fetched | null> {
@@ -78,45 +71,6 @@ async function fetchLimited(url: string, accept: string, limit: number, timeout:
   }
 }
 
-/** Texto da página no charset certo (cabeçalho HTTP, <meta charset> ou UTF-8). */
-function decodePage(page: Fetched): string {
-  const fromHeader = /charset=([\w-]+)/i.exec(page.contentType)?.[1]
-  const sample = new TextDecoder('latin1').decode(page.body.subarray(0, 4096))
-  const charset = fromHeader ?? declaredCharset(sample) ?? 'utf-8'
-  try {
-    return new TextDecoder(charset).decode(page.body)
-  } catch {
-    return new TextDecoder('utf-8').decode(page.body)
-  }
-}
-
-function decodeDataUrl(url: string): Uint8Array | null {
-  const match = /^data:([^;,]+)?(;base64)?,(.*)$/is.exec(url)
-  if (!match) return null
-  try {
-    return match[2] ? new Uint8Array(Buffer.from(match[3]!, 'base64')) : new TextEncoder().encode(decodeURIComponent(match[3]!))
-  } catch {
-    return null
-  }
-}
-
-/** Baixa o primeiro ícone que for mesmo uma imagem. */
-async function downloadIcon(urls: string[]): Promise<{ data: Uint8Array; format: IconFormat } | null> {
-  for (const url of urls) {
-    if (url.startsWith('data:')) {
-      const data = decodeDataUrl(url)
-      const format = data && data.byteLength <= ICON_LIMIT ? sniffImage(data) : null
-      if (data && format) return { data, format }
-      continue
-    }
-    const icon = await fetchLimited(url, 'image/avif,image/webp,image/svg+xml,image/*,*/*;q=0.8', ICON_LIMIT + 1, 6000)
-    if (!icon || !icon.body.byteLength || icon.body.byteLength > ICON_LIMIT) continue
-    const format = sniffImage(icon.body, icon.contentType)
-    if (format) return { data: icon.body, format }
-  }
-  return null
-}
-
 /** Grava o ícone do site em links/icons/ (troca o anterior, mesmo com outra extensão). */
 export async function writeIcon(root: string, host: string, data: Uint8Array, format: IconFormat): Promise<string> {
   const base = iconFileBase(host)
@@ -137,32 +91,12 @@ export async function writeIcon(root: string, host: string, data: Uint8Array, fo
 /**
  * Título e ícone de um endereço. O ícone é gravado em links/icons/ (se `withIcon`).
  * Sem internet (ou site fora do ar), devolve o que conseguiu — nunca lança erro por isso.
+ * As regras ficam em shared/link-meta.ts (as mesmas no app Android).
  */
 export async function fetchLinkMeta(root: string, rawUrl: unknown, withIcon: unknown): Promise<LinkMeta> {
-  if (typeof rawUrl !== 'string' || !/^https?:\/\//i.test(rawUrl.trim()) || rawUrl.length > 4096) throw new AppError('EINVAL', 'Endereço inválido.')
-  const url = rawUrl.trim()
-  let host: string
-  try {
-    host = new URL(url).hostname
-  } catch {
-    throw new AppError('EINVAL', 'Endereço inválido.')
-  }
-  const page = await fetchLimited(url, 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8', PAGE_LIMIT, 9000)
-  let title: string | null = null
-  let candidates: string[] = []
-  if (page && /html|xml/.test(page.contentType || 'text/html')) {
-    const head = parseHead(decodePage(page))
-    title = head.title
-    candidates = iconUrls(head, page.url)
-  } else {
-    candidates = iconUrls({ title: null, icons: [], base: null }, page?.url ?? url)
-  }
-  let icon: string | null = null
-  if (withIcon !== false) {
-    const found = await downloadIcon(candidates)
-    if (found) icon = await writeIcon(root, host, found.data, found.format).catch(() => null)
-  }
-  return { title, icon, reachable: !!page }
+  const url = validLinkUrl(rawUrl)
+  if (!url) throw new AppError('EINVAL', 'Endereço inválido.')
+  return fetchLinkMetaWith({ fetch: fetchLimited, writeIcon: (host, data, format) => writeIcon(root, host, data, format) }, url, withIcon !== false)
 }
 
 /** Ícone embutido num arquivo de favoritos (data:image/…): grava como o ícone do site. */

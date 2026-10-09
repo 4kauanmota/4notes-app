@@ -1,16 +1,25 @@
 <script setup lang="ts">
-/** Módulo MAPA MENTAL: grafo do mapa aberto + painel de edição da nota do nó. */
+/**
+ * Módulo MAPA MENTAL: grafo do mapa aberto + painel de edição da nota do nó.
+ *
+ * No celular (layout compact) o painel ocupa a tela: tocar numa nota primeiro a
+ * seleciona (com a alça de conexão e uma barrinha com "Abrir"); tocar de novo — ou em
+ * "Abrir" — abre a nota.
+ */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import GraphCanvas from '~/components/mindmap/GraphCanvas.vue'
 import GraphToolbar from '~/components/mindmap/GraphToolbar.vue'
 import PermanentNotePanel from '~/components/mindmap/PermanentNotePanel.vue'
-import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { revealItem, separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { onBackButton } from '~/composables/useBackButton'
 import { confirmDialog, promptDialog } from '~/composables/useDialog'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { useShortcuts } from '~/composables/useShortcuts'
 import { PALETTE, PALETTE_LABELS, isPaletteColor, paletteVar } from '~/lib/colors'
 import { noteIdOfNode, noteNodeId } from '~/lib/mindmap/graph'
 import type { GraphNodeInfo } from '~/lib/mindmap/graph-view'
 import { useMindmapStore } from '~/stores/mindmap'
+import { trashPlace } from '~/lib/platform'
 
 const mindmap = useMindmapStore()
 const graph = ref<InstanceType<typeof GraphCanvas>>()
@@ -21,15 +30,25 @@ const hover = ref<{ node: GraphNodeInfo; x: number; y: number } | null>(null)
 /** Conexão selecionada (clique na linha): mostra o "×" para remover. */
 const selectedEdge = ref<string | null>(null)
 
+const { isCompact, isMedium, layout } = useLayoutSize()
+/** Celular: nota selecionada no mapa, ainda sem abrir (o painel cobriria o mapa). */
+const picked = ref<string | null>(null)
+const pickedNote = computed(() => (picked.value ? (mindmap.findNote(picked.value) ?? null) : null))
+
 const hasNotes = computed(() => mindmap.state.notes.length > 0)
 const panelVisible = computed(() => mindmap.state.panelOpen && !!mindmap.selectedNote.value)
 const panelWidth = computed(() => {
-  if (!panelVisible.value) return 0
+  // No celular o painel cobre o mapa inteiro: a câmera não precisa abrir espaço
+  if (!panelVisible.value || isCompact.value) return 0
   const available = page.value?.clientWidth ?? 1200
-  return Math.min(mindmap.state.panelExpanded ? 820 : 480, available)
+  // Tela média (Fold aberto): o painel mais estreito deixa mais do mapa à vista
+  return Math.min(mindmap.state.panelExpanded ? 820 : isMedium.value ? 380 : 480, available)
 })
-const selectedNodeId = computed(() => (panelVisible.value && mindmap.state.selectedId ? noteNodeId(mindmap.state.selectedId) : null))
-const graphSettings = computed(() => ({ nodeStyle: mindmap.state.settings.nodeStyle, labels: mindmap.state.settings.labels }))
+const selectedNodeId = computed(() => {
+  if (panelVisible.value && mindmap.state.selectedId) return noteNodeId(mindmap.state.selectedId)
+  return pickedNote.value ? noteNodeId(pickedNote.value.id) : null
+})
+const graphSettings = computed(() => ({ nodeStyle: mindmap.state.settings.nodeStyle, labels: mindmap.state.settings.labels, touch: layout.touch }))
 const stats = computed(() => {
   const notes = mindmap.state.notes.length
   const links = mindmap.graph.value.edges.length
@@ -48,8 +67,31 @@ watch(
   () => {
     selectedEdge.value = null
     hover.value = null
+    picked.value = null
   },
 )
+// Abriu uma nota (busca, menção, nota nova…) ou saiu do celular: a seleção do celular sai
+watch(
+  () => [mindmap.state.panelOpen, isCompact.value] as const,
+  ([open, compact]) => {
+    if (open || !compact) picked.value = null
+  },
+)
+
+/** Celular: abre a nota selecionada (o painel ocupa a tela). */
+function openPicked() {
+  const id = picked.value
+  if (!id) return
+  picked.value = null
+  mindmap.openNote(id, { focus: false })
+}
+
+// "Voltar" do Android: tira a seleção do mapa (o painel e a conexão fecham pelo Esc)
+onBackButton(() => {
+  if (!picked.value) return false
+  picked.value = null
+  return true
+})
 
 function validateTitle(value: string): string | null {
   if (!value.trim()) return 'Digite um nome para a nota.'
@@ -78,7 +120,14 @@ async function newNote(options: { linkFrom?: string; position?: [number, number]
 function onNodeClick(node: GraphNodeInfo) {
   hover.value = null
   selectedEdge.value = null
-  mindmap.openNote(noteIdOfNode(node.id), { focus: false })
+  const id = noteIdOfNode(node.id)
+  // Celular: o primeiro toque seleciona (alça de conexão, "Abrir"); o segundo abre
+  if (isCompact.value && picked.value !== id) {
+    picked.value = id
+    return
+  }
+  picked.value = null
+  mindmap.openNote(id, { focus: false })
 }
 
 /** Separa o id da conexão ("note:A.md|note:B.md") nas duas notas. */
@@ -119,7 +168,7 @@ async function onNodeContextMenu(node: GraphNodeInfo) {
     { id: 'rename', label: 'Renomear…' },
     { id: 'linked', label: 'Nova nota conectada…' },
     { label: 'Cor', submenu: colors },
-    { id: 'reveal', label: 'Mostrar no Explorador' },
+    ...revealItem(),
     separator,
     { id: 'delete', label: 'Excluir…', danger: true },
   ])
@@ -148,7 +197,7 @@ async function onNodeContextMenu(node: GraphNodeInfo) {
     const note = mindmap.findNote(id)
     const ok = await confirmDialog({
       title: `Excluir “${note?.title}”?`,
-      message: 'O arquivo vai para a Lixeira e as conexões dela são removidas.',
+      message: `O arquivo vai para ${trashPlace()} e as conexões dela são removidas.`,
       confirmLabel: 'Excluir nota',
       danger: true,
     })
@@ -170,6 +219,7 @@ async function onBackgroundContextMenu(world: { x: number; y: number }) {
 /** Clique no vazio: tira a seleção (da conexão e da nota) e fecha o painel da nota. */
 function onBackgroundClick() {
   selectedEdge.value = null
+  picked.value = null
   if (mindmap.state.panelOpen) mindmap.closePanel()
 }
 
@@ -189,7 +239,7 @@ function deleteSelection(): boolean | void {
     removeEdge(selectedEdge.value)
     return
   }
-  const id = selectedNodeId.value ? mindmap.state.selectedId : null
+  const id = selectedNodeId.value ? (mindmap.state.panelOpen ? mindmap.state.selectedId : picked.value) : null
   if (!id) return false
   void mindmap.deleteNote(id)
 }
@@ -214,6 +264,10 @@ useShortcuts(
     escape: () => {
       if (selectedEdge.value) {
         selectedEdge.value = null
+        return
+      }
+      if (picked.value) {
+        picked.value = null
         return
       }
       if (!mindmap.state.panelOpen) return false
@@ -243,6 +297,7 @@ useShortcuts(
       :inset-right="panelWidth"
       :focus="mindmap.state.focus"
       :layout="mindmap.state.layout"
+      :layout-seq="mindmap.state.layoutSeq"
       @node-click="onNodeClick"
       @node-hover="(node, position) => (hover = node && position ? { node, x: position.x, y: position.y } : null)"
       @node-context-menu="onNodeContextMenu"
@@ -263,10 +318,11 @@ useShortcuts(
 
     <div v-if="hasNotes" class="map-footer" :style="{ right: `${panelWidth + 16}px` }">
       <div class="footer-info">
-        <span class="map-stats">{{ stats }}</span>
+        <span v-if="!isCompact" class="map-stats">{{ stats }}</span>
         <Transition name="fade">
           <span v-if="selectedEdge" class="map-hint edge-hint">
-            <AppIcon name="unlink" :size="13" /> Conexão selecionada — clique no × ou pressione Delete para remover
+            <AppIcon name="unlink" :size="13" />
+            {{ layout.touch ? 'Toque no × da conexão para remover' : 'Conexão selecionada — clique no × ou pressione Delete para remover' }}
           </span>
         </Transition>
       </div>
@@ -276,6 +332,21 @@ useShortcuts(
         <button class="icon-btn" data-tip="Enquadrar tudo" data-tip-pos="top" aria-label="Enquadrar tudo" @click="graph?.fit()"><AppIcon name="fit" :size="17" /></button>
       </div>
     </div>
+
+    <!-- Celular: a nota selecionada (sem abrir) — abrir, opções, conectar pela alça -->
+    <Transition name="pick">
+      <div v-if="pickedNote && !panelVisible" class="pick-bar" role="toolbar" :aria-label="`Nota ${pickedNote.title}`">
+        <span class="pick-dot" :style="mindmap.noteColor(pickedNote.id) ? { background: paletteVar(mindmap.noteColor(pickedNote.id)!) } : undefined" />
+        <span class="pick-text">
+          <span class="pick-title">{{ pickedNote.title }}</span>
+          <span class="pick-hint">Arraste a seta → para conectar</span>
+        </span>
+        <button class="icon-btn" aria-label="Mais opções" data-action="pick-menu" @click="onNodeContextMenu({ id: noteNodeId(pickedNote.id), title: pickedNote.title, degree: 0 })">
+          <AppIcon name="more" :size="18" />
+        </button>
+        <button class="btn btn-sm btn-primary" data-action="pick-open" @click="openPicked">Abrir</button>
+      </div>
+    </Transition>
 
     <NodeHoverCard v-if="hover && !mindmap.state.search" :node="hover.node" :x="hover.x" :y="hover.y" />
 
@@ -349,6 +420,68 @@ useShortcuts(
   backdrop-filter: blur(10px);
   pointer-events: auto;
 }
+/* ── Celular ── */
+html[data-layout='compact'] .map-toolbar {
+  top: 10px;
+  left: 10px;
+  right: 10px;
+}
+html[data-layout='compact'] .map-footer {
+  left: 10px;
+  bottom: 10px;
+}
+.pick-bar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 66px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--elevated) 94%, transparent);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
+}
+.pick-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--graph-node);
+}
+.pick-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.pick-title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.pick-enter-active,
+.pick-leave-active {
+  transition:
+    transform 220ms var(--ease-out),
+    opacity 180ms var(--ease-out);
+}
+.pick-enter-from,
+.pick-leave-to {
+  transform: translateY(12px);
+  opacity: 0;
+}
+
 .panel-enter-active {
   transition: transform 340ms var(--ease-out), opacity 220ms var(--ease-out);
 }

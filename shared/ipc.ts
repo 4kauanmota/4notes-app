@@ -22,8 +22,11 @@ export interface AppSettings {
   theme: ThemePreference
 }
 
-/** Por que a pasta de dados não pode ser usada (ou null se está tudo certo). */
-export type DataDirProblem = 'not-configured' | 'missing' | 'not-writable'
+/**
+ * Por que a pasta de dados não pode ser usada (ou null se está tudo certo).
+ * "no-permission": Android sem o "Acesso a todos os arquivos".
+ */
+export type DataDirProblem = 'not-configured' | 'missing' | 'not-writable' | 'no-permission'
 
 export interface DataDirStatus {
   /** Caminho absoluto da pasta de dados (ex.: C:\Users\Kauan\Documents\4notes). */
@@ -32,9 +35,30 @@ export interface DataDirStatus {
   problem: DataDirProblem | null
 }
 
+/**
+ * O que a plataforma sabe fazer. O desktop (Electron) faz tudo; no Android algumas
+ * coisas não existem (não há "Explorador" nem navegadores para ler os favoritos) e a
+ * interface esconde essas opções.
+ */
+export interface PlatformCapabilities {
+  /** Mostrar um arquivo ou pasta no gerenciador de arquivos do sistema. */
+  reveal: boolean
+  /** Iniciar o 4notes junto com o sistema. */
+  launchAtLogin: boolean
+  /** Ler os favoritos dos navegadores instalados (importar links). */
+  browserBookmarks: boolean
+  /** Janela própria: barra de título do 4notes, zoom com Ctrl + / Ctrl −. */
+  window: boolean
+  /** O que é excluído vai para a Lixeira do sistema (no Android: .4notes/trash do workspace). */
+  systemTrash: boolean
+}
+
+export const DESKTOP_CAPABILITIES: Readonly<PlatformCapabilities> = { reveal: true, launchAtLogin: true, browserBookmarks: true, window: true, systemTrash: true }
+
 /** Informações entregues de forma síncrona assim que a janela abre. */
 export interface BootstrapInfo {
   appVersion: string
+  /** "win32", "darwin", "linux" (Electron) ou "android". */
   platform: string
   isDev: boolean
   settings: AppSettings
@@ -43,6 +67,8 @@ export interface BootstrapInfo {
   fakeToday: string | null
   /** Somente para testes automatizados: expõe ganchos de inspeção na janela. */
   testMode: boolean
+  /** O que a plataforma sabe fazer (ausente = desktop: tudo). */
+  capabilities?: PlatformCapabilities
 }
 
 export interface FileEntry {
@@ -99,9 +125,22 @@ export function workspaceNameProblem(name: string): string | null {
  */
 export const WORKSPACE_SCHEME = 'workspace'
 
+/** Começo do endereço dos arquivos do workspace (no Android, o servidor local do app). */
+let workspaceUrlBase = `${WORKSPACE_SCHEME}://files/`
+
+/** Android: os arquivos do workspace são servidos por outro endereço (lib/mobile). */
+export function setWorkspaceFileUrlBase(base: string): void {
+  workspaceUrlBase = base.endsWith('/') ? base : `${base}/`
+}
+
+/** Começo dos endereços de workspaceFileUrl (para reconhecer esses endereços). */
+export function workspaceFileUrlBase(): string {
+  return workspaceUrlBase
+}
+
 /** Endereço de um arquivo do workspace (caminho relativo, com "/"). */
 export function workspaceFileUrl(relativePath: string): string {
-  return `${WORKSPACE_SCHEME}://files/${relativePath.split('/').map(encodeURIComponent).join('/')}`
+  return `${workspaceUrlBase}${relativePath.split('/').map(encodeURIComponent).join('/')}`
 }
 
 /** Resultado de excluir uma imagem da biblioteca: excluída, mantida (está em uso) ou já não existia. */
@@ -173,6 +212,8 @@ export interface FourNotesApi {
     ready(): void
     /** Registra a função chamada antes de a janela fechar (para salvar o que estiver pendente). */
     onBeforeClose(handler: () => Promise<void>): void
+    /** Celular: o app voltou para a tela (a interface relê o workspace). */
+    onResume?(handler: () => void): void
   }
   settings: {
     setTheme(theme: ThemePreference): Promise<void>
@@ -187,6 +228,8 @@ export interface FourNotesApi {
     create(parent: string, name: string): Promise<DataDirStatus>
     /** Abre a pasta de dados no Explorador de Arquivos. */
     reveal(): Promise<void>
+    /** Android: pede o "Acesso a todos os arquivos" (true = permitido). */
+    requestAccess?(): Promise<boolean>
   }
   files: {
     list(dir: string, options?: ListOptions): Promise<FileEntry[]>

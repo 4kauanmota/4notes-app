@@ -8,6 +8,10 @@
  *   nova ali, já conectada. Arrastar o fundo move a câmera.
  * - Clicar numa conexão seleciona; o "×" no meio dela (ou Delete) remove.
  * - Com o mouse sobre uma nota, as setas que saem dela ficam com a cor dela.
+ * - Toque (celular): um dedo arrasta a nota ou move o mapa; dois dedos (pinça)
+ *   aproximam, afastam e movem; tocar seleciona; dois toques no vazio criam uma nota;
+ *   segurar abre o menu (o "clique direito"). A nota selecionada ganha uma alça (→):
+ *   arrastar a alça puxa a seta de conexão — o Shift + arrastar do toque.
  *
  * Esta classe não conhece Vue nem arquivos: recebe dados (GraphData) e cores
  * (GraphTheme) e avisa o que aconteceu por callbacks (GraphViewEvents).
@@ -36,6 +40,8 @@ export interface GraphTheme {
 export interface GraphViewSettings {
   nodeStyle: 'circle' | 'card'
   labels: 'selected' | 'auto' | 'always'
+  /** Tela de toque: mostra a alça de conexão na nota selecionada. */
+  touch?: boolean
 }
 
 export interface GraphNodeInfo {
@@ -104,7 +110,7 @@ interface Camera {
   k: number
 }
 
-type PointerKind = 'node' | 'edge' | 'badge' | 'background'
+type PointerKind = 'node' | 'edge' | 'badge' | 'background' | 'handle'
 
 interface PointerState {
   id: number
@@ -118,12 +124,25 @@ interface PointerState {
   shift: boolean
   moved: boolean
   action: 'none' | 'link' | 'move' | 'pan'
+  /** Dedo (toque): precisa mexer mais para virar arraste. */
+  touch: boolean
+}
+
+/** Pinça com dois dedos: o ponto do mapa que estava entre os dedos continua entre eles. */
+interface PinchState {
+  distance: number
+  k: number
+  world: { x: number; y: number }
 }
 
 const MIN_ZOOM = 0.08
 const MAX_ZOOM = 4
 const TAU = Math.PI * 2
 const DRAG_THRESHOLD = 4
+const TOUCH_DRAG_THRESHOLD = 9
+/** Dois toques no mesmo lugar, nesse intervalo, contam como toque duplo. */
+const DOUBLE_TAP_MS = 320
+const DOUBLE_TAP_DISTANCE = 30
 const NEW_NODE_DISTANCE = 150
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -164,6 +183,11 @@ export class GraphView {
   private matches: Set<string> | null = null
   private insetRight = 0
   private pointer: PointerState | null = null
+  /** Dedos na tela agora (toque), pelo id do ponteiro. */
+  private touches = new Map<number, { x: number; y: number }>()
+  private pinch: PinchState | null = null
+  private lastTap: { time: number; x: number; y: number } | null = null
+  private lastPointerType = 'mouse'
   /** Destino da seta sendo arrastada (nó sob o mouse) e ponta livre da seta. */
   private linkTarget: Node | null = null
   private linkEnd: { x: number; y: number } | null = null
@@ -315,7 +339,7 @@ export class GraphView {
   }
 
   /** Enquadra todos os nós na tela (usa as posições de destino, se estiverem animando). */
-  fit(animate = true, padding = 90): void {
+  fit(animate = true, padding = Math.min(90, Math.max(28, (this.width || 800) * 0.1))): void {
     if (!this.nodes.length || this.width < 10) return
     let minX = Infinity
     let minY = Infinity
@@ -346,6 +370,24 @@ export class GraphView {
 
   zoomBy(factor: number): void {
     this.zoomAt({ x: (this.width - this.insetRight) / 2, y: this.height / 2 }, this.camera.k * factor)
+  }
+
+  /** Posições que chegaram de fora (o mesmo mapa arrumado em outro aparelho): as notas deslizam até elas. */
+  setPositions(layout: Record<string, [number, number]>): void {
+    if (this.pointer?.action === 'move') return
+    let changed = false
+    for (const node of this.nodes) {
+      const position = layout[node.id]
+      if (!position || (Math.round(node.tx) === position[0] && Math.round(node.ty) === position[1])) continue
+      node.tx = position[0]
+      node.ty = position[1]
+      if (!Number.isFinite(node.x)) {
+        node.x = node.tx
+        node.y = node.ty
+      }
+      changed = true
+    }
+    if (changed) this.wake()
   }
 
   positions(): Record<string, [number, number]> {
@@ -703,6 +745,7 @@ export class GraphView {
     ctx.setLineDash([])
     ctx.globalAlpha = 1
     this.drawRemoveBadge()
+    this.drawConnectHandle()
 
     if (!this.cardMode) this.drawLabels()
   }
@@ -856,6 +899,52 @@ export class GraphView {
     ctx.moveTo(badge.x + s, badge.y - s)
     ctx.lineTo(badge.x - s, badge.y + s)
     ctx.stroke()
+  }
+
+  /** Toque: a alça (→) ao lado da nota selecionada — arrastar puxa a seta de conexão. */
+  private handleCenter(): { x: number; y: number; r: number; node: Node } | null {
+    if (!this.settings.touch || !this.selectedId || this.pointer?.action === 'link') return null
+    const node = this.nodeMap.get(this.selectedId)
+    if (!node || node.appear < 0.6) return null
+    const k = this.camera.k
+    const r = 13 / k
+    const half = this.cardMode ? node.width / 2 : node.radius * (1 + node.emphasis * 0.2)
+    return { x: node.x + half + 8 / k + r, y: node.y, r, node }
+  }
+
+  private drawConnectHandle(): void {
+    const handle = this.handleCenter()
+    if (!handle) return
+    const { ctx, theme, camera } = this
+    const { x, y, r } = handle
+    ctx.globalAlpha = 1
+    ctx.beginPath()
+    ctx.arc(x, y, r + 3 / camera.k, 0, TAU)
+    ctx.fillStyle = theme.background
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, TAU)
+    ctx.fillStyle = theme.selected
+    ctx.fill()
+    // Seta →
+    const s = r * 0.42
+    ctx.strokeStyle = theme.onSelected
+    ctx.lineWidth = 2 / camera.k
+    ctx.beginPath()
+    ctx.moveTo(x - s, y)
+    ctx.lineTo(x + s, y)
+    ctx.moveTo(x + s * 0.2, y - s * 0.75)
+    ctx.lineTo(x + s, y)
+    ctx.lineTo(x + s * 0.2, y + s * 0.75)
+    ctx.stroke()
+  }
+
+  private hitHandle(point: { x: number; y: number }): Node | null {
+    const handle = this.handleCenter()
+    if (!handle) return null
+    const world = this.toWorld(point)
+    // Alvo maior que o desenho (dedo)
+    return Math.hypot(world.x - handle.x, world.y - handle.y) <= handle.r + 12 / this.camera.k ? handle.node : null
   }
 
   private drawCircle(node: Node): void {
@@ -1033,11 +1122,28 @@ export class GraphView {
   private onPointerDown = (event: PointerEvent): void => {
     if (event.button !== 0 && event.button !== 1) return
     const point = this.localPoint(event)
+    this.lastPointerType = event.pointerType
+    if (event.pointerType === 'touch') {
+      // Sem os eventos de mouse "de mentira" que o navegador manda depois do toque: um
+      // toque que abre uma janela (toque duplo → "Nova nota") não pode fechá-la em seguida
+      event.preventDefault()
+      // Primeiro dedo de um gesto novo: nenhum dedo antigo continua contando
+      if (event.isPrimary) {
+        this.touches.clear()
+        this.pinch = null
+      }
+      this.touches.set(event.pointerId, point)
+      this.canvas.setPointerCapture(event.pointerId)
+      // Segundo dedo: vira pinça (o que o primeiro estava fazendo para onde está)
+      if (this.touches.size === 2) return this.startPinch()
+      if (this.touches.size > 2 || this.pinch) return
+    }
     let kind: PointerKind = 'background'
     let node: Node | null = null
     let edge: Edge | null = null
     if (event.button === 0) {
       if (this.hitBadge(point)) kind = 'badge'
+      else if ((node = this.hitHandle(point))) kind = 'handle'
       else if ((node = this.hitTest(point))) kind = 'node'
       else if ((edge = this.hitEdge(point))) kind = 'edge'
     }
@@ -1053,6 +1159,7 @@ export class GraphView {
       shift: event.shiftKey,
       moved: false,
       action: 'none',
+      touch: event.pointerType === 'touch',
     }
     this.canvas.setPointerCapture(event.pointerId)
     // Pegar o mapa interrompe a animação da câmera. Se ela só estava se ajustando ao
@@ -1063,8 +1170,14 @@ export class GraphView {
 
   private onPointerMove = (event: PointerEvent): void => {
     const point = this.localPoint(event)
+    if (event.pointerType === 'touch' && this.touches.has(event.pointerId)) {
+      this.touches.set(event.pointerId, point)
+      if (this.pinch) return this.updatePinch()
+    }
     const pointer = this.pointer
     if (!pointer || pointer.id !== event.pointerId) {
+      // Passar o mouse destaca (o dedo não "passa" por cima de nada)
+      if (event.pointerType === 'touch') return
       const badge = this.hitBadge(point)
       const node = badge ? null : this.hitTest(point)
       this.setHovered(node, node || badge ? null : this.hitEdge(point), badge)
@@ -1075,10 +1188,12 @@ export class GraphView {
     const dy = point.y - pointer.y
     pointer.x = point.x
     pointer.y = point.y
-    if (!pointer.moved && Math.hypot(point.x - pointer.startX, point.y - pointer.startY) > DRAG_THRESHOLD) {
+    const threshold = pointer.touch ? TOUCH_DRAG_THRESHOLD : DRAG_THRESHOLD
+    if (!pointer.moved && Math.hypot(point.x - pointer.startX, point.y - pointer.startY) > threshold) {
       pointer.moved = true
-      // Arrastar move a nota; Shift + arrastar puxa uma seta para conectar
-      if (pointer.kind === 'node') pointer.action = pointer.shift || event.shiftKey ? 'link' : 'move'
+      // Arrastar move a nota; Shift + arrastar (ou a alça, no toque) puxa uma seta para conectar
+      if (pointer.kind === 'handle') pointer.action = 'link'
+      else if (pointer.kind === 'node') pointer.action = pointer.shift || event.shiftKey ? 'link' : 'move'
       else if (pointer.kind !== 'badge') pointer.action = 'pan'
       this.events.viewChange?.()
       this.events.nodeHover?.(null, null)
@@ -1106,11 +1221,34 @@ export class GraphView {
   }
 
   private onPointerUp = (event: PointerEvent): void => {
+    if (event.pointerType === 'touch') {
+      this.touches.delete(event.pointerId)
+      if (this.pinch) {
+        // Tirou um dos dedos: a pinça acaba (o outro dedo não vira arraste nem toque)
+        if (this.touches.size < 2) this.pinch = null
+        if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId)
+        return
+      }
+    }
     const pointer = this.pointer
     if (!pointer || pointer.id !== event.pointerId) return
     this.pointer = null
     if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId)
     const completed = event.type === 'pointerup'
+
+    // Toque duplo no vazio: nota nova ali (como o duplo clique)
+    if (pointer.touch && completed && !pointer.moved && pointer.kind === 'background') {
+      const now = performance.now()
+      const last = this.lastTap
+      if (last && now - last.time < DOUBLE_TAP_MS && Math.hypot(pointer.x - last.x, pointer.y - last.y) < DOUBLE_TAP_DISTANCE) {
+        this.lastTap = null
+        this.events.backgroundDoubleClick?.(this.toWorld({ x: pointer.x, y: pointer.y }))
+        return
+      }
+      this.lastTap = { time: now, x: pointer.x, y: pointer.y }
+    } else if (completed) {
+      this.lastTap = null
+    }
 
     if (pointer.action === 'link' && pointer.node && this.linkTarget && completed) {
       this.events.connect?.(pointer.node.id, this.linkTarget.id)
@@ -1132,6 +1270,37 @@ export class GraphView {
     if (!this.pointer) this.setHovered(null, null, false)
   }
 
+  private startPinch(): void {
+    const [a, b] = [...this.touches.values()]
+    if (!a || !b) return
+    // O que o primeiro dedo estava fazendo para por aqui (a nota arrastada fica onde está)
+    this.pointer = null
+    this.linkTarget = null
+    this.linkEnd = null
+    this.lastTap = null
+    this.tween = null
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    this.pinch = { distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), k: this.camera.k, world: this.toWorld(mid) }
+    this.events.viewChange?.()
+    this.events.nodeHover?.(null, null)
+    this.updateCursor()
+    this.wake()
+  }
+
+  private updatePinch(): void {
+    const pinch = this.pinch
+    const [a, b] = [...this.touches.values()]
+    if (!pinch || !a || !b) return
+    const distance = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))
+    const k = clamp((pinch.k * distance) / pinch.distance, MIN_ZOOM, MAX_ZOOM)
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    this.camera.k = k
+    this.camera.x = mid.x - pinch.world.x * k
+    this.camera.y = mid.y - pinch.world.y * k
+    this.events.viewChange?.()
+    this.wake()
+  }
+
   private onWheel = (event: WheelEvent): void => {
     event.preventDefault()
     const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * 100 : event.deltaY
@@ -1141,6 +1310,8 @@ export class GraphView {
   }
 
   private onDoubleClick = (event: MouseEvent): void => {
+    // No toque, o toque duplo já foi tratado (onPointerUp)
+    if (this.lastPointerType === 'touch') return
     const point = this.localPoint(event)
     if (this.hitTest(point) || this.hitEdge(point) || this.hitBadge(point)) return
     this.events.backgroundDoubleClick?.(this.toWorld(point))
@@ -1148,6 +1319,14 @@ export class GraphView {
 
   private onContextMenu = (event: MouseEvent): void => {
     event.preventDefault()
+    // Toque prolongado (vira "clique direito"): só com o dedo parado — arrastando ou na
+    // pinça, não abre menu. O toque que abriu o menu não vira um toque na nota.
+    if (this.pinch || this.pointer?.moved) return
+    if (this.pointer) {
+      // (a captura continua: o fim do toque volta para cá e não vira um toque na nota)
+      this.pointer = null
+      this.updateCursor()
+    }
     const point = this.localPoint(event)
     const node = this.hitTest(point)
     if (node) {

@@ -80,6 +80,11 @@ function onDragStart(event: DragEvent) {
   cursor: pointer;
   transition: background var(--t-fast), color var(--t-fast);
 }
+/* Toque: linhas mais altas (alvo confortável para o dedo) */
+html[data-touch] .tree-row {
+  height: 42px;
+  font-size: 14.5px;
+}
 .tree-row:hover {
   background: var(--hover);
   color: var(--text);

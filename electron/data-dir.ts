@@ -13,9 +13,10 @@
  */
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { DATA_FOLDERS } from '../shared/files'
 import { workspaceNameProblem, type DataDirStatus, type FolderInspection } from '../shared/ipc'
 
-export const DATA_FOLDERS = ['notes', 'tasks', 'mindmap', 'links', 'attachments', '.4notes'] as const
+export { DATA_FOLDERS } from '../shared/files'
 
 async function isDirectory(target: string): Promise<boolean> {
   try {

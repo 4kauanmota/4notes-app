@@ -5,10 +5,13 @@ import { stripHtmlFormatting, stripImages } from '~/lib/editor/markup'
 import type { CursorInfo } from '~/lib/editor/setup'
 import { DATA_PATHS } from '~/lib/storage/paths'
 import { countWords } from '~/lib/notes/title'
+import { canReveal } from '~/lib/platform'
 import { useNotesStore, type QuickNote } from '~/stores/notes'
 
 const props = defineProps<{ note: QuickNote; cursor: CursorInfo }>()
 const notes = useNotesStore()
+/** Clicar no nome do arquivo mostra ele no Explorador (não no celular). */
+const reveal = canReveal()
 
 const words = computed(() => countWords(props.note.content))
 const chars = computed(() => stripImages(stripHtmlFormatting(props.note.content)).length)
@@ -42,8 +45,8 @@ const status = computed(() => {
     </span>
     <button
       class="file-name"
-      :disabled="!note.path"
-      :data-tip="note.path ? 'Mostrar no Explorador' : undefined"
+      :disabled="!note.path || !reveal"
+      :data-tip="note.path && reveal ? 'Mostrar no Explorador' : undefined"
       data-tip-pos="top"
       @click="notes.revealNote(note.id)"
     >

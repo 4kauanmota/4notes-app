@@ -10,6 +10,9 @@
  * - Usa eventos de ponteiro (não o arrastar-e-soltar do navegador), então funciona
  *   com links e mostra o item de verdade se mexendo.
  * - `flip(mudar)` anima qualquer outra troca de ordem (ex.: "Mover para cima").
+ * - No toque (celular), arrastar com o dedo rola a tela: o arraste só começa pela
+ *   alça (`touchHandle`, ex.: o ⠿ das Configurações). Sem alça, reorganize pelo menu
+ *   do toque prolongado ("Mover para cima/baixo").
  */
 import { nextTick, onBeforeUnmount, ref, type Ref } from 'vue'
 
@@ -24,6 +27,8 @@ export interface SortableOptions {
   onReorder(keys: string[]): void
   /** false = não dá para arrastar agora (ex.: durante uma animação). */
   enabled?(): boolean
+  /** No toque, o arraste só começa por aqui (sem isso, o toque não arrasta). */
+  touchHandle?: string
 }
 
 interface Session {
@@ -53,6 +58,7 @@ export function useSortableList(options: SortableOptions) {
     const el = target?.closest<HTMLElement>(options.itemSelector)
     if (!el || !options.container.value?.contains(el)) return
     if (options.ignoreSelector && target?.closest(options.ignoreSelector)) return
+    if (event.pointerType === 'touch' && !(options.touchHandle && target?.closest(options.touchHandle))) return
     const els = items()
     const index = els.indexOf(el)
     if (index < 0 || els.length < 2) return

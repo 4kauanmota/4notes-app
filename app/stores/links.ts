@@ -28,10 +28,9 @@ import {
   type LinkSort,
   type SavedLink,
 } from '~/lib/links/model'
-import { linksRepository as repo } from '~/lib/links/repository'
-import { createJsonWriter } from '~/lib/storage/json-file'
-import { DATA_PATHS } from '~/lib/storage/paths'
+import { linksRepository as repo, normalizeLinksSort } from '~/lib/links/repository'
 import { createId, debounce, SerialQueue } from '~/lib/utils/async'
+import { onSettingsChange, settingsSection, updateSettingsSection } from './settings'
 
 export type LinkSelection = 'all' | 'none' | `folder:${string}`
 
@@ -56,7 +55,6 @@ const state = reactive({
 
 let lastRaw: string | null = null
 const queue = new SerialQueue()
-const uiWriter = createJsonWriter(DATA_PATHS.linksUiState)
 
 function persist(): Promise<void> {
   return queue
@@ -75,15 +73,14 @@ const scheduleSave = debounce(() => void persist(), 250)
 async function flush(): Promise<void> {
   scheduleSave.flush()
   await queue.idle()
-  await uiWriter.flush()
 }
 
 // ── Carregamento ────────────────────────────────────────────────────────────
 
 async function load(): Promise<void> {
   try {
-    const [result, ui] = await Promise.all([repo.load(), repo.readUiState()])
-    state.sort = ui.sort
+    state.sort = normalizeLinksSort(settingsSection('links'))
+    const result = await repo.load()
     if (result.status === 'invalid') {
       state.error = result.error
     } else {
@@ -597,10 +594,16 @@ function select(selection: LinkSelection): void {
   state.selection = selection
 }
 
+/** A ordem da lista é uma configuração do workspace (a mesma em todos os aparelhos). */
 function setSort(sort: LinkSort): void {
   state.sort = sort
-  uiWriter.save(() => ({ sort: state.sort }))
+  updateSettingsSection('links', { sort })
 }
+
+// Mudou em outro aparelho (settings.json relido)
+onSettingsChange((changed) => {
+  if (changed.has('links')) state.sort = normalizeLinksSort(settingsSection('links'))
+})
 
 export function useLinksStore() {
   return {

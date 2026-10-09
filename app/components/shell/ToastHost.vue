@@ -77,7 +77,8 @@ const iconFor = (toast: Toast) => toast.icon ?? (toast.tone === 'error' ? 'alert
 .toast-host {
   position: fixed;
   left: 50%;
-  bottom: 22px;
+  /* No celular: acima da barra de módulos e da barra de gestos do Android */
+  bottom: calc(22px + var(--bottom-nav-h) + var(--safe-bottom));
   z-index: 950;
   display: flex;
   flex-direction: column-reverse;

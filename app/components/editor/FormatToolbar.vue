@@ -5,6 +5,10 @@
  * (inclusive o "Bloco de texto", que transforma a seleção num bloco).
  * O mousedown é cancelado para o editor não perder o foco nem a seleção (menos no
  * campo do endereço do link, que precisa do foco para receber o texto).
+ *
+ * `docked` (toque/celular): a barra fica fixa embaixo da nota, acima do teclado, rolando
+ * para o lado quando não cabe; ganha "Imagem" e, num link, "Abrir" (no desktop isso fica
+ * no botão direito e no Ctrl + clique).
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { PALETTE, PALETTE_LABELS, paletteVar, type PaletteColor } from '~/lib/colors'
@@ -23,6 +27,8 @@ const props = defineProps<{
   linkInitial: string
   /** A seleção pode virar um bloco de texto (fora de blocos de código/texto). */
   textBlock: boolean
+  /** Fixa embaixo da nota (toque). */
+  docked?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -35,6 +41,8 @@ const emit = defineEmits<{
   'close-link': []
   clear: []
   'text-block': []
+  image: []
+  'open-url': [url: string]
 }>()
 
 const mod = modKeyLabel()
@@ -103,8 +111,8 @@ function pickColor(color: PaletteColor | null) {
 <template>
   <div
     class="format-toolbar"
-    :class="{ below }"
-    :style="{ left: `${x}px`, top: `${y}px` }"
+    :class="{ below: below && !docked, docked }"
+    :style="docked ? undefined : { left: `${x}px`, top: `${y}px` }"
     role="toolbar"
     aria-label="Formatação do texto"
     @mousedown="onMouseDown"
@@ -120,6 +128,9 @@ function pickColor(color: PaletteColor | null) {
         aria-label="Endereço do link"
         @keydown="onLinkKeydown"
       />
+      <button v-if="docked && active.link" type="button" class="fmt-btn" aria-label="Abrir o link" data-action="open-link" @click="emit('open-url', active.link)">
+        <AppIcon name="external" :size="16" :stroke="1.9" />
+      </button>
       <button type="submit" class="fmt-btn" data-tip="Aplicar (Enter)" data-tip-pos="top" aria-label="Aplicar link">
         <AppIcon name="check" :size="16" :stroke="2.2" />
       </button>
@@ -216,6 +227,9 @@ function pickColor(color: PaletteColor | null) {
         @click="emit('open-link')"
       >
         <AppIcon name="link" :size="16" :stroke="1.9" />
+      </button>
+      <button v-if="docked" class="fmt-btn" data-format="image" aria-label="Inserir imagem" @click="emit('image')">
+        <AppIcon name="image" :size="16" :stroke="1.9" />
       </button>
       <button class="fmt-btn" data-format="clear" data-tip="Limpar formatação" data-tip-pos="top" aria-label="Limpar formatação" @click="emit('clear')">
         <AppIcon name="clear-format" :size="16" :stroke="1.9" />
@@ -368,5 +382,51 @@ function pickColor(color: PaletteColor | null) {
   from {
     opacity: 0;
   }
+}
+
+/* ── Toque: fixa embaixo da nota ── */
+.format-toolbar.docked {
+  position: relative;
+  flex: none;
+  width: 100%;
+  padding: 4px 6px;
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: var(--chrome);
+  box-shadow: none;
+  transform: none;
+  animation: none;
+}
+.docked .row {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.docked .fmt-btn {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+}
+.docked .sep {
+  flex: none;
+}
+.docked .link-row {
+  padding-left: 6px;
+}
+.docked .link-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 38px;
+  font-size: 15px;
+}
+.docked .palette {
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 8px 4px;
+}
+.docked .swatch {
+  width: 30px;
+  height: 30px;
 }
 </style>

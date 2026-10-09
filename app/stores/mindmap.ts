@@ -31,13 +31,17 @@ import {
   DEFAULT_GRAPH_SETTINGS,
   GRAPH_SETTINGS_VERSION,
   mindmapRepository as repo,
+  normalizeGraphSettings,
   type GraphSettings,
   type Layout,
   type MapInfo,
 } from '~/lib/mindmap/repository'
+import { readDeviceState, writeDeviceState } from '~/lib/storage/device-state'
 import { createJsonWriter } from '~/lib/storage/json-file'
 import { DATA_PATHS } from '~/lib/storage/paths'
 import { createId, debounce, SerialQueue, type Debounced } from '~/lib/utils/async'
+import { onSettingsChange, settingsSection, updateSettingsSection } from './settings'
+import { trashPlace } from '~/lib/platform'
 
 export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error'
 
@@ -79,6 +83,8 @@ const state = reactive({
   layout: {} as Layout,
   /** Pedido para o grafo centralizar um nó (o número muda a cada pedido). */
   focus: { nodeId: null as string | null, seq: 0 },
+  /** Muda quando as posições do mapa aberto chegam de fora (outro aparelho): o grafo as aplica. */
+  layoutSeq: 0,
 })
 
 const queue = new SerialQueue()
@@ -162,13 +168,10 @@ function saveMapNow(): Promise<void> {
 }
 const scheduleMapSave = debounce(() => void saveMapNow(), 300)
 
+/** Posições dos nós (no workspace) e o mapa aberto (neste aparelho). */
 function persistUi(): void {
-  uiWriter.save(() => ({
-    settingsVersion: GRAPH_SETTINGS_VERSION,
-    settings: state.settings,
-    currentMap: state.currentMap,
-    layouts: { ...layouts, [state.currentMap]: state.layout },
-  }))
+  uiWriter.save(() => ({ layouts: { ...layouts, [state.currentMap]: state.layout } }))
+  writeDeviceState('mindmap', { currentMap: state.currentMap })
 }
 
 let positionProvider: (() => Layout) | null = null
@@ -193,10 +196,16 @@ function updateLayout(positions: Layout): void {
   persistUi()
 }
 
+/** Preferências do grafo: no settings.json do workspace (iguais em todos os aparelhos). */
 function updateSettings(patch: Partial<GraphSettings>): void {
   Object.assign(state.settings, patch)
-  persistUi()
+  updateSettingsSection('mindmap', { settingsVersion: GRAPH_SETTINGS_VERSION, ...state.settings })
 }
+
+// Mudaram em outro aparelho (settings.json relido)
+onSettingsChange((changed) => {
+  if (changed.has('mindmap')) state.settings = normalizeGraphSettings(settingsSection('mindmap'))
+})
 
 // ── Carregamento e troca de mapa ────────────────────────────────────────────
 
@@ -273,8 +282,10 @@ function syncMapCount(): void {
 
 async function load(): Promise<void> {
   const ui = await repo.readUiState()
-  state.settings = ui.settings
+  state.settings = normalizeGraphSettings(settingsSection('mindmap'))
   layouts = ui.layouts
+  const device = readDeviceState('mindmap')
+  let currentMap = typeof device?.currentMap === 'string' ? device.currentMap : null
 
   const migration = await repo.migrateLegacy().catch((error) => {
     notifyError(`Não foi possível converter o mapa mental antigo: ${errorMessage(error)}`, error)
@@ -288,7 +299,7 @@ async function load(): Promise<void> {
       if (position) translated[noteNodeId(fileName)] = position
     }
     layouts[migration.map] = { ...translated, ...layouts[migration.map] }
-    ui.currentMap = migration.map
+    currentMap = migration.map
     showToast({
       message: `Mapa mental atualizado: suas notas estão no mapa “${migration.map}” e os [[links]] viraram conexões. Backup em ${migration.backupDir}.`,
       icon: 'sparkle',
@@ -302,7 +313,7 @@ async function load(): Promise<void> {
     maps = [{ name: DEFAULT_MAP_NAME, notes: 0 }]
   }
   state.maps = maps
-  const current = maps.find((map) => nameKey(map.name) === nameKey(ui.currentMap ?? '')) ?? maps.find((map) => map.name === DEFAULT_MAP_NAME) ?? maps[0]!
+  const current = maps.find((map) => nameKey(map.name) === nameKey(currentMap ?? '')) ?? maps.find((map) => map.name === DEFAULT_MAP_NAME) ?? maps[0]!
   await openMap(current.name)
   state.loaded = true
 }
@@ -388,7 +399,7 @@ async function deleteMap(name: string): Promise<boolean> {
     await openMap(state.maps[0]!.name)
   }
   persistUi()
-  showToast({ message: `O mapa “${name}” foi para a Lixeira`, icon: 'trash' })
+  showToast({ message: `O mapa “${name}” foi para ${trashPlace()}`, icon: 'trash' })
   return true
 }
 
@@ -626,7 +637,7 @@ async function deleteNote(id: string): Promise<void> {
   syncMapCount()
   if (state.selectedId === id) closePanel()
   showToast({
-    message: `“${note.title}” foi para a Lixeira`,
+    message: `“${note.title}” foi para ${trashPlace()}`,
     icon: 'trash',
     action: {
       label: 'Desfazer',
@@ -711,6 +722,18 @@ async function refreshFromDisk(): Promise<void> {
     if (!scheduleMapSave.pending()) {
       const result = await repo.readMap(state.currentMap)
       if (result.status !== 'invalid' && JSON.stringify(result.data) !== JSON.stringify(state.mapData)) state.mapData = result.data
+    }
+
+    // Posições mudadas em outro aparelho (.4notes/mindmap.json, sincronizado): valem
+    // aqui também — se nada daqui estiver esperando para ser gravado
+    if (!uiWriter.pending()) {
+      const ui = await repo.readUiState()
+      const current = ui.layouts[state.currentMap]
+      layouts = { ...layouts, ...ui.layouts }
+      if (current && JSON.stringify(current) !== JSON.stringify(state.layout)) {
+        state.layout = current
+        state.layoutSeq++
+      }
     }
   } catch (error) {
     console.warn('[4notes] Falha ao sincronizar o mapa mental:', error)

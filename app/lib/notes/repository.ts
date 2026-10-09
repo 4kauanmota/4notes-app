@@ -6,14 +6,14 @@
 import type { FileEntry } from '#shared/ipc'
 import { joinPath } from '../files/filename'
 import { desktop } from '../platform'
-import { readJsonFile, toJson } from '../storage/json-file'
+import { readJsonFile } from '../storage/json-file'
 import { DATA_PATHS } from '../storage/paths'
 import { CATEGORIES_FILE, normalizeCategories, serializeCategories, type NoteCategory } from './categories'
 
 /** Como os nomes das pastas pelo título aparecem: como foram digitados ou em CAIXA ALTA. */
 export type FolderCase = 'typed' | 'upper'
 
-/** Configurações das Notas (Configurações › Módulos), guardadas no workspace. */
+/** Configurações das Notas (Configurações › Módulos), guardadas no workspace (settings.json). */
 export interface NotesSettings {
   /** Nota nova sem categoria vai para a categoria que já tem notas com o mesmo começo de título. */
   autoCategory: boolean
@@ -22,7 +22,8 @@ export interface NotesSettings {
 
 export const DEFAULT_NOTES_SETTINGS: NotesSettings = { autoCategory: false, folderCase: 'typed' }
 
-export interface NotesUiState {
+/** Como as Notas estavam na tela deste aparelho (lib/storage/device-state.ts). */
+export interface NotesViewState {
   openTabs: string[]
   activeTab: string | null
   sidebarOpen: boolean
@@ -30,12 +31,33 @@ export interface NotesUiState {
   collapsedCategories: string[]
   /** Pastas (pelo título) abertas na lista lateral. */
   openFolders: string[]
-  settings: NotesSettings
 }
 
 export type CategoriesResult = { status: 'ok' | 'missing'; categories: NoteCategory[]; raw: string | null } | { status: 'invalid'; raw: string }
 
 const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [])
+const objectOf = (value: unknown) => (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+
+/** Configurações das Notas a partir da seção "notes" do settings.json (tolerante). */
+export function normalizeNotesSettings(raw: unknown): NotesSettings {
+  const settings = objectOf(raw)
+  return {
+    autoCategory: settings.autoCategory === true,
+    folderCase: settings.folderCase === 'upper' ? 'upper' : 'typed',
+  }
+}
+
+/** Estado da tela guardado no aparelho (tolerante). */
+export function normalizeNotesView(raw: unknown): NotesViewState {
+  const data = objectOf(raw)
+  return {
+    openTabs: strings(data.openTabs),
+    activeTab: typeof data.activeTab === 'string' ? data.activeTab : null,
+    sidebarOpen: data.sidebarOpen !== false,
+    collapsedCategories: strings(data.collapsedCategories),
+    openFolders: strings(data.openFolders),
+  }
+}
 
 export const notesRepository = {
   dir: DATA_PATHS.notesDir,
@@ -85,23 +107,4 @@ export const notesRepository = {
     await desktop().files.write(path, raw)
     return path
   },
-
-  async readUiState(): Promise<NotesUiState> {
-    const result = await readJsonFile(DATA_PATHS.notesUiState)
-    const data = (result.status === 'ok' && result.data && typeof result.data === 'object' ? result.data : {}) as Record<string, unknown>
-    const settings = (data.settings && typeof data.settings === 'object' ? data.settings : {}) as Record<string, unknown>
-    return {
-      openTabs: strings(data.openTabs),
-      activeTab: typeof data.activeTab === 'string' ? data.activeTab : null,
-      sidebarOpen: data.sidebarOpen !== false,
-      collapsedCategories: strings(data.collapsedCategories),
-      openFolders: strings(data.openFolders),
-      settings: {
-        autoCategory: settings.autoCategory === true,
-        folderCase: settings.folderCase === 'upper' ? 'upper' : 'typed',
-      },
-    }
-  },
-
-  serializeUiState: (state: NotesUiState) => toJson(state),
 }

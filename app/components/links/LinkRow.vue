@@ -78,6 +78,10 @@ function open(event: MouseEvent) {
   cursor: pointer;
   transition: background var(--t-fast), box-shadow var(--t-fast);
 }
+html[data-touch] .link-row {
+  height: 52px;
+  contain-intrinsic-size: auto 52px;
+}
 .link-row:hover {
   background: var(--hover);
 }

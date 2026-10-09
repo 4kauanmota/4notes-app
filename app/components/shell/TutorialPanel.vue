@@ -10,6 +10,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { registerShortcut } from '~/composables/useShortcuts'
 import { closeTutorial, tutorial, type TutorialTopic } from '~/composables/useTutorial'
 import { GENERAL_TUTORIAL, moduleById, moduleForPath, type ModuleTutorial } from '~/lib/modules'
@@ -20,6 +21,8 @@ const route = useRoute()
 const modules = useModulesStore()
 const mod = modKeyLabel()
 const panel = ref<HTMLElement>()
+/** Celular / tela de toque: o "botão direito" é o toque prolongado; atalhos só com teclado. */
+const { layout } = useLayoutSize()
 
 const topics = computed(() => [
   ...modules.ordered.value.map((module) => ({ id: module.id as TutorialTopic, label: module.label, icon: module.icon, enabled: modules.isEnabled(module.id) })),
@@ -180,8 +183,15 @@ function listenOutside(on: boolean): void {
             </ul>
           </section>
 
+          <section v-if="layout.touch && content.tutorial.touch?.length" class="tp-touch">
+            <h3 class="tp-label">No toque</h3>
+            <ul class="tp-list touch">
+              <li v-for="item in content.tutorial.touch" :key="item">{{ item }}</li>
+            </ul>
+          </section>
+
           <section v-if="content.tutorial.contextMenu.length">
-            <h3 class="tp-label">Botão direito</h3>
+            <h3 class="tp-label">{{ layout.touch ? 'Toque prolongado (botão direito)' : 'Botão direito' }}</h3>
             <ul class="tp-list menu">
               <li v-for="item in content.tutorial.contextMenu" :key="item">{{ item }}</li>
             </ul>
@@ -195,7 +205,7 @@ function listenOutside(on: boolean): void {
           </section>
 
           <section v-if="content.tutorial.shortcuts.length">
-            <h3 class="tp-label">Atalhos</h3>
+            <h3 class="tp-label">{{ layout.touch ? 'Atalhos (com teclado físico)' : 'Atalhos' }}</h3>
             <dl class="tp-shortcuts">
               <div v-for="item in content.tutorial.shortcuts" :key="item.label" class="tp-shortcut">
                 <dt>
@@ -210,7 +220,7 @@ function listenOutside(on: boolean): void {
         </div>
       </Transition>
 
-      <footer class="tp-foot"><kbd class="kbd">F1</kbd> abre e fecha o tutorial do módulo em que você está</footer>
+      <footer v-if="!layout.touch" class="tp-foot"><kbd class="kbd">F1</kbd> abre e fecha o tutorial do módulo em que você está</footer>
     </aside>
   </Transition>
 </template>
@@ -218,19 +228,39 @@ function listenOutside(on: boolean): void {
 <style scoped>
 .tutorial-panel {
   position: fixed;
-  top: calc(var(--titlebar-h) + 8px);
-  bottom: 10px;
-  left: calc(var(--rail-w) + 6px);
+  /* --safe-*: margens do Android de ponta a ponta (no desktop são 0) */
+  top: calc(var(--titlebar-h) + var(--safe-top) + 8px);
+  bottom: calc(10px + var(--safe-bottom));
+  left: calc(var(--rail-w) + var(--safe-left) + 6px);
   z-index: 800;
   display: flex;
   flex-direction: column;
-  width: min(380px, calc(100vw - var(--rail-w) - 24px));
+  width: min(380px, calc(100vw - var(--rail-w) - var(--safe-left) - var(--safe-right) - 24px));
   border-radius: var(--r-xl);
   border: 1px solid var(--border);
   background: var(--elevated);
   box-shadow: var(--shadow-lg);
   outline: none;
   transition: left 260ms var(--ease-out);
+}
+/* Celular: sem menu lateral — o painel ocupa a largura, entre a barra de cima e a de baixo */
+html[data-layout='compact'] .tutorial-panel {
+  top: calc(var(--titlebar-h) + var(--safe-top) + 6px);
+  bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 8px);
+  left: calc(var(--safe-left) + 8px);
+  width: calc(100vw - var(--safe-left) - var(--safe-right) - 16px);
+}
+html[data-touch] .tp-topic {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+html[data-touch] .tp-list li {
+  font-size: 14px;
+}
+.tp-list.touch li::before {
+  background: var(--accent-strong);
+  border-radius: 1.5px;
 }
 .tp-head {
   display: flex;

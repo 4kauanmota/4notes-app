@@ -40,7 +40,9 @@ const categoryOf = (entry: CompletedEntry) => (entry.task.categoryId ? (tasks.ca
             </div>
           </div>
           <div v-if="!entry.recurring" class="actions">
-            <button class="btn btn-sm btn-ghost" @click="tasks.reopen(entry.task.id)"><AppIcon name="undo" :size="14" /> Reabrir</button>
+            <button class="btn btn-sm btn-ghost reopen" aria-label="Reabrir" @click="tasks.reopen(entry.task.id)">
+              <AppIcon name="undo" :size="14" /><span class="reopen-label"> Reabrir</span>
+            </button>
             <button class="icon-btn sm danger" aria-label="Excluir" data-tip="Excluir" @click="tasks.deleteTask(entry.task.id)">
               <AppIcon name="trash" :size="14" />
             </button>
@@ -119,6 +121,13 @@ const categoryOf = (entry: CompletedEntry) => (entry.task.categoryId ? (tasks.ca
 }
 .row:hover .actions {
   opacity: 1;
+}
+/* Toque: sem "passar o mouse" — os botões ficam à vista (no celular, só os ícones) */
+html[data-touch] .actions {
+  opacity: 1;
+}
+html[data-layout='compact'] .reopen-label {
+  display: none;
 }
 .done-row-leave-active {
   transition: opacity 180ms, transform 200ms;

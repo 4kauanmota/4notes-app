@@ -10,11 +10,14 @@ import { separator, showContextMenu } from '~/composables/useContextMenu'
 import { showToast } from '~/composables/useToasts'
 import { droppedText, isExternalLinkDrag, isLinkDrag, LINK_DRAG_TYPE } from '~/lib/links/drag'
 import type { LinkFolder } from '~/lib/links/model'
-import { modKeyLabel } from '~/lib/platform'
+import { canReveal, capabilities, modKeyLabel } from '~/lib/platform'
 import { useLinksStore, type LinkSelection } from '~/stores/links'
 
-const emit = defineEmits<{ import: []; 'new-folder': []; 'edit-folder': [id: string] }>()
+const emit = defineEmits<{ import: []; 'new-folder': []; 'edit-folder': [id: string]; 'search-done': [] }>()
 const links = useLinksStore()
+const reveal = canReveal()
+/** No celular não há navegadores instalados para ler: importa de um arquivo de favoritos. */
+const importTip = capabilities().browserBookmarks ? 'Brave, Opera GX, Chrome, Edge, Firefox, Zen… ou um arquivo de favoritos' : 'De um arquivo de favoritos exportado pelo navegador (HTML)'
 const mod = modKeyLabel()
 const search = ref<HTMLInputElement>()
 
@@ -32,9 +35,19 @@ function choose(selection: LinkSelection) {
 }
 
 async function folderMenu(folder: LinkFolder) {
-  const choice = await showContextMenu([{ id: 'edit', label: 'Editar categoria…' }, separator, { id: 'delete', label: 'Excluir categoria…', danger: true }])
+  const index = links.state.folders.findIndex((item) => item.id === folder.id)
+  const last = links.state.folders.length - 1
+  const choice = await showContextMenu([
+    { id: 'edit', label: 'Editar categoria…' },
+    // Mudar a ordem sem arrastar (no toque, arrastar rola a lista)
+    { id: 'up', label: 'Mover para cima', enabled: index > 0 },
+    { id: 'down', label: 'Mover para baixo', enabled: index >= 0 && index < last },
+    separator,
+    { id: 'delete', label: 'Excluir categoria…', danger: true },
+  ])
   if (choice === 'edit') emit('edit-folder', folder.id)
-  if (choice === 'delete') void links.requestDeleteFolder(folder.id)
+  else if (choice === 'up' || choice === 'down') links.moveFolder(index, index + (choice === 'up' ? -1 : 1))
+  else if (choice === 'delete') void links.requestDeleteFolder(folder.id)
 }
 
 // ── Arrastar: links para as categorias, categorias para reordenar ───────────
@@ -98,7 +111,15 @@ defineExpose({ focusSearch: () => search.value?.focus() })
   <aside class="links-sidebar" aria-label="Categorias de links">
     <label class="search">
       <AppIcon name="search" :size="15" />
-      <input ref="search" v-model="links.state.search" placeholder="Buscar links…" spellcheck="false" :aria-label="`Buscar links (${mod}+F)`" />
+      <input
+        ref="search"
+        v-model="links.state.search"
+        placeholder="Buscar links…"
+        spellcheck="false"
+        enterkeyhint="search"
+        :aria-label="`Buscar links (${mod}+F)`"
+        @keydown.enter="emit('search-done')"
+      />
       <button v-if="links.state.search" class="icon-btn sm" aria-label="Limpar busca" @click="links.state.search = ''">
         <AppIcon name="x" :size="13" />
       </button>
@@ -164,10 +185,10 @@ defineExpose({ focusSearch: () => search.value?.focus() })
     </div>
 
     <footer class="sidebar-foot">
-      <button class="import-btn" data-tip="Brave, Opera GX, Chrome, Edge, Firefox, Zen… ou um arquivo de favoritos" @click="emit('import')">
+      <button class="import-btn" :data-tip="importTip" @click="emit('import')">
         <AppIcon name="download" :size="15" /> <span class="import-label">Importar do navegador</span>
       </button>
-      <button class="foot-link" @click="links.revealFile()"><AppIcon name="folder" :size="13" /> links.json</button>
+      <button v-if="reveal" class="foot-link" @click="links.revealFile()"><AppIcon name="folder" :size="13" /> links.json</button>
     </footer>
   </aside>
 </template>
@@ -240,6 +261,10 @@ defineExpose({ focusSearch: () => search.value?.focus() })
   text-align: left;
   cursor: pointer;
   transition: background var(--t-fast), color var(--t-fast), box-shadow var(--t-fast);
+}
+html[data-touch] .nav-item {
+  height: 44px;
+  font-size: 15px;
 }
 .nav-item.folder {
   padding-left: 7px;

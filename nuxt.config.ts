@@ -21,7 +21,8 @@ export default defineNuxtConfig({
       htmlAttrs: { lang: 'pt-BR' },
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        // viewport-fit=cover: no Android a interface vai até as bordas (margens seguras no CSS)
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
         { name: 'color-scheme', content: 'light dark' },
       ],
     },

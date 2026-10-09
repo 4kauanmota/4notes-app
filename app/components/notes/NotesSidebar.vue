@@ -6,7 +6,7 @@
  * Arraste uma aba (ou uma nota daqui) até uma categoria para colocá-la nela.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { revealItem, separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
 import {
   categorySubmenu,
   handleCategoryChoice,
@@ -15,13 +15,14 @@ import {
   requestDeleteCategory,
   useCategoryDialog,
 } from '~/composables/useNoteCategories'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { exportSubmenu, handleExportChoice } from '~/composables/useNoteExport'
 import { paletteVar } from '~/lib/colors'
 import { nameKey } from '~/lib/files/filename'
 import { categoryImagePath, type NoteCategory } from '~/lib/notes/categories'
 import { deriveTitle } from '~/lib/notes/title'
 import { buildTitleTree, flattenTree, folderPathTo, type TitleTreeNode, type TreeRow } from '~/lib/notes/title-tree'
-import { modKeyLabel } from '~/lib/platform'
+import { canReveal, capabilities, modKeyLabel } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
 import { noteTitle, useNotesStore, type QuickNote } from '~/stores/notes'
 
@@ -31,6 +32,8 @@ const app = useAppStore()
 const categoryDialog = useCategoryDialog()
 const mod = modKeyLabel()
 const list = ref<HTMLElement>()
+const reveal = canReveal()
+const { layout } = useLayoutSize()
 
 const count = computed(() => notes.visibleNotes.value.length)
 const searching = computed(() => !!notes.state.search.trim())
@@ -138,9 +141,10 @@ function noteMenuItems(note: QuickNote): MenuItemSpec[] {
     categorySubmenu(note),
     { id: 'duplicate', label: 'Duplicar' },
     exportSubmenu(note),
-    { id: 'reveal', label: 'Mostrar no Explorador', enabled: !!note.path },
+    ...revealItem(!!note.path),
     separator,
-    { id: 'delete', label: 'Excluir (enviar para a Lixeira)', danger: true },
+    // (no celular, a "lixeira" é a pasta .4notes/trash do workspace — o aviso depois de excluir diz)
+    { id: 'delete', label: capabilities().systemTrash ? 'Excluir (enviar para a Lixeira)' : 'Excluir', danger: true },
   ]
 }
 
@@ -162,7 +166,7 @@ async function categoryMenu(category: NoteCategory) {
     { id: 'new', label: 'Nova nota nesta categoria' },
     { id: 'edit', label: 'Editar categoria…' },
     { id: 'toggle', label: collapsed ? 'Expandir' : 'Recolher' },
-    { id: 'reveal', label: 'Mostrar no Explorador' },
+    ...revealItem(),
     separator,
     { id: 'delete', label: 'Excluir categoria…', danger: true },
   ])
@@ -325,13 +329,17 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
           />
           <div v-if="dropZone === 'root' && !rootRows.length" class="category-empty">Solte aqui para tirar da categoria</div>
           <div v-if="nothingFound" class="sidebar-empty">Nada encontrado para “{{ notes.state.search }}”.</div>
-          <div v-else-if="!count" class="sidebar-empty">Nenhuma nota ainda.<br />Crie uma com <kbd class="kbd">{{ mod }}</kbd> + <kbd class="kbd">N</kbd>.</div>
+          <div v-else-if="!count" class="sidebar-empty">
+            Nenhuma nota ainda.<br />
+            <template v-if="layout.touch">Toque no + para criar uma.</template>
+            <template v-else>Crie uma com <kbd class="kbd">{{ mod }}</kbd> + <kbd class="kbd">N</kbd>.</template>
+          </div>
         </section>
       </div>
 
       <footer class="sidebar-foot">
         <span>{{ count }} {{ count === 1 ? 'nota' : 'notas' }}</span>
-        <button class="foot-link" @click="app.revealDataFolder()">Abrir pasta</button>
+        <button v-if="reveal" class="foot-link" @click="app.revealDataFolder()">Abrir pasta</button>
       </footer>
     </div>
   </aside>
@@ -349,6 +357,11 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
 .notes-sidebar.open {
   width: 272px;
   border-right-color: var(--border);
+}
+/* Tela média (Fold aberto): a lista um pouco mais estreita, sobra mais espaço para a nota */
+html[data-layout='medium'] .notes-sidebar.open,
+html[data-layout='medium'] .sidebar-inner {
+  width: 248px;
 }
 .sidebar-inner {
   display: flex;
@@ -448,6 +461,10 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
   font-weight: 600;
   cursor: pointer;
   transition: background var(--t-fast);
+}
+html[data-touch] .category-row {
+  height: 46px;
+  font-size: 15px;
 }
 .category-row:hover {
   background: var(--hover);

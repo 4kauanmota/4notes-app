@@ -10,6 +10,7 @@
 import { reactive } from 'vue'
 import { errorCode, errorMessage, workspaceNameProblem, type BootstrapInfo, type DataDirStatus } from '#shared/ipc'
 import { choiceDialog, confirmDialog, promptDialog } from '~/composables/useDialog'
+import { applyWorkspaceTheme } from '~/composables/useTheme'
 import { notifyError, showToast } from '~/composables/useToasts'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 import type { ModuleId } from '~/lib/modules'
@@ -18,6 +19,7 @@ import { flushMentionUpdates, installMentionTracking } from './mentions'
 import { useMindmapStore } from './mindmap'
 import { useModulesStore } from './modules'
 import { useNotesStore } from './notes'
+import { flushSettings, loadSettings, refreshSettings, settingsSection } from './settings'
 import { useTasksStore } from './tasks'
 
 export type AppPhase = 'booting' | 'no-desktop' | 'setup' | 'ready' | 'error'
@@ -51,6 +53,9 @@ const modules = useModulesStore()
 
 async function loadModules(): Promise<void> {
   installMentionTracking()
+  // Primeiro as configurações do workspace (os módulos leem a parte deles)
+  await loadSettings()
+  applyWorkspaceTheme(settingsSection('theme'))
   // Todos os módulos carregam (ativos ou não): desativar só tira o módulo do menu
   const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), modules.load()])
   const failure = results.find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined
@@ -66,19 +71,41 @@ export function rememberModule(module: ModuleId): void {
 export async function flushEverything(): Promise<void> {
   // Primeiro as menções que ainda estavam para ser corrigidas (elas mexem nas notas)
   await flushMentionUpdates().catch((error) => console.warn('[4notes] Falha ao atualizar menções:', error))
-  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), modules.flush()])
+  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), flushSettings()])
 }
 
 let focusTimer: ReturnType<typeof setTimeout> | null = null
-function onWindowFocus(): void {
+/**
+ * Relê os arquivos do workspace: eles podem ter mudado em outro programa ou em outro
+ * aparelho (a pasta sincronizada pelo Google Drive, por exemplo).
+ */
+function refreshWorkspace(): void {
   if (focusTimer) clearTimeout(focusTimer)
-  // Ao voltar para o 4notes, relê os arquivos (você pode tê-los editado em outro programa).
   focusTimer = setTimeout(() => {
+    void refreshSettings()
     void notes.refreshFromDisk()
     void tasks.refreshFromDisk()
     void mindmap.refreshFromDisk()
     void links.refreshFromDisk()
   }, 200)
+}
+
+/** De quanto em quanto tempo o app relê o workspace enquanto está aberto (outros aparelhos). */
+const REFRESH_EVERY_MS = 60_000
+
+function watchWorkspace(): void {
+  // Ao voltar para o 4notes (janela, ou o app no celular)
+  window.addEventListener('focus', refreshWorkspace)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshWorkspace()
+    // Indo para o fundo (celular): salva o que estiver pendente
+    else void flushEverything()
+  })
+  desktop().app.onResume?.(refreshWorkspace)
+  // Enquanto fica aberto, de tempos em tempos (só com o app visível)
+  setInterval(() => {
+    if (document.visibilityState === 'visible') refreshWorkspace()
+  }, REFRESH_EVERY_MS)
 }
 
 export async function startApp(): Promise<void> {
@@ -98,7 +125,7 @@ export async function startApp(): Promise<void> {
   try {
     await loadModules()
     state.phase = 'ready'
-    window.addEventListener('focus', onWindowFocus)
+    watchWorkspace()
   } catch (error) {
     state.error = errorMessage(error)
     state.phase = 'error'

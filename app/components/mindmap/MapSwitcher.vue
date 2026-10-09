@@ -3,7 +3,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { confirmDialog, promptDialog } from '~/composables/useDialog'
 import { useMindmapStore } from '~/stores/mindmap'
+import { canReveal, trashPlace } from '~/lib/platform'
 
+const canShowInFolder = canReveal()
 const mindmap = useMindmapStore()
 const open = ref(false)
 const root = ref<HTMLElement>()
@@ -59,7 +61,7 @@ async function remove() {
   const count = mindmap.state.notes.length
   const ok = await confirmDialog({
     title: `Excluir o mapa “${map}”?`,
-    message: `A pasta do mapa${count ? `, com ${count} ${count === 1 ? 'nota' : 'notas'},` : ''} vai para a Lixeira.`,
+    message: `A pasta do mapa${count ? `, com ${count} ${count === 1 ? 'nota' : 'notas'},` : ''} vai para ${trashPlace()}.`,
     confirmLabel: 'Excluir mapa',
     danger: true,
   })
@@ -108,7 +110,7 @@ function reveal() {
       <div class="menu-sep" />
       <button class="menu-action" role="menuitem" @click="create"><AppIcon name="plus" :size="15" /> Novo mapa…</button>
       <button class="menu-action" role="menuitem" @click="rename"><AppIcon name="edit" :size="15" /> Renomear “{{ current }}”…</button>
-      <button class="menu-action" role="menuitem" @click="reveal"><AppIcon name="folder" :size="15" /> Mostrar no Explorador</button>
+      <button v-if="canShowInFolder" class="menu-action" role="menuitem" @click="reveal"><AppIcon name="folder" :size="15" /> Mostrar no Explorador</button>
       <button
         class="menu-action danger"
         role="menuitem"

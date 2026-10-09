@@ -1,29 +1,30 @@
 /**
  * Blocos de código (```linguagem … ```) no editor. As cercas ``` nunca aparecem.
  *
- * - Fora da edição, o bloco aparece como um cartão: cabeçalho com a linguagem e os
- *   botões Copiar, Tela cheia e Remover, e o código colorido com altura máxima
- *   (rolagem interna para códigos grandes).
- * - Com o cursor dentro do bloco (clique no código ou setas), o cartão se abre: as
- *   linhas do código ficam editáveis ali mesmo, entre o cabeçalho e o rodapé do
- *   cartão (que tomam o lugar das cercas). O cursor nunca fica numa cerca: as
- *   setas e os cliques passam direto para o código ou para fora do bloco.
+ * - O bloco aparece como um cartão: cabeçalho com a linguagem e os botões Copiar,
+ *   Tela cheia e Remover, e o código colorido com altura máxima (rolagem interna
+ *   para códigos grandes).
+ * - O código é editado ali mesmo, no editor do próprio cartão (block-editor.ts): o
+ *   cartão continua do mesmo tamanho — só a tela cheia mostra o bloco inteiro. Cada
+ *   mudança vai para o texto da nota (e o desfazer é o da nota).
+ * - Na nota, o bloco é uma peça só: o cursor da nota pula o bloco; ↑/↓ entram nele.
+ *   Uma seleção da nota que cai dentro do código (setas, desfazer, busca, Enter em
+ *   ```) aparece no editor do bloco.
  * - Digitar ``` (ou ```linguagem) numa linha e apertar Enter cria um bloco; a
  *   linguagem muda pelo nome dela no cabeçalho. Backspace num bloco vazio o remove.
  * - Blocos de texto (```text, criados pela barra de formatação — text-blocks.ts) usam
  *   o mesmo cartão, mas com a fonte do texto, linhas que quebram e sem linguagem.
  * - O arquivo continua sendo Markdown comum.
  */
-import { undo } from '@codemirror/commands'
+import { redo, undo } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
-import { Annotation, EditorSelection, EditorState, Prec, StateField, type Extension, type Range, type Transaction } from '@codemirror/state'
-import { Decoration, EditorView, keymap, WidgetType, type Command, type DecorationSet } from '@codemirror/view'
-import { highlightTree } from '@lezer/highlight'
+import { openSearchPanel } from '@codemirror/search'
+import { Annotation, EditorSelection, EditorState, Prec, StateField, Transaction, type ChangeSpec, type Extension, type Range } from '@codemirror/state'
+import { Decoration, EditorView, keymap, ViewPlugin, WidgetType, type Command, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { ICONS, iconSvg } from '../icons'
-import { focusChanged, focusTracking, isFocused } from './focus'
+import { BLOCK_EDITOR_CLASS, BlockEditor, type BlockEditorHost } from './block-editor'
 import { editorHost } from './host'
-import { findLanguage, isTextBlockInfo, languageLabel } from './languages'
-import { codeHighlight } from './theme'
+import { isTextBlockInfo, languageLabel } from './languages'
 
 export interface CodeBlock {
   /** Começo da linha da cerca de abertura. */
@@ -45,6 +46,9 @@ export interface CodeBlock {
 
 /** Mudança feita pelo próprio editor nas cercas (criar, remover, trocar a linguagem). */
 const fenceEdit = Annotation.define<boolean>()
+
+/** Mudança (ou seleção) que veio do editor de dentro do bloco: não volta para ele. */
+const fromBlockEditor = Annotation.define<boolean>()
 
 /** Nós que nunca contêm blocos de código (não precisa olhar dentro). */
 const SKIP = new Set(['Paragraph', 'ATXHeading1', 'ATXHeading2', 'ATXHeading3', 'ATXHeading4', 'ATXHeading5', 'ATXHeading6', 'HTMLBlock', 'CodeBlock', 'Table'])
@@ -174,111 +178,65 @@ function header(info: string): HTMLElement {
   return head
 }
 
-/** Escreve o código colorido (quando a linguagem já foi carregada) dentro de `target`. */
-export function renderHighlighted(target: HTMLElement, code: string, info: string): void {
-  const language = findLanguage(info)?.support?.language
-  if (!language) {
-    target.textContent = code
-    return
-  }
-  const tree = language.parser.parse(code)
-  let pos = 0
-  highlightTree(tree, codeHighlight, (from, to, classes) => {
-    if (from > pos) target.append(code.slice(pos, from))
-    const span = el('span', classes)
-    span.textContent = code.slice(from, to)
-    target.append(span)
-    pos = to
-  })
-  if (pos < code.length) target.append(code.slice(pos))
-}
+/** Os editores dos cartões na tela (pelo elemento do cartão). */
+const blockEditors = new Map<HTMLElement, BlockEditor>()
 
 class CodeBlockWidget extends WidgetType {
   constructor(
     readonly info: string,
     readonly code: string,
-    readonly loaded: boolean,
   ) {
     super()
   }
   override eq(other: CodeBlockWidget): boolean {
-    return other.info === this.info && other.code === this.code && other.loaded === this.loaded
+    return other.info === this.info && other.code === this.code
   }
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const text = isTextBlockInfo(this.info)
     // Espaçamento por padding (margens em widgets de bloco atrapalham a medição do editor)
     const wrap = el('div', text ? 'cm-codeblock cm-textblock' : 'cm-codeblock')
     const card = el('div', 'cm-codeblock-card')
-    const pre = el('pre', 'cm-codeblock-pre')
-    const code = el('code')
-    // Bloco de texto: o conteúdo exatamente como está (sem cores de linguagem)
-    if (text) code.textContent = this.code
-    else renderHighlighted(code, this.code, this.info)
-    pre.append(code)
-    card.append(header(this.info), pre)
+    const body = el('div', 'cm-codeblock-body')
+    card.append(header(this.info), body)
     wrap.append(card)
+    blockEditors.set(wrap, new BlockEditor(body, this.info, this.code, blockHost(view, wrap)))
     return wrap
+  }
+  /** O código ou a linguagem mudaram: o mesmo cartão (o editor de dentro continua, com o cursor). */
+  override updateDOM(dom: HTMLElement): boolean {
+    const editor = blockEditors.get(dom)
+    if (!editor || isTextBlockInfo(editor.info) !== isTextBlockInfo(this.info)) return false
+    if (editor.info !== this.info) {
+      const old = dom.querySelector('.cm-codeblock-head')
+      if (old) old.replaceWith(header(this.info))
+      editor.setInfo(this.info)
+    }
+    editor.setCode(this.code)
+    return true
+  }
+  override destroy(dom: HTMLElement): void {
+    blockEditors.get(dom)?.destroy()
+    blockEditors.delete(dom)
   }
   override get estimatedHeight(): number {
     return Math.min(this.code.split('\n').length, 18) * 21 + 58
   }
-  override ignoreEvent(): boolean {
-    return false
-  }
-}
-
-/** Cabeçalho do cartão aberto (no lugar da cerca de abertura). */
-class CodeHeaderWidget extends WidgetType {
-  constructor(readonly info: string) {
-    super()
-  }
-  override eq(other: CodeHeaderWidget): boolean {
-    return other.info === this.info
-  }
-  toDOM(): HTMLElement {
-    const wrap = el('div', isTextBlockInfo(this.info) ? 'cm-codeblock-head-editing cm-textblock' : 'cm-codeblock-head-editing')
-    // O espaço abaixo do cabeçalho é o mesmo do cartão fechado (o código não "pula")
-    wrap.append(header(this.info), el('div', 'cm-codeblock-gap'))
-    return wrap
-  }
-  override ignoreEvent(): boolean {
-    return false
-  }
-}
-
-/** Rodapé do cartão aberto (no lugar da cerca de fechamento). */
-class CodeFooterWidget extends WidgetType {
-  override eq(): boolean {
-    return true
-  }
-  toDOM(): HTMLElement {
-    const wrap = el('div', 'cm-codeblock-foot-editing')
-    wrap.append(el('div', 'cm-codeblock-foot'))
-    return wrap
-  }
-  override ignoreEvent(): boolean {
-    return false
+  /** Os eventos do editor de dentro são dele; os do cabeçalho, da nota (codeBlockEvents). */
+  override ignoreEvent(event: Event): boolean {
+    const target = event.target instanceof Element ? event.target : (event.target as Node | null)?.parentElement
+    return !!target?.closest(`.${BLOCK_EDITOR_CLASS}`)
   }
 }
 
 const hidden = Decoration.replace({})
 
 function buildDecorations(state: EditorState): { decorations: DecorationSet; atoms: DecorationSet } {
-  const focused = isFocused(state)
   const ranges: Range<Decoration>[] = []
   const atoms: Range<Decoration>[] = []
   for (const block of codeBlocks(state)) {
-    const editing = focused && !block.empty && state.selection.ranges.some((range) => range.from <= block.codeTo && range.to >= block.codeFrom)
-    if (editing) {
-      ranges.push(Decoration.replace({ widget: new CodeHeaderWidget(block.info), block: true }).range(block.from, block.openTo))
-      ranges.push(Decoration.replace({ widget: new CodeFooterWidget(), block: true }).range(block.closeFrom, block.to))
-      atoms.push(hidden.range(block.from, block.openTo), hidden.range(block.closeFrom, block.to))
-    } else {
-      const loaded = !!findLanguage(block.info)?.support
-      const code = state.sliceDoc(block.codeFrom, block.codeTo)
-      ranges.push(Decoration.replace({ widget: new CodeBlockWidget(block.info, code, loaded), block: true }).range(block.from, block.to))
-      atoms.push(hidden.range(block.from, block.to))
-    }
+    const code = state.sliceDoc(block.codeFrom, block.codeTo)
+    ranges.push(Decoration.replace({ widget: new CodeBlockWidget(block.info, code), block: true }).range(block.from, block.to))
+    atoms.push(hidden.range(block.from, block.to))
   }
   return { decorations: Decoration.set(ranges, true), atoms: Decoration.set(atoms, true) }
 }
@@ -286,7 +244,7 @@ function buildDecorations(state: EditorState): { decorations: DecorationSet; ato
 const codeBlockField = StateField.define<{ decorations: DecorationSet; atoms: DecorationSet }>({
   create: (state) => buildDecorations(state),
   update(value, tr) {
-    const changed = tr.docChanged || tr.selection || focusChanged(tr.effects) || syntaxTree(tr.state) !== syntaxTree(tr.startState)
+    const changed = tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState)
     return changed ? buildDecorations(tr.state) : value
   },
   provide: (field) => [
@@ -294,6 +252,172 @@ const codeBlockField = StateField.define<{ decorations: DecorationSet; atoms: De
     EditorView.atomicRanges.of((view) => view.state.field(field).atoms),
   ],
 })
+
+// ── A ponte entre a nota e o editor de cada bloco ───────────────────────────
+
+/** O bloco do cartão `wrap`, no texto atual da nota. */
+function blockOf(view: EditorView, wrap: HTMLElement): CodeBlock | null {
+  if (!wrap.isConnected) return null
+  try {
+    return codeBlockAt(view.state, view.posAtDOM(wrap))
+  } catch {
+    return null
+  }
+}
+
+/** Uma cerca maior quando o código passa a ter uma linha que fecharia o bloco antes da hora. */
+function longerFences(state: EditorState, block: CodeBlock, code: string): ChangeSpec[] {
+  const open = /^(\s{0,3})(`{3,}|~{3,})/.exec(state.sliceDoc(block.from, block.openTo))
+  const close = /^(\s{0,3})(`{3,}|~{3,})/.exec(state.sliceDoc(block.closeFrom, block.to))
+  if (!open || !close) return []
+  const mark = open[2]![0]!
+  let longest = 0
+  const fence = mark === '`' ? /^ {0,3}(`{3,})/gm : /^ {0,3}(~{3,})/gm
+  for (const match of code.matchAll(fence)) longest = Math.max(longest, match[1]!.length)
+  if (longest < open[2]!.length) return []
+  const next = mark.repeat(longest + 1)
+  const openAt = block.from + open[1]!.length
+  const closeAt = block.closeFrom + close[1]!.length
+  return [
+    { from: openAt, to: openAt + open[2]!.length, insert: next },
+    { from: closeAt, to: closeAt + close[2]!.length, insert: next },
+  ]
+}
+
+function blockHost(view: EditorView, wrap: HTMLElement): BlockEditorHost {
+  return {
+    changed(tr: Transaction) {
+      const block = blockOf(view, wrap)
+      if (!block) return
+      const code = tr.state.doc.toString()
+      const changes: ChangeSpec[] = []
+      if (block.empty) {
+        // Bloco sem nenhuma linha: o código entra com a quebra de linha antes da cerca final
+        if (code) changes.push({ from: block.codeFrom, insert: `${code}\n` })
+      } else {
+        tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+          changes.push({ from: block.codeFrom + fromA, to: block.codeFrom + toA, insert: inserted.toString() })
+        })
+      }
+      const all = [...changes, ...longerFences(view.state, block, code)]
+      // Onde o código começa depois da mudança (a cerca de abertura pode ter crescido)
+      const codeFrom = view.state.changes(all).mapPos(block.codeFrom, -1)
+      const { main } = tr.state.selection
+      view.dispatch({
+        changes: all,
+        selection: EditorSelection.single(codeFrom + main.anchor, codeFrom + main.head),
+        userEvent: tr.annotation(Transaction.userEvent) ?? 'input',
+        annotations: [fenceEdit.of(true), fromBlockEditor.of(true)],
+      })
+    },
+    selected(selection) {
+      const block = blockOf(view, wrap)
+      if (!block || block.empty) return
+      const { main } = selection
+      const length = block.codeTo - block.codeFrom
+      view.dispatch({
+        selection: EditorSelection.single(block.codeFrom + Math.min(main.anchor, length), block.codeFrom + Math.min(main.head, length)),
+        annotations: fromBlockEditor.of(true),
+      })
+    },
+    undo: () => undo(view),
+    redo: () => redo(view),
+    exit(side) {
+      const block = blockOf(view, wrap)
+      if (!block) return
+      const { doc } = view.state
+      let insert: { at: number; text: string } | null = null
+      let target: number
+      if (side === 'before') {
+        if (block.from > 0) target = block.from - 1
+        else {
+          // Bloco no começo da nota: uma linha vazia antes dele, para dar onde escrever
+          insert = { at: 0, text: '\n' }
+          target = 0
+        }
+      } else if (block.to < doc.length) {
+        target = block.to + 1
+      } else {
+        // Bloco no fim da nota: uma linha vazia depois dele
+        insert = { at: doc.length, text: '\n' }
+        target = doc.length + 1
+      }
+      view.dispatch({
+        changes: insert ? { from: insert.at, insert: insert.text } : undefined,
+        selection: EditorSelection.cursor(target, side === 'before' ? -1 : 1),
+        annotations: [fenceEdit.of(true), fromBlockEditor.of(true)],
+        userEvent: 'select',
+        scrollIntoView: true,
+      })
+      view.focus()
+    },
+    removeEmpty() {
+      const block = blockOf(view, wrap)
+      if (!block) return
+      const { doc } = view.state
+      const to = block.to < doc.length ? block.to + 1 : block.to
+      view.dispatch({
+        changes: { from: block.from, to },
+        selection: EditorSelection.cursor(block.from),
+        userEvent: 'delete.codeblock',
+        annotations: [fenceEdit.of(true), fromBlockEditor.of(true)],
+      })
+      view.focus()
+    },
+    openSearch: () => openSearchPanel(view),
+  }
+}
+
+/** O editor do cartão que começa em `from` (só os cartões na tela existem). */
+function editorAt(view: EditorView, from: number): BlockEditor | null {
+  for (const [wrap, editor] of blockEditors) {
+    if (!view.contentDOM.contains(wrap)) continue
+    const block = blockOf(view, wrap)
+    if (block?.from === from) return editor
+  }
+  return null
+}
+
+/**
+ * Seleção da nota que caiu dentro do código de um bloco (↑/↓ entrando, Enter em
+ * "```", desfazer, a busca…): aparece no editor do bloco — com o foco, se a nota
+ * estava com ele.
+ */
+const revealInBlocks = ViewPlugin.fromClass(
+  class {
+    private timer: ReturnType<typeof setTimeout> | null = null
+    constructor(readonly view: EditorView) {}
+    update(update: ViewUpdate) {
+      if (!update.selectionSet || update.transactions.some((tr) => tr.annotation(fromBlockEditor))) return
+      const { selection } = update.state
+      const { main } = selection
+      const block = codeBlocks(update.state).find((b) => !b.empty && b.codeFrom <= main.from && main.to <= b.codeTo)
+      if (!block) return
+      const inside = selection.ranges.filter((range) => block.codeFrom <= range.from && range.to <= block.codeTo)
+      const ranges = inside.map((range) => ({ anchor: range.anchor - block.codeFrom, head: range.head - block.codeFrom }))
+      const mainIndex = inside.indexOf(main)
+      const focus = update.view.hasFocus
+      if (this.timer) clearTimeout(this.timer)
+      // Depois de a nota terminar de desenhar (o cartão pode ter acabado de aparecer)
+      const show = (tries: number) => {
+        this.timer = null
+        const editor = editorAt(this.view, block.from)
+        if (editor) {
+          editor.select(ranges, mainIndex, focus || editor.view.hasFocus)
+          return
+        }
+        if (tries <= 0 || block.from > this.view.state.doc.length) return
+        // Fora da tela: rola até o bloco e tenta de novo
+        this.view.dispatch({ effects: EditorView.scrollIntoView(block.from, { y: 'center' }) })
+        this.timer = setTimeout(() => show(tries - 1), 60)
+      }
+      this.timer = setTimeout(() => show(3), 0)
+    }
+    destroy() {
+      if (this.timer) clearTimeout(this.timer)
+    }
+  },
+)
 
 // ── As cercas nunca são editadas pela metade ─────────────────────────────────
 
@@ -493,19 +617,6 @@ export const deleteNearBlock: Command = (view) => {
 
 // ── Cliques ──────────────────────────────────────────────────────────────────
 
-/** Posição (no código) do caractere sob o mouse. */
-function offsetAtPoint(code: HTMLElement, x: number, y: number): number {
-  const caret = document.caretRangeFromPoint?.(x, y)
-  if (!caret || !code.contains(caret.startContainer)) return 0
-  let offset = 0
-  const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT)
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (node === caret.startContainer) return offset + caret.startOffset
-    offset += node.textContent?.length ?? 0
-  }
-  return offset
-}
-
 /** Troca o desenho do ícone do botão (o mesmo <svg>: a animação do clique continua nele). */
 function setButtonIcon(button: HTMLElement, name: string): void {
   const svg = button.querySelector('svg')
@@ -541,52 +652,30 @@ function runAction(view: EditorView, block: CodeBlock, action: string, button: H
   }
 }
 
+/**
+ * Cliques no cartão fora do código (o código é do editor de dentro — ver
+ * CodeBlockWidget.ignoreEvent): os botões do cabeçalho; o resto não mexe no cursor.
+ */
 const codeBlockEvents = EditorView.domEventHandlers({
   mousedown(event, view) {
     const target = event.target as HTMLElement
-    const widget = target.closest?.('.cm-codeblock, .cm-codeblock-head-editing, .cm-codeblock-foot-editing') as HTMLElement | null
+    const widget = target.closest?.('.cm-codeblock') as HTMLElement | null
     if (!widget || event.button !== 0) return false
     const block = codeBlockAt(view.state, view.posAtDOM(widget))
     if (!block) return false
-    const button = target.closest('[data-action]') as HTMLElement | null
-    if (button) {
-      event.preventDefault()
-      runAction(view, block, button.dataset.action ?? '', button)
-      return true
-    }
-    if (widget.classList.contains('cm-codeblock-foot-editing')) {
-      // Clique no rodapé do cartão aberto: cursor no fim do código
-      event.preventDefault()
-      view.dispatch({ selection: EditorSelection.cursor(block.codeTo, -1), userEvent: 'select.pointer' })
-      view.focus()
-      return true
-    }
-    const pre = target.closest('.cm-codeblock-pre') as HTMLElement | null
-    if (!pre) {
-      event.preventDefault()
-      return true
-    }
-    // Clique na barra de rolagem: só rola
-    if (event.offsetX > pre.clientWidth || event.offsetY > pre.clientHeight) return false
     event.preventDefault()
-    if (block.empty) {
-      // Bloco sem nenhuma linha: ganha uma linha para o cursor
-      view.dispatch({ changes: { from: block.openTo, insert: '\n' }, selection: EditorSelection.cursor(block.openTo + 1), annotations: fenceEdit.of(true), userEvent: 'input' })
-    } else {
-      const offset = offsetAtPoint(pre.querySelector('code')!, event.clientX, event.clientY)
-      view.dispatch({ selection: { anchor: Math.min(block.codeFrom + offset, block.codeTo) }, userEvent: 'select.pointer' })
-    }
-    view.focus()
+    const button = target.closest('[data-action]') as HTMLElement | null
+    if (button) runAction(view, block, button.dataset.action ?? '', button)
     return true
   },
 })
 
 export const codeBlockPreview: Extension = [
-  focusTracking,
   codeBlockField,
   protectFences,
   keepCursorOutOfFences,
   codeBlockEvents,
+  revealInBlocks,
   Prec.highest(
     keymap.of([
       { key: 'Enter', run: openBlock },

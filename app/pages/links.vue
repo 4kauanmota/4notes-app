@@ -10,11 +10,12 @@ import { computed, nextTick, onActivated, onDeactivated, onUnmounted, reactive, 
 import LinkQuickAdd from '~/components/links/LinkQuickAdd.vue'
 import LinksSidebar from '~/components/links/LinksSidebar.vue'
 import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { useShortcuts } from '~/composables/useShortcuts'
 import { paletteVar } from '~/lib/colors'
 import { droppedText, isExternalLinkDrag } from '~/lib/links/drag'
 import type { LinkSort, SavedLink } from '~/lib/links/model'
-import { modKeyLabel } from '~/lib/platform'
+import { canReveal, modKeyLabel } from '~/lib/platform'
 import { useLinksStore, type LinkSelection } from '~/stores/links'
 
 const links = useLinksStore()
@@ -26,6 +27,11 @@ const list = ref<HTMLElement>()
 const sentinel = ref<HTMLElement>()
 /** Link selecionado na lista (teclado e menu). */
 const activeId = ref<string | null>(null)
+
+/** Celular (layout compact): as categorias ficam numa gaveta. */
+const { isCompact } = useLayoutSize()
+const foldersOpen = ref(false)
+const reveal = canReveal()
 
 const folderDialog = reactive({ open: false, id: null as string | null, assignLink: null as string | null })
 const editDialog = reactive({ open: false, id: null as string | null })
@@ -298,13 +304,25 @@ onUnmounted(() => {
 
 useShortcuts({
   'mod+n': () => quickAdd.value?.focus(),
-  'mod+f': () => sidebar.value?.focusSearch(),
+  'mod+f': () => {
+    // No celular a busca fica na gaveta das categorias
+    if (isCompact.value) foldersOpen.value = true
+    void nextTick(() => sidebar.value?.focusSearch())
+  },
 })
 </script>
 
 <template>
   <div class="links-page">
-    <LinksSidebar ref="sidebar" @import="importOpen = true" @new-folder="openFolderDialog(null)" @edit-folder="openFolderDialog" />
+    <MobileDrawer v-model:open="foldersOpen" label="Categorias de links">
+      <LinksSidebar
+        ref="sidebar"
+        @import="(foldersOpen = false), (importOpen = true)"
+        @search-done="foldersOpen = false"
+        @new-folder="openFolderDialog(null)"
+        @edit-folder="openFolderDialog"
+      />
+    </MobileDrawer>
     <section
       class="links-main"
       @dragenter="onDragEnter"
@@ -319,13 +337,16 @@ useShortcuts({
         <p class="muted">Nada foi sobrescrito. Corrija o arquivo <code>links/links.json</code> (ou restaure um backup de <code>.4notes/backups</code>) e tente de novo.</p>
         <div class="error-actions">
           <button class="btn btn-primary" @click="links.retry()">Tentar novamente</button>
-          <button class="btn" @click="links.revealFile()">Mostrar arquivo</button>
+          <button v-if="reveal" class="btn" @click="links.revealFile()">Mostrar arquivo</button>
         </div>
       </div>
 
       <div v-else ref="scroller" class="links-scroll">
         <div class="links-content">
           <header class="links-header">
+            <button v-if="isCompact" class="icon-btn folders-toggle" aria-label="Categorias" data-action="link-folders" @click="foldersOpen = true">
+              <AppIcon name="sidebar" :size="19" />
+            </button>
             <div class="title-block">
               <h1>
                 <CategoryAvatar v-if="folder && !searching" :name="folder.name" :color="folder.color" :icon="folder.icon" :image="folder.image" :size="28" />
@@ -582,5 +603,31 @@ useShortcuts({
   .links-content {
     padding: 20px 18px 80px;
   }
+}
+
+/* ── Celular ── */
+.folders-toggle {
+  flex: none;
+  margin: 0 -2px 0 -8px;
+}
+html[data-layout='compact'] .links-content {
+  padding: 14px 14px 72px;
+}
+html[data-layout='compact'] .links-header {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 14px;
+}
+html[data-layout='compact'] .title-block {
+  flex: 1;
+}
+html[data-layout='compact'] .title-block h1 {
+  font-size: 22px;
+}
+/* A ordem (Recentes / A–Z / URL) desce para a linha de baixo, inteira */
+html[data-layout='compact'] .header-side {
+  width: 100%;
+  padding-top: 0;
 }
 </style>

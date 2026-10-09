@@ -1,13 +1,15 @@
 /**
  * Tema claro/escuro.
  *
- * A preferência ("system" | "light" | "dark") é salva pelo processo principal
- * (config.json) e também aplicada ao `nativeTheme` do Electron, para que menus,
- * caixas de diálogo e a barra de título nativa acompanhem o app.
+ * A preferência ("system" | "light" | "dark") é uma configuração do workspace
+ * (settings.json): a mesma no computador e no celular. O aparelho guarda também uma
+ * cópia (no desktop, o config.json do Electron, que aplica o `nativeTheme` aos menus e
+ * à barra de título nativa) para abrir já com o tema certo, antes de ler o workspace.
  */
 import { reactive, readonly } from 'vue'
 import type { ThemePreference } from '#shared/ipc'
 import { desktop, hasDesktopApi } from '~/lib/platform'
+import { onSettingsChange, settingsSection, updateSettingsSection } from '~/stores/settings'
 
 type ResolvedTheme = 'light' | 'dark'
 
@@ -79,8 +81,23 @@ export async function setTheme(preference: ThemePreference, origin?: { x: number
     change()
   }
 
+  updateSettingsSection('theme', preference)
   if (hasDesktopApi()) await desktop().settings.setTheme(preference)
 }
+
+const isTheme = (value: unknown): value is ThemePreference => value === 'system' || value === 'light' || value === 'dark'
+
+/** Aplica o tema do workspace (ao abrir, ou quando mudou em outro aparelho). */
+export function applyWorkspaceTheme(value: unknown): void {
+  if (!isTheme(value) || value === state.preference) return
+  state.preference = value
+  applyResolved(resolve(value))
+  if (hasDesktopApi()) void desktop().settings.setTheme(value).catch(() => undefined)
+}
+
+onSettingsChange((changed) => {
+  if (changed.has('theme')) applyWorkspaceTheme(settingsSection('theme'))
+})
 
 export function useTheme() {
   return { theme: readonly(state), setTheme }

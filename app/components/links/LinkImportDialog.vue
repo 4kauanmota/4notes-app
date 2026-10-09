@@ -13,6 +13,7 @@ import type { BookmarkFolder, BookmarkNode, BrowserSource } from '#shared/ipc'
 import { showToast } from '~/composables/useToasts'
 import { flattenBookmarks, planImport, type ImportCandidate, type ImportMode } from '~/lib/links/import'
 import { displayHost, normalizeUrl, urlKey } from '~/lib/links/model'
+import { capabilities } from '~/lib/platform'
 import { useLinksStore, type LinkSelection } from '~/stores/links'
 
 const props = defineProps<{ open: boolean }>()
@@ -25,6 +26,8 @@ const FOLDER_PREVIEW = 150
 const step = ref<'source' | 'pick'>('source')
 /** null = procurando os navegadores. */
 const sources = ref<BrowserSource[] | null>(null)
+/** No celular não há navegadores para ler: só o arquivo de favoritos (exportado no computador ou no celular). */
+const browsersAvailable = capabilities().browserBookmarks
 /** Fonte sendo lida (id do navegador ou 'file'). */
 const reading = ref<string | null>(null)
 const sourceLabel = ref('')
@@ -219,7 +222,7 @@ async function runImport() {
 </script>
 
 <template>
-  <UiModal :open="open" :width="step === 'pick' ? 620 : 480" label="Importar do navegador" @close="emit('close')">
+  <UiModal :open="open" :width="step === 'pick' ? 620 : 480" label="Importar do navegador" full-on-compact @close="emit('close')">
     <!-- Passo 1: de onde -->
     <div v-if="step === 'source'" class="import-dialog">
       <h2>Importar do navegador</h2>
@@ -247,7 +250,7 @@ async function runImport() {
             <span v-if="reading === source.id" class="spinner" />
             <AppIcon v-else name="chevron-right" :size="15" class="source-arrow" />
           </button>
-          <p v-if="!sources.length" class="none">Nenhum navegador com favoritos foi encontrado neste computador.</p>
+          <p v-if="!sources.length && browsersAvailable" class="none">Nenhum navegador com favoritos foi encontrado neste computador.</p>
         </template>
 
         <button type="button" class="source file" :class="{ busy: reading === 'file' }" :disabled="!!reading" @click="choose('file')">

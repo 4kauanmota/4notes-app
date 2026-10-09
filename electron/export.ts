@@ -11,8 +11,11 @@ import { BrowserWindow, dialog, shell } from 'electron'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { exportFileName, inlineWorkspaceImages as inlineImages } from '../shared/files'
 import { WORKSPACE_SCHEME } from '../shared/ipc'
-import { AppError, IMAGE_FILE, MAX_IMAGE_BYTES, resolveInside } from './files'
+import { AppError, MAX_IMAGE_BYTES, resolveInside } from './files'
+
+export { exportFileName } from '../shared/files'
 
 /** Pasta do último arquivo exportado (o próximo "Salvar como" começa nela). */
 let lastDir: string | null = null
@@ -21,32 +24,6 @@ const exported = new Set<string>()
 
 const MAX_TEXT = 50 * 1024 * 1024
 const MAX_HTML = 20 * 1024 * 1024
-
-const IMAGE_MIME: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  bmp: 'image/bmp',
-  avif: 'image/avif',
-  svg: 'image/svg+xml',
-  ico: 'image/x-icon',
-}
-
-/** Nome do arquivo a partir do título da nota ("Reunião: 05/10" → "Reunião 05 10.pdf"). */
-export function exportFileName(name: unknown, extension: string): string {
-  const base =
-    (typeof name === 'string' ? name : '')
-      .normalize('NFC')
-      .replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .replace(/^\.+/, '')
-      .slice(0, 100)
-      .replace(/[. ]+$/, '') || 'Nota'
-  return `${/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(base) ? `${base}_` : base}.${extension}`
-}
 
 async function askTarget(win: BrowserWindow | null, title: string, name: unknown, extension: string, filter: string): Promise<string | null> {
   const file = exportFileName(name, extension)
@@ -92,39 +69,11 @@ export async function exportText(win: BrowserWindow | null, name: unknown, text:
 }
 
 /** Troca as imagens do workspace (workspace://files/…) pela imagem embutida (data:…). */
-export async function inlineWorkspaceImages(root: string | null, html: string): Promise<string> {
-  const prefix = `${WORKSPACE_SCHEME}://files/`
-  const pattern = /(<img\b[^>]*?\bsrc=")([^"]*)(")/gi
-  const cache = new Map<string, string | null>()
-  const embed = async (src: string): Promise<string | null> => {
-    if (!src.startsWith(prefix) || !root) return null
-    const relative = src
-      .slice(prefix.length)
-      .split(/[?#]/)[0]!
-      .split('/')
-      .map((part) => {
-        try {
-          return decodeURIComponent(part)
-        } catch {
-          return part
-        }
-      })
-      .join('/')
-    if (!IMAGE_FILE.test(relative)) return null
-    try {
-      const data = await fs.readFile(resolveInside(root, relative))
-      if (data.byteLength > MAX_IMAGE_BYTES) return null
-      return `data:${IMAGE_MIME[path.extname(relative).slice(1).toLowerCase()] ?? 'application/octet-stream'};base64,${data.toString('base64')}`
-    } catch {
-      return null
-    }
-  }
-  const sources = new Set([...html.matchAll(pattern)].map((match) => match[2]!.replace(/&amp;/g, '&')))
-  for (const src of sources) cache.set(src, await embed(src))
-  return html.replace(pattern, (_all, open: string, src: string, close: string) => {
-    const data = cache.get(src.replace(/&amp;/g, '&'))
-    // Sem a imagem (fora do workspace ou não encontrada): fica só o espaço dela
-    return `${open}${data ?? ''}${close}${data ? '' : ' data-missing="1"'}`
+export function inlineWorkspaceImages(root: string | null, html: string): Promise<string> {
+  return inlineImages(html, `${WORKSPACE_SCHEME}://files/`, async (relative) => {
+    if (!root) return null
+    const data = await fs.readFile(resolveInside(root, relative))
+    return data.byteLength > MAX_IMAGE_BYTES ? null : data.toString('base64')
   })
 }
 

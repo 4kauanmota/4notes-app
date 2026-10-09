@@ -7,6 +7,7 @@
  * devolve o `id` do item escolhido — ou null se fechar sem escolha.
  */
 import { shallowRef } from 'vue'
+import { canReveal } from '~/lib/platform'
 
 export interface MenuItemSpec {
   id?: string
@@ -32,6 +33,11 @@ export interface ContextMenuRequest {
 }
 
 export const separator: MenuItemSpec = { type: 'separator' }
+
+/** "Mostrar no Explorador" — só onde há um gerenciador de arquivos (não no celular). */
+export function revealItem(enabled = true): MenuItemSpec[] {
+  return canReveal() ? [{ id: 'reveal', label: 'Mostrar no Explorador', enabled }] : []
+}
 
 /** Menu aberto agora (só um por vez). */
 export const openMenu = shallowRef<ContextMenuRequest | null>(null)

@@ -10,9 +10,12 @@ import { errorMessage, workspaceFileUrl, type LibraryImage } from '#shared/ipc'
 import { confirmDialog } from '~/composables/useDialog'
 import { closeImageLibrary, useImageLibrary } from '~/composables/useImageLibrary'
 import { notifyError, showToast } from '~/composables/useToasts'
-import { desktop } from '~/lib/platform'
+import { desktop, isAndroid, trashPlace } from '~/lib/platform'
 import { flushEverything } from '~/stores/app'
 
+/** Para onde vai a imagem excluída (a Lixeira; no celular, a do workspace). */
+const trash = trashPlace()
+const device = isAndroid() ? 'celular' : 'computador'
 const { state } = useImageLibrary()
 /** null = carregando. */
 const images = ref<LibraryImage[] | null>(null)
@@ -91,7 +94,7 @@ async function remove(image: LibraryImage) {
   if (image.usage.length) return
   const ok = await confirmDialog({
     title: 'Excluir esta imagem?',
-    message: `“${image.name}” vai para a Lixeira. Nenhuma nota ou categoria usa esta imagem.`,
+    message: `“${image.name}” vai para ${trashPlace()}. Nenhuma nota ou categoria usa esta imagem.`,
     confirmLabel: 'Excluir',
     danger: true,
     icon: 'trash',
@@ -99,7 +102,7 @@ async function remove(image: LibraryImage) {
   if (!ok) return
   try {
     const result = await desktop().library.remove(image.path)
-    if (result === 'removed') showToast({ message: 'Imagem excluída (foi para a Lixeira)', icon: 'trash' })
+    if (result === 'removed') showToast({ message: `Imagem excluída (foi para ${trashPlace()})`, icon: 'trash' })
     else if (result === 'in-use') showToast({ message: 'Essa imagem passou a ser usada e não foi excluída.', icon: 'info' })
   } catch (error) {
     notifyError(`Não foi possível excluir a imagem: ${errorMessage(error)}`, error)
@@ -132,7 +135,7 @@ function onKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <UiModal :open="state.open" :width="720" :label="state.title" @close="closeImageLibrary()">
+  <UiModal :open="state.open" :width="720" :label="state.title" full-on-compact @close="closeImageLibrary()">
     <div class="library">
       <header class="library-head">
         <div class="head-text">
@@ -155,7 +158,7 @@ function onKeydown(event: KeyboardEvent) {
       <div v-else-if="!images.length" class="library-state empty">
         <AppIcon name="image" :size="30" />
         <strong>Nenhuma imagem ainda</strong>
-        <span>Envie imagens do computador ou cole uma imagem numa nota: ela aparece aqui.</span>
+        <span>Envie imagens do {{ device }} ou cole uma imagem numa nota: ela aparece aqui.</span>
       </div>
       <div v-else ref="grid" class="library-grid" role="listbox" :aria-label="state.title" tabindex="0" @keydown="onKeydown">
         <button
@@ -177,7 +180,7 @@ function onKeydown(event: KeyboardEvent) {
             v-if="!image.usage.length"
             class="tile-delete icon-btn sm danger"
             role="button"
-            data-tip="Excluir (vai para a Lixeira)"
+            :data-tip="`Excluir (vai para ${trash})`"
             aria-label="Excluir imagem"
             @click.stop="remove(image)"
             @dblclick.stop

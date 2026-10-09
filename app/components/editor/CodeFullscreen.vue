@@ -6,6 +6,9 @@
  *
  * Bloco de texto (```text): o mesmo, mas como texto — fonte do texto, linhas que
  * quebram, sem números de linha e sem nada de código (cores, fechar parênteses…).
+ *
+ * Nos dois, Ctrl+D seleciona a próxima ocorrência (várias seleções editadas juntas),
+ * como no editor do bloco na nota.
  */
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
@@ -16,6 +19,7 @@ import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutt
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { CodeEditRequest } from '~/lib/editor/host'
 import { findLanguage, isTextBlockInfo, languageLabel } from '~/lib/editor/languages'
+import { plainMultipleSelections } from '~/lib/editor/multi-select'
 import { codeEditorTheme, codeHighlight, textEditorTheme } from '~/lib/editor/theme'
 
 const props = defineProps<{ request: CodeEditRequest }>()
@@ -44,6 +48,7 @@ function codeExtensions(): Extension[] {
     highlightActiveLine(),
     history(),
     drawSelection(),
+    plainMultipleSelections,
     indentOnInput(),
     bracketMatching(),
     closeBrackets(),
@@ -64,6 +69,7 @@ function textExtensions(): Extension[] {
   return [
     history(),
     drawSelection(),
+    plainMultipleSelections,
     highlightSelectionMatches(),
     search({ top: true }),
     keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab, { key: 'Escape', run: close }]),
@@ -111,11 +117,11 @@ function copy(): void {
         <AppIcon :name="isText ? 'text-block' : 'code'" :size="16" />
         <span class="cf-lang">{{ label }}</span>
         <span class="cf-hint">As alterações vão direto para a nota</span>
-        <button class="btn btn-ghost btn-sm" type="button" @click="copy">
-          <AppIcon :name="copied ? 'check' : 'copy'" :size="15" /> {{ copied ? 'Copiado' : 'Copiar' }}
+        <button class="btn btn-ghost btn-sm" type="button" :aria-label="copied ? 'Copiado' : 'Copiar'" @click="copy">
+          <AppIcon :name="copied ? 'check' : 'copy'" :size="15" /><span class="cf-label"> {{ copied ? 'Copiado' : 'Copiar' }}</span>
         </button>
-        <button class="btn btn-primary btn-sm" type="button" data-tip="Esc" @click="close">
-          <AppIcon name="shrink" :size="15" /> Fechar
+        <button class="btn btn-primary btn-sm" type="button" data-tip="Esc" aria-label="Fechar" @click="close">
+          <AppIcon name="shrink" :size="15" /><span class="cf-label"> Fechar</span>
         </button>
       </header>
       <div ref="parent" class="cf-editor" />
@@ -126,8 +132,10 @@ function copy(): void {
 <style scoped>
 .code-fullscreen {
   position: fixed;
-  /* Abaixo da barra de título: os botões da janela (minimizar, maximizar, fechar) ficam livres */
-  inset: var(--titlebar-h) 0 0 0;
+  /* Abaixo da barra de título: os botões da janela (minimizar, maximizar, fechar) ficam livres.
+     No Android, também abaixo da barra de status e acima da barra de gestos (--safe-*). */
+  inset: calc(var(--titlebar-h) + var(--safe-top)) 0 0 0;
+  padding-bottom: var(--safe-bottom);
   z-index: 60;
   display: flex;
   flex-direction: column;
@@ -159,6 +167,25 @@ function copy(): void {
 }
 .cf-editor :deep(.cm-editor) {
   height: 100%;
+}
+/* Celular: sem o aviso (não cabe) e só os ícones nos botões */
+html[data-layout='compact'] .cf-hint {
+  display: none;
+}
+html[data-layout='compact'] .cf-lang {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-layout='compact'] .cf-head .btn {
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+}
+html[data-layout='compact'] .cf-label {
+  display: none;
 }
 @keyframes cf-in {
   from {

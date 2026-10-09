@@ -45,6 +45,8 @@ function hide() {
 function onOver(event: PointerEvent) {
   // Arrastando para reorganizar (useSortableList): sem dicas pelo caminho
   if (document.documentElement.classList.contains('is-sorting')) return hide()
+  // No toque não há "passar o mouse": as dicas só atrapalhariam depois de cada toque
+  if (event.pointerType === 'touch' || document.documentElement.hasAttribute('data-touch')) return hide()
   const el = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-tip]')
   if (el === current) return
   hide()

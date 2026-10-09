@@ -9,16 +9,20 @@
  *   pegam a mesma palavra inteira, com as mesmas maiúsculas.
  * - Chegando ao fim da nota, continua do começo; ocorrências já selecionadas e as
  *   escondidas (endereço de um link, dentro de uma menção, marcações) ficam de fora.
+ *   O código dos blocos também: cada bloco é um editor à parte (block-editor.ts),
+ *   com o próprio Ctrl+D.
  * - Esc volta para um cursor só.
  *
  * Fora disso nada muda: Ctrl+clique continua abrindo links (não cria cursores), só o
  * Ctrl+D cria seleções extras e as outras teclas funcionam como antes.
+ *
+ * `plainMultipleSelections` é o mesmo Ctrl+D para editores de texto puro (o código
+ * de um bloco, a tela cheia): ali não existe nada escondido.
  */
 import { syntaxTree } from '@codemirror/language'
 import { SearchCursor } from '@codemirror/search'
-import { Annotation, EditorSelection, EditorState, Prec, StateEffect, StateField, type Extension, type SelectionRange } from '@codemirror/state'
+import { Annotation, EditorSelection, EditorState, Facet, Prec, StateEffect, StateField, type Extension, type SelectionRange } from '@codemirror/state'
 import { EditorView, keymap, type Command } from '@codemirror/view'
-import { codeBlocks, type CodeBlock } from './code-blocks'
 import { hiddenElements, markupRanges } from './elements'
 import { lineMarkerAt } from './line-markers'
 import { isMentionUrl } from './mentions'
@@ -49,6 +53,9 @@ const wordModeField = StateField.define<boolean>({
 })
 
 const lower = (text: string) => text.toLowerCase()
+
+/** Texto puro (sem nada escondido): toda ocorrência pode ser selecionada. */
+const plainText = Facet.define<boolean, boolean>({ combine: (values) => values.some(Boolean) })
 
 type Span = { from: number; to: number }
 
@@ -98,11 +105,10 @@ function hiddenRanges(state: EditorState, from: number, to: number): Span[] {
 /**
  * A ocorrência pode ser selecionada? Não pode começar ou terminar dentro de algo
  * escondido (o endereço de um link, o título de uma menção…); algo escondido
- * inteiro dentro dela, pode. Dentro do código de um bloco, pode: o bloco se abre
- * para mostrar a seleção.
+ * inteiro dentro dela, pode. Dentro de um bloco de código, não: o bloco é um cartão
+ * atômico na nota (o código dele é editado no editor do próprio bloco).
  */
-function isSelectable(state: EditorState, from: number, to: number, atoms: Span[], blocks: CodeBlock[]): boolean {
-  if (blocks.some((block) => !block.empty && block.codeFrom <= from && to <= block.codeTo)) return true
+function isSelectable(state: EditorState, from: number, to: number, atoms: Span[]): boolean {
   const cuts = (span: Span) => span.from < to && span.to > from && !(from <= span.from && span.to <= to)
   return !atoms.some(cuts) && !hiddenRanges(state, from, to).some(cuts)
 }
@@ -112,8 +118,8 @@ function findNext(view: EditorView, query: string, wordMode: boolean): { from: n
   const { ranges, main } = state.selection
   const normalize = wordMode ? undefined : lower
   const taken = (from: number, to: number) => ranges.some((range) => range.from < to && range.to > from)
-  const atoms = atomicRanges(view)
-  const blocks = codeBlocks(state)
+  const plain = state.facet(plainText)
+  const atoms = plain ? [] : atomicRanges(view)
   // Depois da última ocorrência escolhida até o fim; depois, do começo da nota
   for (const cursor of [new SearchCursor(state.doc, query, main.to, state.doc.length, normalize), new SearchCursor(state.doc, query, 0, main.to, normalize)]) {
     for (cursor.next(); !cursor.done; cursor.next()) {
@@ -123,7 +129,7 @@ function findNext(view: EditorView, query: string, wordMode: boolean): { from: n
         const word = state.wordAt(from)
         if (!word || word.from !== from || word.to !== to) continue
       }
-      if (!isSelectable(state, from, to, atoms, blocks)) continue
+      if (!plain && !isSelectable(state, from, to, atoms)) continue
       return { from, to }
     }
   }
@@ -177,3 +183,6 @@ export const multipleSelections: Extension = [
   onlyCtrlDAddsRanges,
   Prec.high(keymap.of([{ key: 'Mod-d', run: selectNextOccurrence, preventDefault: true }])),
 ]
+
+/** O mesmo Ctrl+D para o código de um bloco e a tela cheia (texto puro). */
+export const plainMultipleSelections: Extension = [multipleSelections, plainText.of(true)]

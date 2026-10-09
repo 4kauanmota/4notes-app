@@ -1,8 +1,17 @@
 <script setup lang="ts">
 /**
  * Uma configuração: o nome, o "?" com uma explicação bem curta (ao passar o
- * mouse) e o controle à direita (switch, opções…).
+ * mouse; no toque, tocando no "?") e o controle à direita (switch, opções…).
  */
+import { ref } from 'vue'
+
+const showHelp = ref(false)
+
+/** No toque não há "passar o mouse": tocar no "?" mostra a explicação embaixo do nome. */
+function toggleHelp() {
+  if (document.documentElement.hasAttribute('data-touch')) showHelp.value = !showHelp.value
+}
+
 defineProps<{
   label: string
   /** Explicação curta mostrada no "?". */
@@ -18,10 +27,11 @@ defineProps<{
     <div class="setting-text">
       <div class="setting-title">
         <span class="setting-label">{{ label }}</span>
-        <span class="setting-help" tabindex="0" role="img" :aria-label="help" :data-tip="help" data-tip-pos="top">
+        <span class="setting-help" tabindex="0" role="img" :aria-label="help" :data-tip="help" data-tip-pos="top" @click="toggleHelp">
           <AppIcon name="help" :size="15" />
         </span>
       </div>
+      <p v-if="showHelp" class="setting-help-text">{{ help }}</p>
       <p v-if="note" class="setting-note">{{ note }}</p>
     </div>
     <div class="setting-control"><slot /></div>
@@ -75,5 +85,25 @@ defineProps<{
 .disabled .setting-control {
   opacity: 0.5;
   pointer-events: none;
+}
+.setting-help-text {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+/* Toque: o "?" é um alvo maior */
+html[data-touch] .setting-help {
+  width: 32px;
+  height: 32px;
+  margin: -8px 0;
+}
+/* Celular: o controle desce para baixo do nome quando não cabe ao lado */
+html[data-layout='compact'] .setting-row {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+html[data-layout='compact'] .setting-control {
+  margin-left: auto;
 }
 </style>

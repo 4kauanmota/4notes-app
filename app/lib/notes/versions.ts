@@ -11,7 +11,8 @@
  *   pastas pelo título (title-tree.ts) — por isso as versões de uma nota ficam
  *   sempre na mesma pasta da lista lateral.
  * - A anterior é a maior versão menor que a atual ("1.4.1" → "1.4.0"; sem "1.4.0",
- *   "1.3.9"…). Versões iguais ("1.4" e "1.4.0") não contam como anteriores.
+ *   "1.3.9"…); a próxima, a menor versão maior ("1.4.0" → "1.4.1"; sem ela, "1.5"…).
+ *   Versões iguais ("1.4" e "1.4.0") não contam nem como anterior nem como próxima.
  * - Quem chama decide o grupo (as notas da mesma categoria).
  */
 import { titleWords } from './title-tree'
@@ -52,18 +53,29 @@ export function compareVersions(a: number[], b: number[]): number {
   return 0
 }
 
-/**
- * A versão anterior de `title` entre `items` (null = não há). Empate entre duas
- * notas com a mesma versão: vale a que vem primeiro em `items`.
- */
-export function previousVersion<T>(title: string, items: readonly T[], titleOf: (item: T) => string): { item: T; version: NoteVersion } | null {
+/** A versão vizinha de `title` entre `items`, para trás (-1) ou para a frente (1). */
+function neighborVersion<T>(title: string, items: readonly T[], titleOf: (item: T) => string, direction: -1 | 1): { item: T; version: NoteVersion } | null {
   const current = versionOf(title)
   if (!current) return null
   let best: { item: T; version: NoteVersion } | null = null
   for (const item of items) {
     const version = versionOf(titleOf(item))
-    if (!version || version.key !== current.key || compareVersions(version.parts, current.parts) >= 0) continue
-    if (!best || compareVersions(version.parts, best.version.parts) > 0) best = { item, version }
+    if (!version || version.key !== current.key || compareVersions(version.parts, current.parts) * direction <= 0) continue
+    // A mais perto da atual: a maior das menores (anterior) ou a menor das maiores (próxima)
+    if (!best || compareVersions(version.parts, best.version.parts) * direction < 0) best = { item, version }
   }
   return best
+}
+
+/**
+ * A versão anterior de `title` entre `items` (null = não há). Empate entre duas
+ * notas com a mesma versão: vale a que vem primeiro em `items`.
+ */
+export function previousVersion<T>(title: string, items: readonly T[], titleOf: (item: T) => string): { item: T; version: NoteVersion } | null {
+  return neighborVersion(title, items, titleOf, -1)
+}
+
+/** A próxima versão de `title` entre `items` (null = não há). Empate: a que vem primeiro. */
+export function nextVersion<T>(title: string, items: readonly T[], titleOf: (item: T) => string): { item: T; version: NoteVersion } | null {
+  return neighborVersion(title, items, titleOf, 1)
 }

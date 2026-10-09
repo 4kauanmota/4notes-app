@@ -3,9 +3,9 @@ import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorSelection, EditorState, RangeSet, Transaction, type Extension, type TransactionSpec } from '@codemirror/state'
 import { Decoration, EditorView } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
-import { codeBlocks, isTextBlock } from '~/lib/editor/code-blocks'
+import { codeBlockPreview, codeBlocks, isTextBlock } from '~/lib/editor/code-blocks'
 import { fenceFromVsCodeMode, findLanguage, isTextBlockInfo, languageLabel } from '~/lib/editor/languages'
-import { multipleSelections, selectNextOccurrence } from '~/lib/editor/multi-select'
+import { multipleSelections, plainMultipleSelections, selectNextOccurrence } from '~/lib/editor/multi-select'
 import { canWrapInTextBlock, textBlockChange } from '~/lib/editor/text-blocks'
 import { noteToPlainText } from '~/lib/notes/export'
 
@@ -131,8 +131,8 @@ describe('bloco de texto (```text)', () => {
 // ── Ctrl+D ──────────────────────────────────────────────────────────────────
 
 /** Editor "de mentira" com o Ctrl+D (só estado + dispatch). */
-function editor(doc: string, selection: EditorSelection | { anchor: number; head?: number }, extra: Extension[] = []) {
-  let state = stateOf(doc, selection, [multipleSelections, ...extra])
+function editor(doc: string, selection: EditorSelection | { anchor: number; head?: number }, extra: Extension[] = [], base: Extension = multipleSelections) {
+  let state = stateOf(doc, selection, [base, ...extra])
   const view = {
     get state() {
       return state
@@ -214,6 +214,24 @@ describe('Ctrl+D: próxima ocorrência', () => {
     const ed = editor(doc, { anchor: 0, head: 3 }, [hidden])
     ed.ctrlD()
     expect(ed.selected).toEqual([[0, 3], [16, 19]])
+  })
+
+  it('na nota, o código dos blocos fica de fora (cada bloco tem o próprio editor)', () => {
+    const doc = 'foo\n```js\nfoo()\n```\nfoo'
+    const ed = editor(doc, { anchor: 0, head: 3 }, [codeBlockPreview])
+    ed.ctrlD()
+    expect(ed.selected).toEqual([[0, 3], [doc.length - 3, doc.length]])
+  })
+
+  it('no editor do bloco e na tela cheia (texto puro), toda ocorrência vale', () => {
+    // O mesmo texto como código: "[x](foo)" não é um link escondido
+    const doc = 'foo [x](foo) foo'
+    const ed = editor(doc, { anchor: 0, head: 3 }, [], plainMultipleSelections)
+    ed.ctrlD()
+    ed.ctrlD()
+    expect(ed.selected).toEqual([[0, 3], [8, 11], [13, 16]])
+    ed.type('bar')
+    expect(ed.state.doc.toString()).toBe('bar [x](bar) bar')
   })
 
   it('só o Ctrl+D cria seleções extras (outros comandos continuam com uma só)', () => {

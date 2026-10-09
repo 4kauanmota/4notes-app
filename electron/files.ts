@@ -8,7 +8,11 @@
 import { shell } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { ATTACHMENTS_DIR, fileStamp, IMAGE_EXTENSIONS, IMAGE_FILE, MAX_IMAGE_BYTES, normalizeText, TRASH_DIR } from '../shared/files'
 import type { FileEntry, ListOptions } from '../shared/ipc'
+
+// Regras compartilhadas com o app Android (shared/files.ts)
+export { ATTACHMENTS_DIR, IMAGE_FILE, MAX_IMAGE_BYTES } from '../shared/files'
 
 export class AppError extends Error {
   constructor(public code: string, message: string) {
@@ -20,11 +24,6 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function toPosix(relativePath: string): string {
   return relativePath.split(path.sep).join('/')
-}
-
-/** Remove o BOM (comum em arquivos do Bloco de Notas antigo) e padroniza quebras de linha (CRLF → LF). */
-function normalizeText(text: string): string {
-  return (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).replace(/\r\n?/g, '\n')
 }
 
 export function isErrno(error: unknown, ...codes: string[]): boolean {
@@ -203,7 +202,7 @@ export async function trashFile(root: string, relativePath: string): Promise<voi
     await shell.trashItem(absolute)
   } catch {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const fallback = path.join(root, '.4notes', 'trash', `${stamp} ${path.basename(absolute)}`)
+    const fallback = path.join(root, ...TRASH_DIR.split('/'), `${stamp} ${path.basename(absolute)}`)
     await fs.mkdir(path.dirname(fallback), { recursive: true })
     await renameWithRetry(absolute, fallback)
   }
@@ -212,20 +211,6 @@ export async function trashFile(root: string, relativePath: string): Promise<voi
 export function revealFile(root: string, relativePath: string): void {
   shell.showItemInFolder(resolveInside(root, relativePath))
 }
-
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'image/bmp': 'bmp',
-  'image/avif': 'avif',
-  'image/svg+xml': 'svg',
-}
-export const MAX_IMAGE_BYTES = 40 * 1024 * 1024
-
-/** Pasta das imagens do workspace (a biblioteca de imagens). */
-export const ATTACHMENTS_DIR = 'attachments'
 
 /**
  * Grava uma imagem nova em attachments/ com um nome livre: "<base>.<ext>",
@@ -252,14 +237,8 @@ export async function saveImage(root: string, data: unknown, mime: unknown): Pro
   if (!extension) throw new AppError('EINVAL', 'Formato de imagem não suportado.')
   if (!(data instanceof Uint8Array) || data.byteLength === 0) throw new AppError('EINVAL', 'Imagem vazia.')
   if (data.byteLength > MAX_IMAGE_BYTES) throw new AppError('EFBIG', 'A imagem é grande demais (máximo de 40 MB).')
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  return writeNewAttachment(root, `imagem-${stamp}`, extension, data)
+  return writeNewAttachment(root, `imagem-${fileStamp()}`, extension, data)
 }
-
-/** Arquivo de imagem (pelo nome). */
-export const IMAGE_FILE = /\.(?:png|jpe?g|gif|webp|bmp|avif|svg|ico)$/i
 
 /** Copia uma imagem do workspace para outro caminho dele (substitui o destino, com escrita atômica). */
 export async function copyImage(root: string, from: unknown, to: unknown): Promise<FileEntry> {

@@ -29,13 +29,15 @@ import {
 } from '~/lib/notes/categories'
 import { matchCategory, titleLineFinished } from '~/lib/notes/auto-category'
 import { rebaseLinks } from '~/lib/notes/mention-links'
-import { DEFAULT_NOTES_SETTINGS, notesRepository as repo, type NotesSettings } from '~/lib/notes/repository'
+import { DEFAULT_NOTES_SETTINGS, normalizeNotesSettings, normalizeNotesView, notesRepository as repo, type NotesSettings } from '~/lib/notes/repository'
 import { deriveTitle } from '~/lib/notes/title'
-import { previousVersion } from '~/lib/notes/versions'
-import { createJsonWriter } from '~/lib/storage/json-file'
+import { nextVersion, previousVersion } from '~/lib/notes/versions'
 import { emitNoteChange } from '~/lib/note-events'
+import { readDeviceState, writeDeviceState } from '~/lib/storage/device-state'
 import { DATA_PATHS } from '~/lib/storage/paths'
 import { createId, debounce, SerialQueue, type Debounced } from '~/lib/utils/async'
+import { onSettingsChange, settingsSection, updateSettingsSection } from './settings'
+import { trashPlace } from '~/lib/platform'
 
 export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error'
 
@@ -83,14 +85,13 @@ const state = reactive({
   openFolders: [] as string[],
   /** Muda quando a imagem de uma categoria é trocada (a lista recarrega a imagem). */
   imageVersion: 0,
-  /** Configurações das Notas (Configurações › Módulos), guardadas em .4notes/notes.json. */
+  /** Configurações das Notas (Configurações › Módulos), guardadas no settings.json do workspace. */
   settings: { ...DEFAULT_NOTES_SETTINGS } as NotesSettings,
 })
 
 const queue = new SerialQueue()
 const timers = new Map<string, Debounced<[]>>()
 const closedTabs: string[] = []
-const uiWriter = createJsonWriter(DATA_PATHS.notesUiState)
 /** Último categorias.json lido ou gravado (para perceber edições feitas fora do app). */
 let categoriesRaw: string | null = null
 
@@ -136,37 +137,53 @@ const filteredNotes = computed(() => {
 const openTabs = computed(() => state.openIds.map((id) => findNote(id)).filter((note): note is QuickNote => !!note))
 const activeNote = computed(() => findNote(state.activeId) ?? null)
 
+/** As outras notas da mesma categoria (ou as sem categoria), onde ficam as versões de `note`. */
+function versionSiblings(note: QuickNote): QuickNote[] {
+  return visibleNotes.value.filter((other) => other.id !== note.id && sameDir(other.dir, note.dir))
+}
+
 /**
  * Versão anterior da nota ("4notes 1.4.1" → "4notes 1.4.0"), entre as notas da mesma
  * categoria (ou entre as sem categoria) — regras em lib/notes/versions.ts. null = não há.
  */
 function previousVersionOf(note: QuickNote): { note: QuickNote; label: string } | null {
   if (isBlankNote(note)) return null
-  const siblings = visibleNotes.value.filter((other) => other.id !== note.id && sameDir(other.dir, note.dir))
-  const found = previousVersion(noteTitle(note), siblings, noteTitle)
+  const found = previousVersion(noteTitle(note), versionSiblings(note), noteTitle)
   return found ? { note: found.item, label: found.version.label } : null
 }
 
-// ── Estado da interface (abas abertas, lista lateral) ───────────────────────
-
-function persistUi(): void {
-  uiWriter.save(() => {
-    const pathOf = (id: string | null) => findNote(id)?.path ?? null
-    return {
-      openTabs: state.openIds.map(pathOf).filter((path): path is string => !!path),
-      activeTab: pathOf(state.activeId),
-      sidebarOpen: state.sidebarOpen,
-      collapsedCategories: state.collapsedCategories,
-      openFolders: state.openFolders,
-      settings: state.settings,
-    }
-  })
+/** Próxima versão da nota ("4notes 1.4.0" → "4notes 1.4.1"), com as mesmas regras. null = não há. */
+function nextVersionOf(note: QuickNote): { note: QuickNote; label: string } | null {
+  if (isBlankNote(note)) return null
+  const found = nextVersion(noteTitle(note), versionSiblings(note), noteTitle)
+  return found ? { note: found.item, label: found.version.label } : null
 }
+
+// ── Estado da tela (abas abertas, lista lateral): deste aparelho ────────────
+
+/** Grava o estado da tela no aparelho (os caminhos são lidos na hora de gravar). */
+const persistUi = debounce(() => {
+  const pathOf = (id: string | null) => findNote(id)?.path ?? null
+  writeDeviceState('notes', {
+    openTabs: state.openIds.map(pathOf).filter((path): path is string => !!path),
+    activeTab: pathOf(state.activeId),
+    sidebarOpen: state.sidebarOpen,
+    collapsedCategories: state.collapsedCategories,
+    openFolders: state.openFolders,
+  })
+}, 200)
+
+// ── Configurações (settings.json do workspace: iguais em todos os aparelhos) ──
 
 function updateSettings(patch: Partial<NotesSettings>): void {
   Object.assign(state.settings, patch)
-  persistUi()
+  updateSettingsSection('notes', { ...state.settings })
 }
+
+// Mudaram em outro aparelho (settings.json relido)
+onSettingsChange((changed) => {
+  if (changed.has('notes')) state.settings = normalizeNotesSettings(settingsSection('notes'))
+})
 
 // ── Carregamento ────────────────────────────────────────────────────────────
 
@@ -213,13 +230,14 @@ async function readSavedCategories(): Promise<NoteCategory[]> {
 }
 
 async function load(): Promise<void> {
-  const [files, ui] = await Promise.all([repo.list(), repo.readUiState()])
+  const files = await repo.list()
+  const ui = normalizeNotesView(readDeviceState('notes'))
   state.notes = files.map(fromFile)
   state.categories = mergeWithFolders(await readSavedCategories(), foldersWithNotes())
   state.sidebarOpen = ui.sidebarOpen
   state.collapsedCategories = ui.collapsedCategories
   state.openFolders = ui.openFolders
-  state.settings = ui.settings
+  state.settings = normalizeNotesSettings(settingsSection('notes'))
   const ids: string[] = []
   for (const path of ui.openTabs) {
     const note = findByPath(path)
@@ -232,11 +250,20 @@ async function load(): Promise<void> {
 
 // ── Abas ────────────────────────────────────────────────────────────────────
 
+/** Quem quer saber quando uma nota é aberta (no celular, a tela troca da lista para a nota). */
+const openListeners = new Set<(id: string) => void>()
+
+export function onNoteOpened(listener: (id: string) => void): () => void {
+  openListeners.add(listener)
+  return () => openListeners.delete(listener)
+}
+
 function openNote(id: string): void {
   if (!findNote(id)) return
   if (!state.openIds.includes(id)) state.openIds.push(id)
   state.activeId = id
   persistUi()
+  for (const listener of openListeners) listener(id)
 }
 
 /**
@@ -537,7 +564,7 @@ async function flushAll(): Promise<void> {
     }
   }
   await queue.idle()
-  await uiWriter.flush()
+  persistUi.flush()
 }
 
 // ── Excluir / duplicar ──────────────────────────────────────────────────────
@@ -559,7 +586,7 @@ async function deleteNote(id: string): Promise<void> {
   removeFromState(id)
   if (!snapshot.content.trim()) return
   showToast({
-    message: `“${snapshot.title}” foi para a Lixeira`,
+    message: `“${snapshot.title}” foi para ${trashPlace()}`,
     icon: 'trash',
     action: {
       label: 'Desfazer',
@@ -944,6 +971,7 @@ export function useNotesStore() {
     findCategory,
     categoryOf,
     previousVersionOf,
+    nextVersionOf,
     isBlank: isBlankNote,
     load,
     createNote,

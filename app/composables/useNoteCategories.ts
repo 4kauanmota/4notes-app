@@ -7,6 +7,7 @@ import { separator, type MenuItemSpec } from '~/composables/useContextMenu'
 import { confirmDialog } from '~/composables/useDialog'
 import { paletteVar } from '~/lib/colors'
 import { useNotesStore, type QuickNote } from '~/stores/notes'
+import { trashPlace } from '~/lib/platform'
 
 /** Arrastar uma nota (aba ou item da lista) leva o id dela neste tipo. */
 export const NOTE_DRAG_TYPE = 'application/x-4notes-note'
@@ -70,8 +71,8 @@ export async function requestDeleteCategory(name: string): Promise<boolean> {
   const ok = await confirmDialog({
     title: `Excluir a categoria “${category.name}”?`,
     message: count
-      ? `${count} ${count === 1 ? 'nota volta' : 'notas voltam'} para Notas, sem categoria. Nenhuma nota é apagada; a pasta da categoria vai para a Lixeira.`
-      : 'A pasta da categoria vai para a Lixeira.',
+      ? `${count} ${count === 1 ? 'nota volta' : 'notas voltam'} para Notas, sem categoria. Nenhuma nota é apagada; a pasta da categoria vai para ${trashPlace()}.`
+      : `A pasta da categoria vai para ${trashPlace()}.`,
     confirmLabel: 'Excluir categoria',
     danger: true,
   })

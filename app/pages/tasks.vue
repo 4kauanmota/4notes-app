@@ -3,12 +3,14 @@
  * Módulo TAREFAS: categorias à esquerda, lista no centro, painel de edição à direita.
  * Clicar fora do painel (na lista, nas categorias…) fecha o painel.
  */
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import TaskDrawer from '~/components/tasks/TaskDrawer.vue'
 import TaskQuickAdd from '~/components/tasks/TaskQuickAdd.vue'
 import { confirmDialog } from '~/composables/useDialog'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { registerShortcut, useShortcuts } from '~/composables/useShortcuts'
 import { formatLongDate, relativeDayLabel } from '~/lib/dates'
+import { canReveal } from '~/lib/platform'
 import { groupByDate, type Task } from '~/lib/tasks/model'
 import { useTasksStore } from '~/stores/tasks'
 
@@ -16,6 +18,16 @@ const tasks = useTasksStore()
 const quickAdd = ref<InstanceType<typeof TaskQuickAdd>>()
 const drawer = ref<InstanceType<typeof TaskDrawer>>()
 const categoryDialog = ref(false)
+const reveal = canReveal()
+
+/** Celular (layout compact): as listas (Pendentes, categorias) ficam numa gaveta. */
+const { isCompact } = useLayoutSize()
+const listsOpen = ref(false)
+// Escolheu uma lista na gaveta: ela fecha e mostra a lista escolhida
+watch(
+  () => tasks.state.selection,
+  () => (listsOpen.value = false),
+)
 
 const selection = computed(() => tasks.state.selection)
 const categoryKey = computed(() => (selection.value.startsWith('cat:') ? selection.value.slice(4) : null))
@@ -120,7 +132,9 @@ onUnmounted(unbindEscape)
 
 <template>
   <div class="tasks-page" @pointerdown.capture="onPagePointerDown" @click.capture="onPageClick">
-    <TasksSidebar />
+    <MobileDrawer v-model:open="listsOpen" label="Listas de tarefas">
+      <TasksSidebar />
+    </MobileDrawer>
     <section class="tasks-main" :class="{ 'drawer-open': !!tasks.state.drawer }">
       <div v-if="tasks.state.error" class="tasks-error">
         <AppIcon name="alert" :size="34" />
@@ -129,7 +143,7 @@ onUnmounted(unbindEscape)
         <p class="muted">Nada foi sobrescrito. Corrija o arquivo <code>tasks/tasks.json</code> (ou restaure um backup de <code>.4notes/backups</code>) e tente de novo.</p>
         <div class="error-actions">
           <button class="btn btn-primary" @click="tasks.retry()">Tentar novamente</button>
-          <button class="btn" @click="tasks.revealFile()">Mostrar arquivo</button>
+          <button v-if="reveal" class="btn" @click="tasks.revealFile()">Mostrar arquivo</button>
         </div>
       </div>
 
@@ -140,6 +154,9 @@ onUnmounted(unbindEscape)
               <AppIcon name="arrow-left" :size="14" /> Pendentes
             </button>
             <header class="tasks-header">
+              <button v-if="isCompact" class="icon-btn lists-toggle" aria-label="Listas e categorias" data-action="task-lists" @click="listsOpen = true">
+                <AppIcon name="sidebar" :size="19" />
+              </button>
               <div class="title-block">
                 <h1>
                   <CategoryDot v-if="categoryKey" :color="category?.color ?? null" :size="12" />
@@ -157,7 +174,9 @@ onUnmounted(unbindEscape)
                 </div>
                 <button v-if="category" class="btn btn-sm btn-ghost" @click="categoryDialog = true"><AppIcon name="edit" :size="14" /> Editar</button>
                 <button v-if="selection === 'done' && doneOneOffs" class="btn btn-sm" @click="clearCompleted"><AppIcon name="trash" :size="14" /> Limpar concluídas</button>
-                <button class="btn btn-sm btn-primary" @click="tasks.openCreator()"><AppIcon name="plus" :size="15" /> Nova tarefa</button>
+                <button class="btn btn-sm btn-primary new-task" aria-label="Nova tarefa" @click="tasks.openCreator()">
+                  <AppIcon name="plus" :size="15" /><span class="new-task-label"> Nova tarefa</span>
+                </button>
               </div>
             </header>
 
@@ -452,5 +471,44 @@ onUnmounted(unbindEscape)
   .progress-block {
     display: none;
   }
+}
+
+/* ── Celular ── */
+.lists-toggle {
+  flex: none;
+  margin: 0 -2px 0 -8px;
+}
+html[data-layout='compact'] .tasks-content {
+  padding: 14px 14px 72px;
+}
+html[data-layout='compact'] .tasks-header {
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+html[data-layout='compact'] .title-block {
+  flex: 1;
+  min-width: 0;
+}
+html[data-layout='compact'] .title-block h1 {
+  font-size: 22px;
+}
+html[data-layout='compact'] .title-block h1,
+html[data-layout='compact'] .title-block p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-layout='compact'] .header-side {
+  gap: 6px;
+}
+/* Só o + (o nome cabe no botão do painel) */
+html[data-layout='compact'] .new-task {
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+}
+html[data-layout='compact'] .new-task-label {
+  display: none;
 }
 </style>

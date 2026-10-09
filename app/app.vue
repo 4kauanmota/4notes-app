@@ -4,8 +4,9 @@
  * A inicialização (carregar a pasta de dados) fica em stores/app.ts; os módulos
  * (rotas, atalhos Ctrl+1…4, quais estão ativos) vêm de lib/modules.ts e stores/modules.ts.
  */
-import { nextTick, onMounted, watch } from 'vue'
+import { computed, nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { useShortcuts } from '~/composables/useShortcuts'
 import { toggleTutorial } from '~/composables/useTutorial'
 import { MODULES, moduleById, moduleForPath, type ModuleId } from '~/lib/modules'
@@ -17,6 +18,10 @@ const app = useAppStore()
 const modules = useModulesStore()
 const route = useRoute()
 const router = useRouter()
+const { layout, isCompact } = useLayoutSize()
+
+/** Celular (compact): os módulos ficam na barra de baixo — que sai enquanto o teclado está aberto. */
+const bottomNav = computed(() => app.state.phase === 'ready' && isCompact.value && !layout.keyboard)
 
 onMounted(async () => {
   await app.startApp()
@@ -75,10 +80,10 @@ function reload() {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'with-bottom-nav': bottomNav }">
     <TitleBar />
     <div class="app-body">
-      <NavRail v-if="app.state.phase === 'ready'" />
+      <NavRail v-if="app.state.phase === 'ready' && !isCompact" />
       <main class="app-main" :class="{ full: app.state.phase !== 'ready' }">
         <!-- As páginas ficam sempre montadas (ocultas até a pasta de dados carregar) -->
         <div v-show="app.state.phase === 'ready'" class="page-host">
@@ -90,7 +95,7 @@ function reload() {
         <div v-else-if="app.state.phase === 'no-desktop'" class="app-message">
           <AppLogo :size="48" />
           <h1>O 4notes roda como aplicativo desktop</h1>
-          <p>Esta interface precisa do Electron para acessar seus arquivos. No terminal, use <code>npm run dev</code>.</p>
+          <p>Esta interface precisa do Electron (ou do app Android) para acessar seus arquivos. No terminal, use <code>npm run dev</code>.</p>
         </div>
 
         <div v-else-if="app.state.phase === 'error'" class="app-message">
@@ -104,10 +109,12 @@ function reload() {
         </div>
       </main>
     </div>
+    <MobileNav v-if="bottomNav" />
 
     <SettingsDialog v-if="app.state.phase === 'ready'" />
     <ImageLibraryDialog v-if="app.state.phase === 'ready'" />
     <TutorialPanel v-if="app.state.phase === 'ready'" />
+    <FolderPickerDialog />
     <DialogHost />
     <ToastHost />
     <ContextMenuHost />
@@ -120,14 +127,29 @@ function reload() {
   display: grid;
   /* minmax(0, 1fr): conteúdo largo (ex.: muitas abas) nunca alarga a janela inteira */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: var(--titlebar-h) minmax(0, 1fr);
+  /* --safe-*: margens do Android de ponta a ponta (no desktop são 0) */
+  grid-template-rows: calc(var(--titlebar-h) + var(--safe-top)) minmax(0, 1fr);
   height: 100vh;
+  height: 100dvh;
+  padding: 0 var(--safe-right) 0 var(--safe-left);
   background: var(--chrome);
+}
+.app-shell.with-bottom-nav {
+  grid-template-rows: calc(var(--titlebar-h) + var(--safe-top)) minmax(0, 1fr) auto;
 }
 .app-body {
   display: flex;
   min-width: 0;
   min-height: 0;
+}
+/* Sem a barra de baixo: o conteúdo termina acima da barra de gestos do Android */
+.app-shell:not(.with-bottom-nav) > .app-body {
+  padding-bottom: var(--safe-bottom);
+}
+/* Celular: o conteúdo ocupa a largura toda (sem o canto do menu lateral) */
+html[data-layout='compact'] .app-main {
+  border-left: 0;
+  border-top-left-radius: 0;
 }
 .app-main {
   position: relative;

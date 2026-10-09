@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fundo da tela de abertura (tema claro): o mesmo da moldura do app. -->
+    <color name="splash_background">#EFEDF5</color>
+    <color name="colorPrimary">#6842EE</color>
+    <color name="colorPrimaryDark">#5A35E6</color>
+    <color name="colorAccent">#FFCB2B</color>
+</resources>

@@ -1,7 +1,7 @@
 // Versões de uma nota ("4notes 1.4.1" → "4notes 1.4.0" → …): a regra pura e o store
 // das Notas (só a mesma categoria), com um "disco" falso na memória.
 import { beforeAll, describe, expect, it } from 'vitest'
-import { compareVersions, previousVersion, versionOf } from '~/lib/notes/versions'
+import { compareVersions, nextVersion, previousVersion, versionOf } from '~/lib/notes/versions'
 
 describe('versão no título', () => {
   it('acha a última palavra que é um número de versão', () => {
@@ -36,6 +36,18 @@ describe('versão no título', () => {
     // Maiúsculas não importam
     expect(previous('4NOTES 1.6')).toBe('4notes 1.5')
     expect(previous('Ideias')).toBeNull()
+  })
+
+  it('a próxima é a menor versão maior que a atual, com o mesmo nome', () => {
+    const titles = ['4notes 1.3.2', '4notes 1.4.0', '4notes 1.3.10', 'Outro 1.4.1', '4notes 1.5', '4notes 1.4']
+    const next = (title: string) => nextVersion(title, titles, (item) => item)?.item ?? null
+    expect(next('4notes 1.3.2')).toBe('4notes 1.3.10')
+    expect(next('4notes 1.3.10')).toBe('4notes 1.4.0')
+    // "1.4" é igual a "1.4.0": não é próxima
+    expect(next('4notes 1.4.0')).toBe('4notes 1.5')
+    expect(next('4notes 1.5')).toBeNull()
+    expect(next('4NOTES 1.0')).toBe('4notes 1.3.2')
+    expect(next('Ideias')).toBeNull()
   })
 })
 
@@ -79,6 +91,10 @@ const previousOf = (path: string) => {
   const found = notes.previousVersionOf(notes.findByPath(path)!)
   return found ? `${found.note.path} (${found.label})` : null
 }
+const nextOf = (path: string) => {
+  const found = notes.nextVersionOf(notes.findByPath(path)!)
+  return found ? `${found.note.path} (${found.label})` : null
+}
 
 describe('versão anterior no store (mesma categoria)', () => {
   it('segue a sequência dentro da categoria', () => {
@@ -87,6 +103,15 @@ describe('versão anterior no store (mesma categoria)', () => {
     expect(previousOf('notes/Dev/4notes 1.4.0.md')).toBe('notes/Dev/4notes 1.3.2.md (1.3.2)')
     // A 1.0 está sem categoria: não conta
     expect(previousOf('notes/Dev/4notes 1.3.2.md')).toBeNull()
+  })
+
+  it('e a próxima também, nos dois sentidos', () => {
+    expect(nextOf('notes/Dev/4notes 1.3.2.md')).toBe('notes/Dev/4notes 1.4.0.md (1.4.0)')
+    expect(nextOf('notes/Dev/4notes 1.4.0.md')).toBe('notes/Dev/4notes 1.4.1.md (1.4.1)')
+    expect(nextOf('notes/Dev/4notes 1.4.1.md')).toBeNull()
+    // A 1.3.9 de outra categoria não tem próxima na categoria dela
+    expect(nextOf('notes/Outra/4notes 1.3.9.md')).toBeNull()
+    expect(nextOf('notes/Aula 2.md')).toBe('notes/Aula 3.md (3)')
   })
 
   it('sem categoria: só entre as notas sem categoria', () => {

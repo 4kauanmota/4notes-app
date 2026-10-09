@@ -15,10 +15,19 @@ export const DATA_PATHS = {
   /** Ícones dos sites (um por site), mostrados ao lado de cada link. */
   linkIconsDir: 'links/icons',
 
-  /** Estado da interface (pode ser apagado sem perder dados). */
   metaDir: '.4notes',
-  notesUiState: '.4notes/notes.json',
+  /**
+   * Configurações do workspace (tema, módulos, Notas, Mapa Mental, Links): as mesmas
+   * em todos os aparelhos que abrirem esta pasta (stores/settings.ts).
+   */
+  settingsFile: '.4notes/settings.json',
+  /** Posições dos nós de cada mapa mental (o mapa fica igual em todos os aparelhos). */
   mindmapUiState: '.4notes/mindmap.json',
+  /**
+   * Até a 1.4.3: configurações misturadas com o estado da tela (abas abertas…). Lidos uma
+   * vez, ao passar para o settings.json (lib/storage/settings-migration.ts).
+   */
+  notesUiState: '.4notes/notes.json',
   appUiState: '.4notes/app.json',
   linksUiState: '.4notes/links.json',
   /** Cópias automáticas (tasks.json e links.json de cada dia da semana, conversões do mapa mental). */

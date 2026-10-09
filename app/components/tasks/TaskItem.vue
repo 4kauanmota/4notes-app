@@ -113,6 +113,9 @@ async function openMenu() {
   cursor: pointer;
   transition: background var(--t-fast), box-shadow var(--t-fast);
 }
+html[data-touch] .task {
+  padding: 12px 12px 12px 10px;
+}
 .task:hover {
   background: var(--hover);
 }
@@ -185,5 +188,9 @@ async function openMenu() {
 .task:hover .task-actions,
 .task:focus-within .task-actions {
   opacity: 1;
+}
+/* Toque: pular e excluir ficam no toque prolongado (botões invisíveis não podem receber o toque) */
+html[data-touch] .task-actions {
+  display: none;
 }
 </style>

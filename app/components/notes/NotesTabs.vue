@@ -4,27 +4,31 @@
  * — ou até uma categoria da lista lateral, para colocar a nota nela.
  * A aba de uma nota com categoria é marcada com a cor da categoria.
  * Com muitas abas, a faixa rola na horizontal (roda do mouse ou barra fina no topo).
- * No fim da faixa, quando a nota aberta tem uma versão anterior ("4notes 1.4.1" →
- * "4notes 1.4.0", na mesma categoria), um botão discreto abre essa versão.
+ * No fim da faixa, quando a nota aberta tem outras versões ("4notes 1.4.1" →
+ * "4notes 1.4.0" e "4notes 1.4.2", na mesma categoria), botões discretos abrem a
+ * anterior (‹) e a próxima (›). Cada um só aparece se a versão existir.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { choiceDialog } from '~/composables/useDialog'
-import { separator, showContextMenu } from '~/composables/useContextMenu'
+import { revealItem, separator, showContextMenu } from '~/composables/useContextMenu'
 import { exportSubmenu, handleExportChoice } from '~/composables/useNoteExport'
 import { categorySubmenu, handleCategoryChoice, startNoteDrag } from '~/composables/useNoteCategories'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { paletteVar } from '~/lib/colors'
-import { modKeyLabel } from '~/lib/platform'
+import { modKeyLabel, trashPlace } from '~/lib/platform'
 import { noteTitle, useNotesStore, type QuickNote } from '~/stores/notes'
 
-const emit = defineEmits<{ new: [] }>()
+const emit = defineEmits<{ new: []; list: [] }>()
 const notes = useNotesStore()
+const { isCompact } = useLayoutSize()
 const mod = modKeyLabel()
 const scroller = ref<HTMLElement>()
 const dragIndex = ref<number | null>(null)
 const dropIndex = ref<number | null>(null)
 
-/** Versão anterior da nota aberta (lib/notes/versions.ts). */
+/** Versões anterior e próxima da nota aberta (lib/notes/versions.ts). */
 const previous = computed(() => (notes.activeNote.value ? notes.previousVersionOf(notes.activeNote.value) : null))
+const next = computed(() => (notes.activeNote.value ? notes.nextVersionOf(notes.activeNote.value) : null))
 
 // ── Rolagem horizontal ──────────────────────────────────────────────────────
 
@@ -138,7 +142,7 @@ async function requestClose(note: QuickNote) {
   }
   const choice = await choiceDialog({
     title: `Fechar “${noteTitle(note)}”`,
-    message: 'Guardar fecha só a aba — a nota continua salva na lista de notas. Apagar envia o arquivo para a Lixeira.',
+    message: `Guardar fecha só a aba — a nota continua salva na lista de notas. Apagar envia o arquivo para ${trashPlace()}.`,
     icon: 'notes',
     buttons: [
       { id: 'cancel', label: 'Cancelar', variant: 'ghost' },
@@ -159,7 +163,7 @@ async function openMenu(note: QuickNote) {
     categorySubmenu(note),
     { id: 'duplicate', label: 'Duplicar nota' },
     exportSubmenu(note),
-    { id: 'reveal', label: 'Mostrar no Explorador', enabled: !!note.path },
+    ...revealItem(!!note.path),
     separator,
     { id: 'delete', label: 'Excluir nota', danger: true },
   ])
@@ -174,7 +178,12 @@ async function openMenu(note: QuickNote) {
 
 <template>
   <div class="tabs-bar">
+    <!-- Celular: volta para a lista de notas (a lista e a nota são telas separadas) -->
+    <button v-if="isCompact" class="icon-btn sidebar-toggle" aria-label="Voltar para a lista de notas" data-action="notes-list" @click="emit('list')">
+      <AppIcon name="chevron-left" :size="20" />
+    </button>
     <button
+      v-else
       class="icon-btn sidebar-toggle"
       :class="{ 'is-active': notes.state.sidebarOpen }"
       :data-tip="`Lista de notas (${mod}+\\)`"
@@ -232,20 +241,36 @@ async function openMenu(note: QuickNote) {
       <AppIcon name="plus" :size="16" />
     </button>
 
-    <Transition name="pop">
-      <button
-        v-if="previous"
-        class="prev-version"
-        data-prev-version
-        :data-tip="`Abrir a versão anterior\n${noteTitle(previous.note)}`"
-        data-tip-pos="left"
-        :aria-label="`Abrir a versão anterior: ${noteTitle(previous.note)}`"
-        @click="notes.openNote(previous.note.id)"
-      >
-        <AppIcon name="history" :size="14" :stroke="1.9" />
-        <span class="prev-label">{{ previous.label }}</span>
-      </button>
-    </Transition>
+    <div class="version-nav" role="group" aria-label="Versões desta nota">
+      <Transition name="pop">
+        <button
+          v-if="previous"
+          class="version-btn prev"
+          data-prev-version
+          :data-tip="`Versão anterior\n${noteTitle(previous.note)}`"
+          data-tip-pos="left"
+          :aria-label="`Abrir a versão anterior: ${noteTitle(previous.note)}`"
+          @click="notes.openNote(previous.note.id)"
+        >
+          <AppIcon name="chevron-left" :size="14" :stroke="2" />
+          <span class="version-label">{{ previous.label }}</span>
+        </button>
+      </Transition>
+      <Transition name="pop">
+        <button
+          v-if="next"
+          class="version-btn next"
+          data-next-version
+          :data-tip="`Próxima versão\n${noteTitle(next.note)}`"
+          data-tip-pos="left"
+          :aria-label="`Abrir a próxima versão: ${noteTitle(next.note)}`"
+          @click="notes.openNote(next.note.id)"
+        >
+          <span class="version-label">{{ next.label }}</span>
+          <AppIcon name="chevron-right" :size="14" :stroke="2" />
+        </button>
+      </Transition>
+    </div>
   </div>
 </template>
 
@@ -259,14 +284,19 @@ async function openMenu(note: QuickNote) {
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
-.prev-version {
+.version-nav {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin: 0 0 7px auto;
+}
+.version-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   flex: none;
   height: 26px;
-  margin: 0 0 7px auto;
-  padding: 0 9px 0 7px;
+  padding: 0 9px 0 5px;
   border: none;
   border-radius: 7px;
   background: transparent;
@@ -279,11 +309,14 @@ async function openMenu(note: QuickNote) {
     background var(--t-fast),
     color var(--t-fast);
 }
-.prev-version:hover {
+.version-btn.next {
+  padding: 0 5px 0 9px;
+}
+.version-btn:hover {
   background: var(--hover);
   color: var(--primary-text);
 }
-.prev-label {
+.version-label {
   max-width: 90px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -464,6 +497,11 @@ async function openMenu(note: QuickNote) {
 }
 .tab:not(:hover):not(.active) .tab-dot + .tab-close {
   opacity: 0;
+}
+/* Toque: o × só na aba atual (o das outras ficaria invisível, mas tocável); as outras
+   fecham pelo toque prolongado */
+html[data-touch] .tab:not(.active) .tab-close {
+  display: none;
 }
 .tab-close:hover {
   background: var(--hover);

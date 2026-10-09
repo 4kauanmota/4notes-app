@@ -7,15 +7,20 @@
  * O menu não tira o foco de onde ele está (o editor continua focado, então
  * "Colar" cola no lugar certo); o teclado é tratado enquanto o menu está aberto:
  * ↑ ↓ escolhem, → / ← abrem e fecham submenus, Enter confirma e Esc fecha.
+ *
+ * No celular (layout compact) o mesmo menu aparece como uma folha que sobe da borda
+ * de baixo, com itens maiores; um submenu toma o lugar do menu (com "voltar").
  */
 import { redo, selectAll, undo } from '@codemirror/commands'
 import { EditorView } from '@codemirror/view'
+import { historyViewOf } from '~/lib/editor/block-editor'
 import { contextMenuPosition, linkAtContextMenu, removeLink, selectLinkAt } from '~/lib/editor/formatting'
 import { editorHost } from '~/lib/editor/host'
 import { insertImageFromLibrary, isInsideCode } from '~/lib/editor/paste'
-import { nextTick, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
 import type { TextMenuRequest } from '#shared/ipc'
 import { openMenu, separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { desktop, hasDesktopApi, modKeyLabel } from '~/lib/platform'
 
 interface Level {
@@ -34,6 +39,16 @@ interface Level {
 
 const levels = reactive<Level[]>([])
 const panels: HTMLElement[] = []
+const { isCompact } = useLayoutSize()
+/** Celular: o menu vira uma folha embaixo (só o nível de cima aparece). */
+const sheet = computed(() => isCompact.value)
+const sheetLevel = computed(() => levels.at(-1) ?? null)
+/** Nome do item que abriu o submenu (o "voltar" da folha). */
+const sheetBackLabel = computed(() => {
+  const parent = levels.at(-2)
+  const level = levels.at(-1)
+  return parent && level ? (parent.items[level.opener]?.label ?? 'Voltar') : ''
+})
 let hoverTimer: ReturnType<typeof setTimeout> | null = null
 const MARGIN = 6
 
@@ -107,7 +122,8 @@ function openSubmenu(depth: number, index: number, focusFirst: boolean): void {
 
 function onHover(depth: number, index: number): void {
   const level = levels[depth]
-  if (!level) return
+  // Na folha não há "passar o mouse" (o toque também gera mouseenter)
+  if (!level || sheet.value) return
   level.active = index
   clearHover()
   const item = level.items[index]
@@ -224,8 +240,20 @@ function onPointerDown(event: PointerEvent): void {
 function onWheel(event: WheelEvent): void {
   if (levels.length && !isInside(event.target)) close()
 }
-function onWindowChange(): void {
+let lastWidth = typeof window !== 'undefined' ? window.innerWidth : 0
+function onWindowChange(event?: Event): void {
+  // No celular o teclado abrindo/fechando muda só a altura: o menu continua
+  if (event?.type === 'resize') {
+    const width = window.innerWidth
+    const sameWidth = width === lastWidth
+    lastWidth = width
+    if (sameWidth && document.documentElement.hasAttribute('data-touch')) return
+  }
   if (levels.length) close()
+}
+
+function sheetBack(): void {
+  if (levels.length > 1) levels.splice(levels.length - 1)
 }
 
 // ── Menu de texto (editor e campos): copiar/colar e corretor ─────────────────
@@ -299,8 +327,9 @@ async function onTextMenu(request: TextMenuRequest): Promise<void> {
     return
   }
   if (editor && (choice === 'undo' || choice === 'redo' || choice === 'selectAll')) {
-    const command = choice === 'undo' ? undo : choice === 'redo' ? redo : selectAll
-    command(editor)
+    // Desfazer/refazer no código de um bloco usa o histórico da nota (block-editor.ts)
+    if (choice === 'selectAll') selectAll(editor)
+    else (choice === 'undo' ? undo : redo)(historyViewOf(editor))
     editor.focus()
     return
   }
@@ -329,47 +358,93 @@ onBeforeUnmount(() => {
 
 function setPanel(depth: number, el: unknown): void {
   if (el instanceof HTMLElement) panels[depth] = el
-  else panels.length = Math.min(panels.length, depth)
+  // (na folha do celular o único painel é o do nível de cima: depth pode chegar a -1 ao fechar)
+  else panels.length = Math.max(0, Math.min(panels.length, depth))
 }
 </script>
 
 <template>
-  <div
-    v-for="(level, depth) in levels"
-    :key="depth"
-    :ref="(el) => setPanel(depth, el)"
-    class="ctx-menu"
-    :class="{ sub: depth > 0 }"
-    role="menu"
-    :style="{ left: `${level.left}px`, top: `${level.top}px`, visibility: level.measured ? 'visible' : 'hidden' }"
-    @mousedown.prevent
-    @contextmenu.prevent
-    @mouseenter="onPanelEnter(depth)"
-  >
-    <template v-for="(item, index) in level.items" :key="index">
-      <div v-if="item.type === 'separator'" class="ctx-sep" role="separator" />
+  <!-- Celular: folha que sobe da borda de baixo -->
+  <template v-if="sheet">
+    <Transition name="ctx-sheet">
+      <div v-if="sheetLevel" class="ctx-scrim" aria-hidden="true" />
+    </Transition>
+    <Transition name="ctx-sheet">
       <div
-        v-else
-        class="ctx-item"
-        :class="{ active: level.active === index, disabled: item.enabled === false, danger: item.danger, open: !!levels[depth + 1] && level.active === index && !!item.submenu }"
-        :role="item.type === 'checkbox' ? 'menuitemcheckbox' : item.type === 'radio' ? 'menuitemradio' : 'menuitem'"
-        :aria-checked="item.type === 'checkbox' || item.type === 'radio' ? !!item.checked : undefined"
-        :aria-disabled="item.enabled === false || undefined"
-        :aria-haspopup="item.submenu ? 'menu' : undefined"
-        @mouseenter="onHover(depth, index)"
-        @click="activate(depth, index)"
+        v-if="sheetLevel"
+        :ref="(el) => setPanel(levels.length - 1, el)"
+        class="ctx-menu ctx-sheet"
+        role="menu"
+        @mousedown.prevent
+        @contextmenu.prevent
       >
-        <span class="ctx-check" aria-hidden="true">
-          <AppIcon v-if="item.checked && item.type === 'checkbox'" name="check" :size="13" :stroke="2.4" />
-          <span v-else-if="item.checked && item.type === 'radio'" class="ctx-dot" />
-        </span>
-        <span v-if="item.swatch" class="ctx-swatch" :style="{ background: item.swatch }" aria-hidden="true" />
-        <span class="ctx-label">{{ item.label }}</span>
-        <span v-if="item.hint" class="ctx-hint">{{ item.hint }}</span>
-        <AppIcon v-if="item.submenu" name="chevron-right" :size="13" class="ctx-arrow" />
+        <div class="ctx-handle" aria-hidden="true"><span /></div>
+        <div v-if="levels.length > 1" class="ctx-item ctx-back" role="menuitem" @click="sheetBack">
+          <AppIcon name="chevron-left" :size="16" />
+          <span class="ctx-label">{{ sheetBackLabel }}</span>
+        </div>
+        <template v-for="(item, index) in sheetLevel.items" :key="`${levels.length}-${index}`">
+          <div v-if="item.type === 'separator'" class="ctx-sep" role="separator" />
+          <div
+            v-else
+            class="ctx-item"
+            :class="{ disabled: item.enabled === false, danger: item.danger }"
+            :role="item.type === 'checkbox' ? 'menuitemcheckbox' : item.type === 'radio' ? 'menuitemradio' : 'menuitem'"
+            :aria-checked="item.type === 'checkbox' || item.type === 'radio' ? !!item.checked : undefined"
+            :aria-disabled="item.enabled === false || undefined"
+            :aria-haspopup="item.submenu ? 'menu' : undefined"
+            @click="activate(levels.length - 1, index)"
+          >
+            <span class="ctx-check" aria-hidden="true">
+              <AppIcon v-if="item.checked && item.type === 'checkbox'" name="check" :size="15" :stroke="2.4" />
+              <span v-else-if="item.checked && item.type === 'radio'" class="ctx-dot" />
+            </span>
+            <span v-if="item.swatch" class="ctx-swatch" :style="{ background: item.swatch }" aria-hidden="true" />
+            <span class="ctx-label">{{ item.label }}</span>
+            <AppIcon v-if="item.submenu" name="chevron-right" :size="15" class="ctx-arrow" />
+          </div>
+        </template>
       </div>
-    </template>
-  </div>
+    </Transition>
+  </template>
+  <template v-else>
+    <div
+      v-for="(level, depth) in levels"
+      :key="depth"
+      :ref="(el) => setPanel(depth, el)"
+      class="ctx-menu"
+      :class="{ sub: depth > 0 }"
+      role="menu"
+      :style="{ left: `${level.left}px`, top: `${level.top}px`, visibility: level.measured ? 'visible' : 'hidden' }"
+      @mousedown.prevent
+      @contextmenu.prevent
+      @mouseenter="onPanelEnter(depth)"
+    >
+      <template v-for="(item, index) in level.items" :key="index">
+        <div v-if="item.type === 'separator'" class="ctx-sep" role="separator" />
+        <div
+          v-else
+          class="ctx-item"
+          :class="{ active: level.active === index, disabled: item.enabled === false, danger: item.danger, open: !!levels[depth + 1] && level.active === index && !!item.submenu }"
+          :role="item.type === 'checkbox' ? 'menuitemcheckbox' : item.type === 'radio' ? 'menuitemradio' : 'menuitem'"
+          :aria-checked="item.type === 'checkbox' || item.type === 'radio' ? !!item.checked : undefined"
+          :aria-disabled="item.enabled === false || undefined"
+          :aria-haspopup="item.submenu ? 'menu' : undefined"
+          @mouseenter="onHover(depth, index)"
+          @click="activate(depth, index)"
+        >
+          <span class="ctx-check" aria-hidden="true">
+            <AppIcon v-if="item.checked && item.type === 'checkbox'" name="check" :size="13" :stroke="2.4" />
+            <span v-else-if="item.checked && item.type === 'radio'" class="ctx-dot" />
+          </span>
+          <span v-if="item.swatch" class="ctx-swatch" :style="{ background: item.swatch }" aria-hidden="true" />
+          <span class="ctx-label">{{ item.label }}</span>
+          <span v-if="item.hint" class="ctx-hint">{{ item.hint }}</span>
+          <AppIcon v-if="item.submenu" name="chevron-right" :size="13" class="ctx-arrow" />
+        </div>
+      </template>
+    </div>
+  </template>
 </template>
 
 <style scoped>
@@ -465,5 +540,74 @@ function setPanel(depth: number, el: unknown): void {
     opacity: 0;
     transform: translateY(-3px) scale(0.985);
   }
+}
+
+/* Toque: itens mais altos (alcance do dedo) */
+html[data-touch] .ctx-item {
+  height: 42px;
+  font-size: 14.5px;
+}
+html[data-touch] .ctx-hint {
+  display: none;
+}
+
+/* ── Celular: folha embaixo ── */
+.ctx-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1499;
+  background: var(--scrim);
+}
+.ctx-menu.ctx-sheet {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: auto;
+  min-width: 0;
+  max-width: none;
+  max-height: min(78dvh, calc(100dvh - var(--safe-top) - 48px));
+  padding: 0 8px calc(8px + var(--safe-bottom));
+  border-radius: 18px 18px 0 0;
+  border-bottom: none;
+  animation: none;
+}
+.ctx-sheet .ctx-item {
+  height: 50px;
+  padding: 0 14px 0 8px;
+  gap: 10px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+.ctx-sheet .ctx-item:active:not(.disabled) {
+  background: var(--hover);
+}
+.ctx-handle {
+  display: grid;
+  place-items: center;
+  height: 20px;
+}
+.ctx-handle span {
+  width: 36px;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--border-strong);
+}
+.ctx-back {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.ctx-sheet-enter-active,
+.ctx-sheet-leave-active {
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+.ctx-sheet-enter-from,
+.ctx-sheet-leave-to {
+  opacity: 0;
+}
+.ctx-menu.ctx-sheet-enter-from,
+.ctx-menu.ctx-sheet-leave-to {
+  transform: translateY(100%);
 }
 </style>

@@ -344,6 +344,10 @@ function toggleTheme(event: MouseEvent) {
   padding: 6px 0 12px;
   background: var(--chrome);
   transition: width 260ms var(--ease-out);
+  /* Telas baixas (celular deitado): o menu rola em vez de cortar os botões de baixo */
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 .rail.icons {
   --item-h: 46px;

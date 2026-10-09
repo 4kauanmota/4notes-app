@@ -30,6 +30,8 @@ export interface ModuleTutorial {
   /** O que pode passar despercebido. */
   tips: string[]
   shortcuts: TutorialShortcut[]
+  /** No celular (toque): os gestos e onde ficam as ações (aparece só nas telas de toque). */
+  touch?: string[]
 }
 
 export interface ModuleDefinition {
@@ -77,9 +79,9 @@ export const MODULES: readonly ModuleDefinition[] = [
       tips: [
         'A primeira linha é o título — e o nome do arquivo.',
         'Títulos que começam igual viram pastas na lista (“4notes 1.4.0”, “4notes 1.4.1”).',
-        'Versão no título (“4notes 1.4.1”)? O botão no fim das abas abre a anterior.',
+        'Versão no título (“4notes 1.4.1”)? ‹ e › no fim das abas abrem a anterior e a próxima.',
         'Tudo salva sozinho; fechar a aba não apaga a nota.',
-        'Excluir manda o arquivo para a Lixeira.',
+        'Excluir manda o arquivo para a Lixeira (no celular, para .4notes/trash).',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Nova nota' },
@@ -95,6 +97,12 @@ export const MODULES: readonly ModuleDefinition[] = [
         { keys: ['Mod', 'K'], label: 'Link' },
         { keys: ['Mod', 'Shift', 'V'], label: 'Colar sem formatação' },
         { keys: ['Mod', 'Clique'], label: 'Abrir o link no navegador' },
+      ],
+      touch: [
+        'Toque numa nota para abrir; ‹ (ou o “voltar” do Android) volta para a lista.',
+        'A barra de formatação fica acima do teclado: B, I, títulos, listas, imagem, link…',
+        'Num link, toque nele e depois em ↗ na barra para abrir no navegador.',
+        'Toque prolongado numa nota, aba ou categoria abre o menu (categoria, exportar…).',
       ],
     },
   },
@@ -116,7 +124,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Categorias na lateral: filtre e arraste para mudar a ordem.',
         'Mencione notas com @ no título ou nos detalhes.',
       ],
-      contextMenu: ['Tarefa: editar, concluir, pular, mover de categoria, excluir.', 'Categoria: editar ou excluir.'],
+      contextMenu: ['Tarefa: editar, concluir, pular, mover de categoria, excluir.', 'Categoria: editar, mover para cima/baixo ou excluir.'],
       tips: [
         '“Revisar amanhã #estudos” já define a data e a categoria.',
         'Concluídas e agendadas ficam nos links discretos no fim da lista.',
@@ -128,6 +136,11 @@ export const MODULES: readonly ModuleDefinition[] = [
         { keys: ['Enter'], label: 'Abrir a tarefa selecionada' },
         { keys: ['Espaço'], label: 'Concluir a tarefa selecionada' },
         { keys: ['Esc'], label: 'Fechar o painel' },
+      ],
+      touch: [
+        'No celular, o botão de lista ao lado do título abre Pendentes e as categorias.',
+        'Toque numa tarefa para editar; o “voltar” do Android fecha o painel.',
+        'Toque prolongado numa tarefa: concluir, pular, mover de categoria, excluir.',
       ],
     },
   },
@@ -168,6 +181,12 @@ export const MODULES: readonly ModuleDefinition[] = [
         { keys: ['Delete'], label: 'Excluir a nota ou a conexão selecionada' },
         { keys: ['Esc'], label: 'Fechar a nota / tirar a seleção' },
       ],
+      touch: [
+        'Um dedo arrasta a nota ou o mapa; dois dedos (pinça) aproximam e afastam.',
+        'Toque numa nota para abrir — na tela pequena, o 1º toque seleciona (e “Abrir”).',
+        'Arraste a seta → da nota selecionada até outra para conectar (ou ao vazio: nota nova).',
+        'Dois toques no vazio criam uma nota; segurar o dedo abre o menu.',
+      ],
     },
   },
   {
@@ -189,7 +208,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       ],
       contextMenu: [
         'Link: abrir, copiar endereço, editar, mover, atualizar título e ícone, excluir.',
-        'Categoria: editar ou excluir.',
+        'Categoria: editar, mover para cima/baixo ou excluir.',
       ],
       tips: [
         'Arrastar um link do navegador para a lista também salva.',
@@ -206,6 +225,11 @@ export const MODULES: readonly ModuleDefinition[] = [
         { keys: ['Mod', 'C'], label: 'Copiar o endereço' },
         { keys: ['F2'], label: 'Editar' },
         { keys: ['Delete'], label: 'Excluir' },
+      ],
+      touch: [
+        'No celular, o botão de lista ao lado do título abre as categorias e a busca.',
+        'Toque num link para abrir; toque prolongado: editar, mover, copiar, excluir.',
+        'Importar no celular: o arquivo de favoritos (HTML) exportado pelo navegador.',
       ],
     },
   },
@@ -229,7 +253,8 @@ export const GENERAL_TUTORIAL: ModuleTutorial = {
   tips: [
     'Desativar um módulo só o esconde: os dados continuam guardados.',
     'Backup: basta copiar a pasta do workspace.',
-    'Editou um arquivo em outro programa? O 4notes relê ao voltar para a janela.',
+    'Mudou algo em outro programa ou aparelho? O 4notes relê ao voltar e a cada minuto.',
+    'O tema e as configurações ficam no workspace: valem no computador e no celular.',
   ],
   shortcuts: [
     // Acompanha a lista de módulos (um módulo novo entra aqui sozinho)
@@ -237,6 +262,12 @@ export const GENERAL_TUTORIAL: ModuleTutorial = {
     { keys: ['F1'], label: 'Abrir ou fechar o tutorial' },
     { keys: ['Mod', ','], label: 'Configurações' },
     { keys: ['Mod', '+ / − / 0'], label: 'Zoom da interface' },
+  ],
+  touch: [
+    'Módulos na barra de baixo (com o celular aberto, ao lado); o resto fica em “Mais”.',
+    'Toque prolongado = clique direito: abre o menu do que estiver embaixo do dedo.',
+    'O “voltar” do Android fecha menus e painéis e volta para a tela anterior.',
+    'Com a pasta sincronizada (Google Drive…), o workspace é o mesmo nos dois aparelhos.',
   ],
 }
 

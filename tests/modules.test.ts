@@ -46,6 +46,13 @@ describe('registro dos módulos', () => {
     }
   })
 
+  it('todo tutorial explica o toque (celular), curto', () => {
+    for (const { name, tutorial } of [...MODULES, { name: 'Geral', tutorial: GENERAL_TUTORIAL }]) {
+      expect(tutorial.touch?.length ?? 0, name).toBeGreaterThanOrEqual(2)
+      for (const line of tutorial.touch ?? []) expect(line.length, line).toBeLessThan(100)
+    }
+  })
+
   it('o atalho de módulos do "Geral" acompanha a lista de módulos', () => {
     expect(GENERAL_TUTORIAL.shortcuts[0]!.keys).toEqual(['Mod', '1 / 2 / 3 / 4'])
     expect(GENERAL_TUTORIAL.shortcuts[0]!.label).toBe('Ir para Notas / Tarefas / Mapa / Links')

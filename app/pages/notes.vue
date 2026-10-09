@@ -1,16 +1,51 @@
 <script setup lang="ts">
-/** Módulo NOTAS: lista + abas + editor + barra de status. */
-import { nextTick, ref } from 'vue'
+/**
+ * Módulo NOTAS: lista + abas + editor + barra de status.
+ *
+ * No celular (layout compact) a lista e a nota são duas telas: tocar numa nota (ou
+ * criar uma) abre a nota; o ‹ das abas ou o "voltar" do Android volta para a lista.
+ */
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import MarkdownEditor from '~/components/editor/MarkdownEditor.vue'
+import { onBackButton } from '~/composables/useBackButton'
+import { SHORT_MAX, useLayoutSize } from '~/composables/useLayoutSize'
 import { useShortcuts } from '~/composables/useShortcuts'
 import type { MentionHost } from '~/lib/editor/host'
 import type { CursorInfo } from '~/lib/editor/setup'
 import { describeMention, mentionRevision, openMentionPath, savedLinkIcon, searchMentions } from '~/stores/mentions'
-import { useNotesStore } from '~/stores/notes'
+import { onNoteOpened, useNotesStore } from '~/stores/notes'
 
 const notes = useNotesStore()
 const editor = ref<InstanceType<typeof MarkdownEditor>>()
 const cursor = ref<CursorInfo>({ line: 1, col: 1, selected: 0 })
+
+// ── Celular: a lista ou a nota ──────────────────────────────────────────────
+
+const { isCompact, layout } = useLayoutSize()
+/** Barra de status só com espaço de sobra (não no celular, nem deitado/com o teclado aberto). */
+const statusBar = computed(() => !isCompact.value && layout.height > SHORT_MAX)
+/** Continua de onde parou: com uma nota aberta, começa nela. */
+const screen = ref<'list' | 'note'>(notes.activeNote.value ? 'note' : 'list')
+const stopOpened = onNoteOpened(() => (screen.value = 'note'))
+onBeforeUnmount(stopOpened)
+// Fechou a última aba: volta para a lista
+watch(
+  () => notes.activeNote.value,
+  (note) => {
+    if (!note) screen.value = 'list'
+  },
+)
+
+function showList() {
+  screen.value = 'list'
+  ;(document.activeElement as HTMLElement | null)?.blur?.()
+}
+
+onBackButton(() => {
+  if (!isCompact.value || screen.value !== 'note') return false
+  showList()
+  return true
+})
 
 /** Menções (@) a notas (das Notas e do Mapa Mental), tarefas e links salvos — stores/mentions.ts. */
 const mentions: MentionHost = {
@@ -61,10 +96,10 @@ useShortcuts({
 </script>
 
 <template>
-  <div class="notes-page" :class="{ 'sidebar-open': notes.state.sidebarOpen }">
+  <div class="notes-page" :class="{ 'sidebar-open': notes.state.sidebarOpen, compact: isCompact, [`screen-${screen}`]: isCompact }">
     <NotesSidebar @new="newNote" />
     <section class="notes-main">
-      <NotesTabs @new="newNote()" />
+      <NotesTabs @new="newNote()" @list="showList" />
       <div class="notes-editor">
         <MarkdownEditor
           v-if="notes.activeNote.value"
@@ -81,7 +116,7 @@ useShortcuts({
         />
         <NotesEmptyState v-else @new="newNote" />
       </div>
-      <NotesStatusBar v-if="notes.activeNote.value" :note="notes.activeNote.value" :cursor="cursor" />
+      <NotesStatusBar v-if="notes.activeNote.value && statusBar" :note="notes.activeNote.value" :cursor="cursor" />
     </section>
     <NoteCategoryDialog />
   </div>
@@ -102,5 +137,19 @@ useShortcuts({
   flex: 1;
   min-height: 0;
   background: var(--surface);
+}
+
+/* ── Celular: uma tela de cada vez (a lista ou a nota) ── */
+.notes-page.compact.screen-list .notes-main {
+  display: none;
+}
+.notes-page.compact.screen-note :deep(.notes-sidebar) {
+  display: none;
+}
+.notes-page.compact.screen-list :deep(.notes-sidebar),
+.notes-page.compact.screen-list :deep(.notes-sidebar .sidebar-inner) {
+  flex: 1;
+  width: 100%;
+  border-right: none;
 }
 </style>

@@ -5,6 +5,7 @@
  * da busca (Ctrl+K) está no tutorial.
  */
 import { computed, ref, watch } from 'vue'
+import { useLayoutSize } from '~/composables/useLayoutSize'
 import { toPlainText } from '~/lib/editor/markup'
 import { useMindmapStore, type PermanentNote } from '~/stores/mindmap'
 
@@ -13,6 +14,9 @@ const mindmap = useMindmapStore()
 const input = ref<HTMLInputElement>()
 const focused = ref(false)
 const activeIndex = ref(0)
+/** Celular: a busca é um botão que abre o campo na barra inteira. */
+const { isCompact } = useLayoutSize()
+const searching = computed(() => isCompact.value && (focused.value || !!mindmap.state.search))
 
 const results = computed(() => mindmap.searchResults.value.slice(0, 8))
 watch(results, () => (activeIndex.value = 0))
@@ -48,9 +52,9 @@ defineExpose({ focusSearch: () => input.value?.focus() })
 </script>
 
 <template>
-  <div class="toolbar">
+  <div class="toolbar" :class="{ compact: isCompact, searching }">
     <MapSwitcher />
-    <div class="search" :class="{ active: focused || mindmap.state.search }">
+    <div class="search" :class="{ active: focused || mindmap.state.search }" @click="input?.focus()">
       <AppIcon name="search" :size="15" />
       <input
         ref="input"
@@ -83,8 +87,8 @@ defineExpose({ focusSearch: () => input.value?.focus() })
       </Transition>
     </div>
 
-    <button class="btn btn-primary btn-sm new-btn" @click="emit('new')">
-      <AppIcon name="plus" :size="15" /> Nova nota
+    <button class="btn btn-primary btn-sm new-btn" aria-label="Nova nota" @click="emit('new')">
+      <AppIcon name="plus" :size="15" /><span class="new-label"> Nova nota</span>
     </button>
     <button
       class="icon-btn tool-btn"
@@ -203,5 +207,59 @@ defineExpose({ focusSearch: () => input.value?.focus() })
 .tool-btn {
   width: 32px;
   height: 32px;
+}
+
+/* ── Celular: a barra ocupa a largura; a busca abre por cima das outras opções ── */
+.toolbar.compact {
+  gap: 6px;
+}
+.toolbar.compact :deep(.map-switcher) {
+  flex: 1;
+  min-width: 0;
+}
+.toolbar.compact :deep(.switcher-btn) {
+  max-width: 100%;
+  height: 38px;
+}
+.toolbar.compact .search {
+  flex: none;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  cursor: pointer;
+}
+.toolbar.compact .search input {
+  width: 0;
+  flex: 0;
+}
+.toolbar.compact.searching .search {
+  flex: 1;
+  justify-content: flex-start;
+  width: auto;
+  padding: 0 6px 0 12px;
+}
+.toolbar.compact.searching .search input {
+  flex: 1;
+  font-size: 15px;
+}
+.toolbar.compact.searching > :not(.search) {
+  display: none;
+}
+.toolbar.compact .new-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+}
+.toolbar.compact .new-label {
+  display: none;
+}
+.toolbar.compact .tool-btn {
+  width: 38px;
+  height: 38px;
+}
+html[data-touch] .results li {
+  padding: 11px 12px;
 }
 </style>

@@ -18,6 +18,8 @@ const props = defineProps<{
   insetRight: number
   focus: { nodeId: string | null; seq: number }
   layout: Record<string, [number, number]>
+  /** Muda quando as posições chegam de fora (outro aparelho). */
+  layoutSeq?: number
 }>()
 
 const emit = defineEmits<{
@@ -123,6 +125,10 @@ watch(
 watch(
   () => props.selectedId,
   (id) => view?.setSelected(id),
+)
+watch(
+  () => props.layoutSeq,
+  () => view?.setPositions(props.layout),
 )
 watch(
   () => props.selectedEdgeId,

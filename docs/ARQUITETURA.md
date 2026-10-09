@@ -1,6 +1,6 @@
 # Arquitetura do 4notes
 
-Este documento explica, de forma didática, como o 4notes funciona por dentro: como o **Nuxt** é usado, o que transforma o projeto em um **aplicativo desktop**, como os **arquivos** são lidos e salvos e como funcionam **tarefas recorrentes**, o **Mapa Mental** e os **Links**.
+Este documento explica, de forma didática, como o 4notes funciona por dentro: como o **Nuxt** é usado, o que transforma o projeto em um **aplicativo desktop** — e, desde a 1.5.0, num **app Android** (item 17) —, como os **arquivos** são lidos e salvos e como funcionam **tarefas recorrentes**, o **Mapa Mental** e os **Links**.
 
 ---
 
@@ -38,8 +38,10 @@ Cada um roda em um **processo** separado, e eles conversam por mensagens (**IPC*
    ├── mindmap/<mapa>/ (.md + mapa.json)
    ├── links/links.json (+ icons/, os ícones dos sites)
    ├── attachments/ (biblioteca de imagens)
-   └── .4notes/
+   └── .4notes/ (settings.json: configurações; mindmap.json: posições dos nós)
 ```
+
+No **celular** (1.5.0), a mesma interface roda dentro do **Capacitor** (um app Android com um WebView), e no lugar do processo principal do Electron entra a camada `app/lib/mobile/`, que oferece a mesma `window.fourNotes` — ver item 17.
 
 ### Camadas
 
@@ -54,6 +56,8 @@ Cada um roda em um **processo** separado, e eles conversam por mensagens (**IPC*
 | Sistema operacional          | `electron/system.ts`                                          | Iniciar o 4notes junto com o computador.                                         |
 | Renderização do mapa         | `app/lib/mindmap/graph-view.ts`                               | Desenho em `<canvas>`, câmera, arrastar/conectar, animações.                     |
 | Camada desktop               | `electron/`                                                   | Janela, protocolo, menus, IPC, segurança.                                        |
+| Camada Android (1.5.0)       | `app/lib/mobile/`, `android/`, `capacitor.config.ts`          | A mesma API do desktop no celular: arquivos, permissão, seletor de pastas, links, PDF (item 17). |
+| Tamanho de tela e toque (1.5.0) | `composables/useLayoutSize.ts`, `lib/touch/long-press.ts`, `composables/useBackButton.ts`, `assets/css/mobile.css` | Celular, dobrável e tablet: layout por tamanho, toque prolongado, "voltar" do Android (item 17). |
 
 ### Independência dos módulos
 
@@ -182,7 +186,7 @@ Proteções:
 - **Todos os caminhos são relativos à pasta de dados** e validados por `resolveInside()`: `../../Windows/...` é recusado.
 - **Escrita atômica**: o conteúdo vai para um arquivo temporário oculto e só depois substitui o original. Se a energia cair no meio, o arquivo antigo continua inteiro.
 - **Novas tentativas** quando o arquivo está travado (antivírus, OneDrive sincronizando).
-- **Excluir = Lixeira do Windows** (`shell.trashItem`), com fallback para `.4notes/trash/`.
+- **Excluir = Lixeira do Windows** (`shell.trashItem`), com fallback para `.4notes/trash/` (no Android, sempre `.4notes/trash/`: não há Lixeira para essas pastas).
 - Arquivos com BOM (comum no Bloco de Notas antigo) são lidos corretamente.
 
 ---
@@ -214,12 +218,11 @@ Pessoal/
 │   ├── links.json              Links salvos + categorias (um arquivo só)
 │   └── icons/                  ícones dos sites, um por site (nuxt.com.png, store.steampowered.com.ico…)
 ├── attachments/                Biblioteca de imagens: coladas nas notas (imagem-20261002-141503.png), enviadas, fotos das categorias
-└── .4notes/                    Estado da interface (pode ser apagado sem perder dados)
-    ├── notes.json              abas abertas, aba ativa, lista lateral, categorias recolhidas, pastas abertas e as configurações das Notas
-    ├── mindmap.json            mapa aberto, posições dos nós de cada mapa e as configurações do Mapa Mental
-    ├── links.json              ordem da lista de links (recentes, A–Z ou URL)
-    ├── app.json                último módulo aberto, módulos ativos e como aparecem no menu lateral
-    └── backups/                tasks-segunda.json … tasks-domingo.json e links-segunda.json … (7 dias) e conversões do mapa
+└── .4notes/
+    ├── settings.json           configurações (1.5.0): tema, módulos, Notas, Mapa Mental, ordem dos links — as mesmas em todos os aparelhos
+    ├── mindmap.json            posições dos nós de cada mapa
+    ├── trash/                  no Android: o que foi excluído (não há Lixeira)
+    └── backups/                tasks-segunda.json … tasks-domingo.json e links-segunda.json … (7 dias), conversões do mapa e, em 1.5.0/, os arquivos de estado da 1.4.3
 ```
 
 Formatos escolhidos:
@@ -232,8 +235,8 @@ Formatos escolhidos:
 | Imagens das notas | Arquivos em `attachments/` + `![](../attachments/x.png)` na nota | A imagem fica no workspace (backup = copiar a pasta) e o caminho relativo também funciona no Obsidian/VS Code. |
 | Categorias das Notas | Pastas em `notes/` + `notes/categorias.json` (ordem, cor, ícone, imagem) | A categoria de uma nota é a pasta onde o arquivo está: aparece igual no Explorador e no Obsidian, sem cadastro paralelo que possa ficar diferente. |
 | Links | JSON (`links/links.json`) + ícones em `links/icons/` | Uma lista de registros (endereço, título, categoria): JSON é o formato natural e continua editável à mão. Os ícones ficam no workspace para aparecer sem internet e ir junto no backup. |
-| Configurações dos módulos | JSON em `.4notes/` (no arquivo de estado de cada módulo) | Valem para o workspace (cada workspace com as suas) e não misturam com os dados. |
-| Estado da interface | JSON em `.4notes/` | Separado dos dados: apagar não perde nada importante. |
+| Configurações (tema e módulos) | `.4notes/settings.json` (1.5.0) | Valem para o workspace (cada workspace com as suas) e vão junto com a pasta: as mesmas no computador e no celular. |
+| Estado da interface (abas abertas, último módulo, mapa aberto) | No aparelho (`localStorage` do app, por workspace — 1.5.0) | É de cada aparelho; perder não perde nada importante. |
 
 Exemplo de `tasks.json`:
 
@@ -279,7 +282,7 @@ Exemplo de `mapa.json`:
 
 As notas são referenciadas pelo título (nome do arquivo sem `.md`). A conexão guarda o sentido da seta (`from` → `to`), mas duas notas têm no máximo uma conexão. Se um `.md` for renomeado por fora, a conexão antiga continua no arquivo (só não aparece) — nada é apagado sozinho.
 
-**Preferências desta máquina** (não são dados) ficam em `%APPDATA%\4notes\config.json` (`electron/config.ts`): qual workspace abrir, tema, zoom e tamanho/posição da janela.
+**Preferências desta máquina** (não são dados) ficam em `%APPDATA%\4notes\config.json` (`electron/config.ts`): qual workspace abrir, zoom, tamanho/posição da janela e uma cópia do tema (para a janela abrir já com a cor certa). No Android, qual workspace abrir e a cópia do tema ficam no próprio app.
 
 ---
 
@@ -340,7 +343,7 @@ Outros detalhes:
 - O **X da aba** de uma nota **sem categoria** pergunta o que fazer: **Guardar nota** (fecha só a aba; a nota continua na lista) ou **Apagar nota** (vai para a Lixeira, com Desfazer). Uma nota que está numa **categoria** fecha direto, guardada (1.3.0, `NotesTabs.vue → requestClose`) — para apagá-la há a lixeira ao lado dela na lista lateral. `Ctrl+W` e o clique do meio fecham a aba guardando a nota, como antes.
 - Com muitas abas, a faixa rola na horizontal (roda do mouse ou a barra fina no topo) e o botão **+** fica sempre visível.
 - Uma aba nova e vazia **não cria arquivo** (como no Bloco de Notas).
-- As abas abertas ficam em `.4notes/notes.json` e são restauradas na próxima vez.
+- As abas abertas ficam guardadas no aparelho (1.5.0, `lib/storage/device-state.ts`; até a 1.4.3, em `.4notes/notes.json`) e são restauradas na próxima vez — cada aparelho com as suas.
 - Excluir manda o arquivo para a **Lixeira**, com botão **Desfazer**.
 - Editou o `.md` em outro programa? Ao voltar para a janela do 4notes, o conteúdo é recarregado (se você não tinha alterações pendentes naquela nota). Arquivos criados por fora aparecem na lista.
 - O nome do arquivo na barra de status inclui a pasta da categoria (`Trabalho/Reunião.md`), e o caminho no topo mostra a categoria (`Notas / Trabalho / Reunião`).
@@ -389,27 +392,27 @@ Lista de compras          1.1.1
 - A segunda palavra vira subpasta quando 2+ notas começam com as mesmas duas palavras e alguma tem texto depois. Não há terceiro nível.
 - A nota com o título exatamente igual ao da pasta é a própria pasta: clicar nela abre a nota (a setinha abre/fecha a pasta).
 - Maiúsculas não importam para agrupar; o nome da pasta usa a grafia da nota da pasta (ou a mais comum). Pastas primeiro, depois as notas, em ordem alfabética com números na ordem certa (`1.9` antes de `1.10`).
-- As pastas começam fechadas; as que levam até a nota ativa abrem sozinhas. Categorias recolhidas e pastas abertas ficam em `.4notes/notes.json`. Buscando, tudo aparece aberto.
+- As pastas começam fechadas; as que levam até a nota ativa abrem sozinhas. Categorias recolhidas e pastas abertas ficam guardadas no aparelho, junto das abas. Buscando, tudo aparece aberto.
 - **Exibição das pastas pelo título** (1.3.1, configuração das Notas): **Padrão** (como foi digitado) ou **CAIXA ALTA** — só CSS (`text-transform` no nome das pastas); o título das notas e os arquivos não mudam.
 - O título **"Notas"** em cima das notas sem categoria só aparece quando existe alguma nota sem categoria (ou enquanto você arrasta uma nota até ali, para tirar a categoria).
 - O **+** de uma pasta (1.3.0, aparece ao passar o mouse) cria uma nota na mesma categoria que já começa com o título da pasta — `# 4notes ` (`titlePath` da pasta, em `title-tree.ts`) —, com o cursor no fim. Completando o título, a nota cai na pasta. Esse começo é só uma sugestão (`createNote(…, { template: true })`): enquanto você não digita mais nada, a nota não vira arquivo e fechar a aba a descarta.
 
 A aba de uma nota com categoria fica marcada com a **cor da categoria** (na aba ativa, o indicador de baixo inteiro; nas outras, um traço discreto).
 
-### Versão anterior de uma nota — `lib/notes/versions.ts`, `stores/notes.ts › previousVersionOf`, `NotesTabs.vue` (1.4.1)
+### Versões de uma nota (anterior e próxima) — `lib/notes/versions.ts`, `stores/notes.ts › previousVersionOf/nextVersionOf`, `NotesTabs.vue` (1.4.1 · 1.4.3)
 
 Notas com o mesmo título a não ser por um **número de versão** são versões umas das outras:
 
 ```
-4notes 1.4.1  →  4notes 1.4.0  →  4notes 1.3.2  →  (nenhuma: sem botão)
+4notes 1.3.2  ‹  4notes 1.4.0  ‹  4notes 1.4.1  ›  4notes 1.4.2  ›  (nenhuma: sem botão)
 Aula 3        →  Aula 2
 4notes 1.2.0 bugs  →  4notes 1.1.1 bugs   (o texto depois da versão também conta)
 ```
 
 - A versão é a **última palavra** do título que é um número (`3`, `1.4.0`, `v2.1`), com pelo menos uma palavra antes. As outras palavras precisam ser iguais (sem diferenciar maiúsculas) — as mesmas palavras de `titleWords` que montam as pastas pelo título, então as versões ficam sempre na mesma pasta da lista.
-- A anterior é a **maior versão menor que a atual**, comparando parte por parte (`1.10` > `1.9`; `1.4` = `1.4.0`, que não conta como anterior). Pulos na numeração são seguidos (`1.4.1` sem `1.4.0` → `1.3.9`).
+- A anterior é a **maior versão menor que a atual** e a próxima (1.4.3), a **menor versão maior que a atual**, comparando parte por parte (`1.10` > `1.9`; `1.4` = `1.4.0`, que não conta nem como anterior nem como próxima). Pulos na numeração são seguidos (`1.4.1` sem `1.4.0` → `1.3.9`). As duas usam a mesma função (`neighborVersion`, uma para cada sentido).
 - O grupo é o da organização da lista: **a mesma categoria** (ou as notas sem categoria) — `sameDir`. Uma `1.3.9` em outra categoria não entra.
-- O botão fica no **fim da barra das abas** (ícone de histórico + o número, ex.: `1.4.0`; o balão mostra o título), não no editor; abre a anterior numa aba (`openNote`). Sem versão anterior (ou numa nota sem versão), não aparece. É calculado da lista de notas (sem ler arquivos), então acompanha na hora uma nota nova, renomeada ou movida.
+- Os botões ficam no **fim da barra das abas**, não no editor: **‹ 1.4.0** (anterior) e **1.4.2 ›** (próxima), o balão mostra o título; cada um abre a versão numa aba (`openNote`) e só aparece se ela existir (nenhum numa nota sem versão). São calculados da lista de notas (sem ler arquivos), então acompanham na hora uma nota nova, renomeada ou movida.
 
 ### Formatação do texto (Notas e Mapa Mental)
 
@@ -456,7 +459,14 @@ O arquivo continua sendo Markdown puro — a prévia só muda o desenho.
 ### Blocos de código — `code-detect.ts`, `code-blocks.ts`, `languages.ts`
 
 - **Colar código** (`paste.ts`) cria um bloco ` ```linguagem `. Se o texto veio do VS Code, a linguagem vem junto na área de transferência; senão `code-detect.ts` decide por pontuação de padrões (palavras-chave, símbolos, indentação) com proteções contra falsos positivos (texto comum, Markdown, listas). Precisa de pelo menos 2 linhas; `Ctrl+Shift+V` cola como texto comum.
-- Fora da edição, o bloco é um **cartão** (widget do CodeMirror) com a linguagem, os botões **Copiar**, **Tela cheia** e **Remover bloco**, e o código colorido com **altura máxima e rolagem interna**. Clicar no código (ou chegar nele pelas setas) **abre o cartão**: as linhas do código ficam editáveis ali mesmo, entre o cabeçalho e o rodapé do cartão, que tomam o lugar das cercas ` ``` ` — as cercas nunca aparecem e o cursor nunca para nelas (1.3.0).
+- O bloco é um **cartão** (widget do CodeMirror) com a linguagem, os botões **Copiar**, **Tela cheia** e **Remover bloco**, e o código colorido com **altura máxima e rolagem interna**. As cercas ` ``` ` nunca aparecem.
+- **Editor dentro do cartão** (1.4.3, `block-editor.ts`): o corpo do cartão é um segundo CodeMirror, só com o código (cores da linguagem, `Tab`, fechar parênteses; no bloco de texto, a fonte do texto e linhas que quebram), com a mesma altura máxima e rolagem. Clicar no código edita ali mesmo e **o cartão não cresce** — até a 1.4.2, clicar "abria" o cartão (as linhas viravam linhas do editor da nota, sem altura máxima). Como é um editor de verdade, o duplo clique, arrastar para selecionar e o `Ctrl+D` funcionam como num editor de código.
+  - **Uma fonte de verdade**: cada mudança do editor do bloco vira uma transação no editor da nota (as posições somadas ao começo do código, com o mesmo `userEvent`, para o histórico agrupar a digitação); `Ctrl+Z`/`Ctrl+Y` (teclado e menu do botão direito — `historyViewOf`) usam o histórico da nota. Mudanças vindas da nota (desfazer, tela cheia, arquivo mudado por fora) voltam pelo `updateDOM` do widget, que mantém o mesmo editor (e o cursor) — o widget só é recriado quando o bloco troca de tipo (texto ↔ código).
+  - **Seleção espelhada**: a seleção principal do bloco é copiada para o editor da nota (sem foco), então a barra de status mostra a linha/coluna certa, o desfazer volta o cursor para o lugar certo e a busca da nota continua dali. Ao contrário: uma seleção da nota que cai dentro do código (`↑`/`↓` entrando no bloco, `Enter` em ` ```py `, desfazer, `Ctrl+F` achando algo no código) aparece no editor do bloco (`revealInBlocks`), com o foco se a nota estava com ele.
+  - **Sair**: `↑`/`←` no começo e `↓`/`→` no fim voltam para a nota (antes/depois do bloco; no começo/fim da nota ganha uma linha vazia); `Esc` (com um cursor só) vai para depois do bloco; `Backspace` no começo de um bloco vazio remove o bloco; `Ctrl+F` abre a busca da nota.
+  - **A cerca cresce**: digitar dentro do bloco uma linha que o fecharia antes da hora (` ``` `) troca as duas cercas por uma maior (` ```` `) na mesma transação (`longerFences`).
+  - **Aparência**: as regras do tema da nota também alcançam o editor de dentro (ele fica dentro da nota); por isso o `blockEditorTheme` usa seletores que começam pelo próprio editor (`&.cm-editor …`), que valem mais. Ele também esconde a seleção e o cursor nativos (o CodeMirror da nota mostraria os de um campo focado dentro dele), e a seleção fica mais clara quando o foco volta para o texto da nota.
+  - Só os cartões na tela têm editor (o CodeMirror da nota só desenha o que está perto da tela): uma nota com 40 blocos abre em ~0,2 s.
 - Digitar ` ``` ` (ou ` ```linguagem `) numa linha e apertar `Enter` cria um bloco; a linguagem muda clicando no nome dela no cabeçalho (menu com as linguagens, `chooseLanguage`); `Backspace` num bloco vazio o remove.
 - **Tela cheia** (`components/editor/CodeFullscreen.vue`) é um segundo editor com a linguagem do bloco; cada alteração é gravada de volta no bloco (`replaceBlockCode`), então desfazer/salvar funcionam como no resto da nota. **Remover bloco** apaga o bloco inteiro de uma vez, com **Desfazer** no aviso.
 - As cores vêm de `@codemirror/language-data`: a lista oficial de linguagens do CodeMirror, que **carrega cada linguagem só quando ela aparece** numa nota. GDScript (Godot) não está na lista e foi adicionado em `languages.ts` como um modo simples.
@@ -477,14 +487,15 @@ bonito
 - **O conteúdo é o que aparece na tela**, sem tratamento: dentro de uma cerca não existe formatação, então o trecho é convertido pelas mesmas regras do **Exportar TXT** (`noteToPlainText` sobre `balancedSlice` da seleção): sai a marcação escondida (`**`, `<u>`, o endereço dos links; as menções ficam com o título), os itens de lista ficam com o marcador da tela (`•`, `1.`, `☐`/`☑`) e indentação/espaços continuam. Nenhuma linguagem, nenhuma cor, nada de "normalizar" o texto.
 - **Um bloco ocupa linhas inteiras**: o que sobra antes e depois da seleção, na mesma linha, continua no lugar, em linhas próprias. Formatos cortados pelo bloco fecham antes dele e reabrem depois (`**abcd**` com `bc` selecionado → `**a**`, bloco `bc`, `**d**`); os espaços encostados no corte saem (para o Markdown continuar valendo). Parte de um item de lista: o item continua com o resto do texto. Várias linhas a partir do começo do texto de uma linha: a primeira entra inteira (com o marcador da lista). Seleção que corta um bloco de código leva o bloco inteiro; dentro de um bloco, o botão não aparece (`canWrapInTextBlock`).
 - A cerca usa mais crases que qualquer linha do texto que comece com crases (` ```` ` quando precisa), para não fechar antes da hora.
-- **Cartão**: o mesmo dos blocos de código (`code-blocks.ts` reconhece `isTextBlock`), com o cabeçalho **Texto** (sem trocar linguagem), **Copiar**, **Tela cheia** e **Remover** (com **Desfazer** no aviso), altura máxima e rolagem interna — mas com a fonte do texto e linhas que quebram (`.cm-textblock` em `theme.ts`; editando, as linhas ganham `cm-md-textblock` em `setup.ts`). A **tela cheia** (`CodeFullscreen.vue`) abre como texto: fonte do texto, linhas que quebram, corretor ligado, sem números de linha nem recursos de código. Desde a 1.4.1 o texto usa a **largura toda** da janela, com a mesma margem lateral do editor de notas (`--editor-padding-x`, em `textEditorTheme`), em vez de uma coluna centralizada com espaço vazio dos lados.
+- **Cartão**: o mesmo dos blocos de código (`code-blocks.ts` reconhece `isTextBlock`), com o cabeçalho **Texto** (sem trocar linguagem), **Copiar**, **Tela cheia** e **Remover** (com **Desfazer** no aviso), altura máxima e rolagem interna — mas com a fonte do texto e linhas que quebram (`.cm-textblock` e `.cm-block-text` em `theme.ts`; o editor do cartão usa `lineWrapping` e o corretor). A **tela cheia** (`CodeFullscreen.vue`) abre como texto: fonte do texto, linhas que quebram, corretor ligado, sem números de linha nem recursos de código. Desde a 1.4.1 o texto usa a **largura toda** da janela, com a mesma margem lateral do editor de notas (`--editor-padding-x`, em `textEditorTheme`), em vez de uma coluna centralizada com espaço vazio dos lados.
 - `text` é reservado: `findLanguage('text')` não devolve linguagem (a busca aproximada do CodeMirror acharia o LaTeX pelo apelido `tex`) e o Markdown do editor usa `findLanguage` para colorir o código dos blocos. No PDF exportado o bloco sai com a fonte do texto (`.code.text`).
 
 ### Várias ocorrências — `Ctrl+D` — `multi-select.ts` (1.3.2)
 
 - `Ctrl+D` (`⌘D`) com um trecho selecionado acrescenta à seleção a **próxima ocorrência** do mesmo texto, sem diferenciar maiúsculas (como o VS Code); de novo, a seguinte — chegando ao fim da nota, continua do começo. A ocorrência nova vira a seleção principal (a próxima busca continua depois dela). Sem nada selecionado, o primeiro `Ctrl+D` seleciona a palavra do cursor e os próximos só pegam a mesma palavra inteira, com as mesmas maiúsculas (`wordModeField`).
 - Digitar, colar, apagar e os atalhos de formatação agem em todas as seleções juntas (os comandos de formatação já usavam `changeByRange`); um `Ctrl+Z` desfaz tudo de uma vez; `Esc` volta para um cursor só.
-- Ocorrências que começam ou terminam dentro de algo escondido ficam de fora: o endereço de um link, o título de uma menção, imagens, marcadores de linha e marcações (lido do texto por `hiddenRanges`, valendo também fora da parte visível da nota, e das partes atômicas do editor). Dentro do código de um bloco vale — o cartão se abre para mostrar a seleção.
+- Ocorrências que começam ou terminam dentro de algo escondido ficam de fora: o endereço de um link, o título de uma menção, imagens, marcadores de linha e marcações (lido do texto por `hiddenRanges`, valendo também fora da parte visível da nota, e das partes atômicas do editor). Desde a 1.4.3, o código dos blocos também: o bloco é um cartão atômico na nota e tem o próprio editor.
+- **Nos blocos e na tela cheia** (1.4.3): `plainMultipleSelections` é o mesmo `Ctrl+D` para texto puro (nada escondido — o facet `plainText`), usado pelo editor do cartão (`block-editor.ts`) e pela tela cheia (`CodeFullscreen.vue`, que antes não aceitava várias seleções). As outras ocorrências do texto selecionado (`highlightSelectionMatches`) ficam só com um contorno (`.cm-selectionMatch`), para não se confundirem com as selecionadas.
 - O editor passou a aceitar várias seleções (`EditorState.allowMultipleSelections`), mas **só o `Ctrl+D` cria seleções extras** (`onlyCtrlDAddsRanges`): `Ctrl+clique` continua abrindo links (`clickAddsSelectionRange` desligado) e outros comandos do CodeMirror que criariam cursores (`Ctrl+Shift+L`, `Ctrl+Alt+↑`…) continuam como antes. Vale nas Notas e nas notas do Mapa Mental.
 
 ### Imagens — `images.ts`, `paste.ts`, `host.ts`
@@ -623,7 +634,7 @@ O componente do mapa só repassa os dados ao renderizador quando algo visível m
 
 ### 3) Posições e "Reorganizar o mapa" — `app/lib/mindmap/layout.ts`
 
-Os nós **ficam onde você os deixa** (arrastar move uma nota). Nota nova aparece num espaço livre perto da nota ligada a ela (ou onde você clicou com o botão direito). As posições ficam em `.4notes/mindmap.json`, por mapa.
+Os nós **ficam onde você os deixa** (arrastar move uma nota). Nota nova aparece num espaço livre perto da nota ligada a ela (ou onde você clicou com o botão direito). As posições ficam em `.4notes/mindmap.json`, por mapa — no workspace, então são as mesmas no computador e no celular (relidas ao voltar para o app, item 17).
 
 "Reorganizar o mapa" calcula um layout limpo, no estilo de um mapa mental:
 
@@ -640,7 +651,7 @@ Os nós **ficam onde você os deixa** (arrastar move uma nota). Nota nova aparec
 - Com o mouse sobre uma nota, ela e as conexões dela ganham destaque; as **setas que saem dela** ficam com a **cor da nota** (`Edge.tint`).
 - Ao abrir/fechar o painel, a câmera desliza para manter o centro; se você pega o mapa no meio desse ajuste, ele termina na hora (abrir e fechar rápido não deixa o mapa deslocado).
 - Ajustes (desde a 1.3.1 em **Configurações → Módulos → Mapa Mental**, `components/mindmap/GraphSettings.vue`; desde a 1.4.2 não há mais um atalho para elas na barra do mapa): esconder notas sem conexões e nós em **cards** (padrão, com o nome dentro) ou **círculos** (estilo Obsidian). Nos círculos, os nomes aparecem **só na nota selecionada** (padrão), conforme o zoom ou sempre. **Reorganizar o mapa** continua no próprio mapa: botão na barra e no clique direito do fundo. A barra do mapa (`GraphToolbar.vue`) tem só o seletor de mapas, a busca (o atalho `Ctrl+K` funciona, mas só aparece no tutorial), **Nova nota** e **Reorganizar**; o rodapé mostra o resumo do mapa, o zoom e, com uma conexão selecionada, como removê-la (a dica fixa "Arraste para mover…" saiu na 1.4.2 — está no tutorial).
-- Os ajustes ficam em `.4notes/mindmap.json` com `settingsVersion`: na primeira abertura da 1.1.0, os ajustes gravados pelas versões anteriores (que sempre salvavam os padrões antigos) passam para os novos padrões — cards e nomes ao selecionar — uma única vez.
+- Os ajustes ficam na seção `mindmap` do `.4notes/settings.json` (até a 1.4.3, no `.4notes/mindmap.json`) com `settingsVersion`: na primeira abertura da 1.1.0, os ajustes gravados pelas versões anteriores (que sempre salvavam os padrões antigos) passam para os novos padrões — cards e nomes ao selecionar — uma única vez.
 
 ---
 
@@ -689,7 +700,7 @@ Na interface elas se chamam **categorias** (1.3.1; no arquivo continuam `folders
 3. Em segundo plano, `links.fetchMeta` pede ao processo principal o título e o ícone. `electron/links.ts` baixa só o começo da página (`net.fetch`, que usa o proxy e os certificados do sistema; até 768 KB e 9 s), lê o `<title>` (ou `og:title`) e os `<link rel="icon">` (`parseHead`), escolhe o melhor ícone para mostrar pequeno (`iconUrls`: SVG, depois tamanhos médios; o `/favicon.ico` do site por último), confere pelos primeiros bytes que é mesmo uma imagem (`sniffImage`) e grava `links/icons/<site>.<ext>`. O ícone vale para todos os links do mesmo site.
 4. Sem internet ou com o site fora do ar, o link fica com o domínio e a inicial dele numa cor fixa por site; **Atualizar título e ícone** tenta de novo. Ao abrir a tela, os ícones que faltam são procurados uma vez por sessão, três sites por vez.
 
-**Tela** (`pages/links.vue`): lista lateral com busca, "Todos os links", "Sem categoria" e as categorias (arraste um link até uma categoria para movê-lo — o arrastar leva o id no tipo `application/x-4notes-link` — e arraste as categorias para reordenar). "Sem categoria" só aparece quando existe algum link sem categoria, quando ela está aberta ou enquanto um link da lista é arrastado (para poder soltar ali). No centro, o campo de salvar (com o ícone de link, igual ao da barra de nova tarefa) e a lista — **Recentes**, **A–Z** ou **URL** (1.3.1: pelo endereço, `urlSortKey`: o domínio sem `www.` e com acentos, depois o caminho), lembrado em `.4notes/links.json`. Colar com `Ctrl+V` fora de um campo e soltar um link vindo do navegador também salvam. Clicar abre no navegador padrão (`shell.openExternal`). Mover, excluir e excluir categoria têm **Desfazer**; excluir uma categoria não apaga links — eles ficam sem categoria.
+**Tela** (`pages/links.vue`): lista lateral com busca, "Todos os links", "Sem categoria" e as categorias (arraste um link até uma categoria para movê-lo — o arrastar leva o id no tipo `application/x-4notes-link` — e arraste as categorias para reordenar). "Sem categoria" só aparece quando existe algum link sem categoria, quando ela está aberta ou enquanto um link da lista é arrastado (para poder soltar ali). No centro, o campo de salvar (com o ícone de link, igual ao da barra de nova tarefa) e a lista — **Recentes**, **A–Z** ou **URL** (1.3.1: pelo endereço, `urlSortKey`: o domínio sem `www.` e com acentos, depois o caminho), lembrado em `.4notes/settings.json` (`links.sort`; até a 1.4.3, `.4notes/links.json`). Colar com `Ctrl+V` fora de um campo e soltar um link vindo do navegador também salvam. Clicar abre no navegador padrão (`shell.openExternal`). Mover, excluir e excluir categoria têm **Desfazer**; excluir uma categoria não apaga links — eles ficam sem categoria.
 
 **Milhares de links** (favoritos importados): a lista desenha 150 linhas e mais ao rolar perto do fim (um `IntersectionObserver` no fim da lista; teclado e link recém-salvo garantem que a linha deles exista), as linhas fora da tela não são calculadas pelo navegador (`content-visibility: auto`) e listas com mais de 300 links não animam (a animação mediria todas as linhas a cada mudança). A busca guarda o texto já normalizado de cada link, e os links "buscando ícone" ficam num `Set` reativo — só a linha do link muda quando a busca dele começa ou termina. Testado com 3.000 links: buscar, ordenar e salvar levam frações de segundo.
 
@@ -722,14 +733,16 @@ Toda imagem enviada ao 4notes fica em **`attachments/`** — coladas nas notas, 
 `components/shell/SettingsDialog.vue`, em duas abas (`app.openSettings(aba, módulo)`):
 
 - **Geral**: tema; **Tutoriais e atalhos** (abre o painel do item 16); **Iniciar com o computador**; workspace (pasta, abrir/criar outro) e a biblioteca de imagens.
-- **Módulos**: primeiro as **configurações gerais dos módulos** (1.4.0, item 16) — módulos ativos (arraste para mudar a ordem, 1.4.1) e **Menu lateral** (ícone e nome / só o ícone). Depois, os ajustes de cada módulo **ativo** que fazem sentido como configuração permanente, guardados **no workspace** (no arquivo de estado do módulo em `.4notes/`): Notas (`NotesSettings.vue`: categoria automática pelo título, exibição das pastas pelo título), Mapa Mental (`GraphSettings.vue`: notas sem conexões, estilo dos nós, nomes), e Tarefas e Links com "Sem nenhuma configuração disponível no momento.". As de um módulo desativado somem da lista (continuam guardadas). **Critério**: o que se usa toda hora fica na tela do próprio módulo — ordenar os links, as opções de criação das tarefas, reorganizar o mapa.
+- **Módulos**: primeiro as **configurações gerais dos módulos** (1.4.0, item 16) — módulos ativos (arraste para mudar a ordem, 1.4.1) e **Menu lateral** (ícone e nome / só o ícone). Depois, os ajustes de cada módulo **ativo** que fazem sentido como configuração permanente, guardados **no workspace** (`.4notes/settings.json`, uma seção por módulo — 1.5.0): Notas (`NotesSettings.vue`: categoria automática pelo título, exibição das pastas pelo título), Mapa Mental (`GraphSettings.vue`: notas sem conexões, estilo dos nós, nomes), e Tarefas e Links com "Sem nenhuma configuração disponível no momento.". As de um módulo desativado somem da lista (continuam guardadas). **Critério**: o que se usa toda hora fica na tela do próprio módulo — ordenar os links, as opções de criação das tarefas, reorganizar o mapa.
 - Os **atalhos** de teclado saíram das Configurações (até a 1.3.2 havia uma aba "Atalhos"): ficam nos tutoriais de cada módulo (item 16).
 
 **Desfoque só atrás do painel** (1.4.1): o fundo do `UiModal` (escurecido + `backdrop-filter`) é um `::before` com `inset` configurável (`scrimInset`). Na aba **Módulos**, ele começa abaixo da barra de título e à direita do menu lateral (`var(--titlebar-h) 0 0 var(--rail-w)`), então o nome do workspace e o menu ficam nítidos enquanto você liga, desliga e reorganiza; o resto da janela continua bloqueado para cliques. Na aba Geral, a janela inteira fica embaçada, como nos outros diálogos.
 
 Cada configuração é um `components/ui/SettingRow.vue`: nome, o **?** com uma explicação bem curta (balão ao passar o mouse ou focar com o teclado) e o controle.
 
-**Iniciar com o computador** (`electron/system.ts`): `app.setLoginItemSettings({ openAtLogin })` — no Windows, a mesma lista do Gerenciador de Tarefas › Inicializar (desligado por lá conta como desligado aqui; ligar aqui religa lá). É uma configuração **da máquina** (não do workspace) e só existe no app instalado (Windows e macOS): em desenvolvimento ela abriria o Electron "puro", então o switch fica desativado com o aviso "Disponível no 4notes instalado". Nos testes automatizados só simula.
+**Iniciar com o computador** (`electron/system.ts`): `app.setLoginItemSettings({ openAtLogin })` — no Windows, a mesma lista do Gerenciador de Tarefas › Inicializar (desligado por lá conta como desligado aqui; ligar aqui religa lá). É uma configuração **da máquina** (não do workspace) e só existe no app instalado (Windows e macOS): em desenvolvimento ela abriria o Electron "puro", então o switch fica desativado com o aviso "Disponível no 4notes instalado". Nos testes automatizados só simula. No Android não existe (`capabilities.launchAtLogin` falso) e a linha não aparece.
+
+No celular, as Configurações abrem em **Mais** e ocupam a tela inteira; o tema também fica em **Mais**. Como tudo fica no `settings.json` do workspace, mudar uma configuração no celular muda no computador (item 17).
 
 ---
 
@@ -760,6 +773,21 @@ Para instalar a nova versão por cima da antiga, basta executar o novo instalado
 
 Para testar a versão de produção sem instalar: `npm start`.
 
+**App Android** (1.5.0) — `npm run build:android` (`scripts/android.mjs`):
+
+```
+nuxt generate                     → .output/public/           (a MESMA interface do Windows)
+npx cap sync android              → android/app/src/main/assets/public/ (+ plugins do Capacitor)
+gradlew assembleRelease           → android/app/build/outputs/apk/release/app-release.apk
+(cópia)                           → release/android/4notes-<versão>.apk
+```
+
+- Precisa do **Android Studio** (o script acha o Java — a pasta `jbr` dele — e o Android SDK nos lugares padrão, ou usa `JAVA_HOME`/`ANDROID_HOME`, e grava o `android/local.properties`). Na primeira vez o Gradle baixa o que precisa (internet).
+- A versão do app é a do `package.json` (`versionName` 1.5.0, `versionCode` 10500 — `android/app/build.gradle`), então um número só vale para as duas plataformas.
+- Assinatura: com `android/keystore.properties` (fora do Git), a sua chave; sem ele, a chave de testes do Android Studio deste computador. O Android só atualiza um app com um APK assinado pela mesma chave.
+- `npm run android:run` instala direto no celular ligado no cabo (depuração USB); `npm run android:open` abre o projeto no Android Studio; `npm run android:sync` só atualiza o `android/`.
+- `npm run build:windows` é o mesmo que `npm run dist:win`; `npm run build:ios` explica por que o iOS ainda não está incluído (item 17).
+
 ---
 
 ## 15. Como instalar em outro computador
@@ -774,6 +802,8 @@ Para testar a versão de produção sem instalar: `npm start`.
 
 Para gerar o instalador em outra máquina (para desenvolver lá), instale o Node.js 22+, copie o projeto (sem `node_modules`) e rode `npm install` + `npm run dist:win`.
 
+**No celular** (1.5.0): copie o `4notes-<versão>.apk` para o Android e toque nele (permita "instalar apps desconhecidos" para o app que abriu o arquivo). Na primeira abertura, crie ou abra o workspace — o 4notes pede o **Acesso a todos os arquivos** — e, para usar o mesmo workspace do computador, deixe a pasta sincronizada pelo Google Drive (item 17, "Sincronização"; o passo a passo está no README).
+
 ---
 
 ## 16. Módulos: ativar, desativar, reorganizar, menu lateral e tutoriais (1.4.0 · 1.4.1)
@@ -782,10 +812,10 @@ Arquivos: `app/lib/modules.ts` (lista dos módulos + tutoriais + regras puras da
 
 **Uma lista só** (`MODULES` em `lib/modules.ts`): id, nome curto (menu) e completo, ícone, rota, tecla do atalho (`Ctrl+1…4`), uma linha de descrição e o **tutorial** (obrigatório no tipo). O menu lateral, os atalhos do `app.vue`, as Configurações, o título e os Tutoriais leem essa lista — um módulo novo entra em todos esses lugares (inclusive no atalho "Ir para …" do tutorial Geral) só sendo acrescentado ali.
 
-**Ativar/desativar = preferência de exibição**, guardada em `.4notes/app.json` (o mesmo arquivo do último módulo aberto, agora de `stores/modules.ts`):
+**Ativar/desativar = preferência de exibição**, guardada na seção `modules` do `.4notes/settings.json` (`stores/modules.ts`; até a 1.4.3 ficava em `.4notes/app.json`, junto do último módulo aberto — que agora é de cada aparelho):
 
 ```json
-{ "lastModule": "notes", "modules": { "disabled": ["links"], "order": ["notes", "mindmap", "tasks", "links"], "navStyle": "icon-label" } }
+{ "modules": { "disabled": ["links"], "order": ["notes", "mindmap", "tasks", "links"], "navStyle": "icon-label" } }
 ```
 
 - Guarda só os **desativados**: um módulo novo começa ativo; ids desconhecidos (de outra versão) e outras chaves do arquivo são mantidos. Pelo menos um módulo fica ativo (`canDisable`; um arquivo editado à mão com todos desligados reativa o primeiro).
@@ -808,6 +838,131 @@ Arquivos: `app/lib/modules.ts` (lista dos módulos + tutoriais + regras puras da
 
 ---
 
+## 17. O app Android (1.5.0)
+
+**A ideia: o mesmo app, outra "casca".** No computador, o Electron dá à interface uma janela e o acesso aos arquivos. No celular, quem faz esse papel é o **Capacitor**: um app Android de verdade (instalado pelo APK, com ícone, permissões e o "voltar"), que mostra a interface num **WebView** (o Chromium do Android) e oferece plugins nativos (arquivos, HTTP, barras do sistema). Páginas, componentes, stores, editor e mapa são a **mesma pasta `app/`** — uma mudança no código vale para as duas plataformas; só a camada que fala com o sistema muda.
+
+```
+                 app/  (Nuxt + Vue) — a MESMA interface nas duas plataformas
+                           │   window.fourNotes  (contrato FourNotesApi, shared/ipc.ts)
+           ┌───────────────┴──────────────────┐
+   COMPUTADOR (Electron)               CELULAR (Capacitor)
+   electron/preload.ts                 app/lib/mobile/   (instalada por plugins/00.platform.client.ts)
+   electron/files.ts                   ├─ api.ts         a API inteira, com as mesmas regras do desktop
+   electron/data-dir.ts                ├─ workspace.ts   arquivos do workspace   (= electron/files.ts)
+   electron/library.ts …               ├─ data-dir.ts    criar/abrir workspaces  (= electron/data-dir.ts)
+   (Node.js: fs, shell, net)           ├─ fs.ts          @capacitor/filesystem (+ disco na memória p/ testes)
+                                       ├─ native.ts      plugin do 4notes (android/…/FourNotesPlugin.java)
+           │                           └─ pick-files.ts  escolher arquivos do celular
+           │                                   │
+           └──── WORKSPACE: a mesma pasta, mantida igual por um app de sincronização ────┘
+```
+
+### 1) Uma API, duas plataformas
+
+- A interface não sabe em que plataforma está: ela chama `window.fourNotes.files.write(...)`, como sempre. No desktop, o preload do Electron instala essa API; no Android, `plugins/00.platform.client.ts` (que roda antes de tudo — `enforce: 'pre'`) chama `installMobilePlatform()` (`lib/mobile/install.ts`), que monta a mesma API com `createMobileApi`. O código do Android é carregado sob demanda (import dinâmico): o desktop nunca o carrega.
+- As regras que precisam ser **iguais nos dois lados** saíram de `electron/` para `shared/`: `shared/files.ts` (nomes das imagens coladas, limite de 40 MB, texto sem BOM e com `\n`, imagens embutidas no PDF…) e `shared/library.ts` (biblioteca de imagens: uso, cópias iguais, excluir). O Electron e o celular chamam as mesmas funções — e passam pelos mesmos testes.
+- **O que o celular não tem** chega em `bootstrap.capabilities` (`PlatformCapabilities`): `reveal` (Mostrar no Explorador), `launchAtLogin`, `browserBookmarks` (ler os favoritos dos navegadores instalados), `window` (barra de título e zoom próprios) e `systemTrash` (Lixeira do sistema). A interface pergunta (`capabilities()`, `canReveal()` e `trashPlace()` em `lib/platform.ts`; `revealItem()` nos menus) e esconde o que não existe — nada de botão que não funciona. No desktop tudo é `true` (`DESKTOP_CAPABILITIES`).
+
+### 2) Arquivos e permissão
+
+- O workspace fica numa pasta do **armazenamento interno** escolhida por você (`/storage/emulated/0/…`), e não na pasta privada do app: assim você vê os arquivos, e um app de sincronização (Autosync, FolderSync…) os leva ao Google Drive. No Android 11 ou mais recente, gravar numa pasta qualquer exige a permissão **Acesso a todos os arquivos** (`MANAGE_EXTERNAL_STORAGE`). O `FourNotesPlugin.java` diz se ela está ativa (`storageInfo`) e abre a tela do Android para ativá-la (`requestStorageAccess`); o 4notes explica antes. Se ela for desligada depois, a tela inicial mostra **Permitir acesso** (`DataDirProblem` `'no-permission'`).
+  - Alternativa descartada: o seletor de pastas do Android (SAF, `content://`). Ele dá acesso a uma pasta sem a permissão ampla, mas sem caminhos de verdade, com operações bem mais lentas e sem o renomear da escrita atômica. Para um app pessoal, instalado por você, a permissão ampla é mais simples, mais rápida e funciona com qualquer app de sincronização.
+- `fs.ts` (`capacitorFs`) usa o plugin `@capacitor/filesystem` a partir da raiz do armazenamento (`Directory.ExternalStorage`). `workspace.ts` (`WorkspaceFiles`) faz o que `electron/files.ts` faz: caminhos sempre relativos ao workspace e validados (`resolve` recusa `../`), escrita atômica (arquivo temporário + renomear), itens ocultos fora das listas. Diferenças do Android: o armazenamento não diferencia maiúsculas (`nota.md` e `Nota.md` são o mesmo arquivo — renomear só as maiúsculas passa por um nome temporário) e excluir vai para `.4notes/trash/` (não há Lixeira).
+- **Escolher pastas**: o 4notes tem o próprio seletor (`FolderPickerDialog.vue` + `useFolderPicker.ts`): navega pelo armazenamento interno, cria pastas e devolve um caminho — o mesmo formato que o seletor do Windows devolve, então criar/abrir workspace (`stores/app.ts`) não mudou. **Escolher arquivos** (enviar imagens, arquivo de favoritos): o seletor do Android (`pick-files.ts`).
+- **Imagens** (das notas, das categorias, ícones dos sites): o WebView mostra arquivos do aparelho por um endereço do servidor local do Capacitor (`Capacitor.convertFileSrc`), configurado com `setWorkspaceFileUrlBase` — o papel do protocolo `workspace://` do desktop.
+- **Links**: título e ícone dos sites buscados pelo HTTP nativo (`CapacitorHttp`, sem as restrições de uma página) e lidos com as mesmas regras (`shared/link-meta.ts`). **Importar** aceita o arquivo HTML de favoritos.
+- **Exportar**: o TXT vai para a pasta que você escolher; o PDF sai pela impressão do Android (`printHtml` → "Salvar como PDF"), com o mesmo HTML que o desktop imprime.
+
+### 3) Configurações iguais, telas de cada aparelho
+
+Com a mesma pasta em dois aparelhos, aparece a pergunta: o que deve ser igual e o que é de cada um? Até a 1.4.3, `.4notes/` misturava as duas coisas (as configurações das Notas ficavam junto das abas abertas no `notes.json`) e o tema ficava no computador. Na 1.5.0:
+
+| O quê | Onde | Por quê |
+| --- | --- | --- |
+| Tema, módulos (ativos, ordem, menu lateral), ajustes das Notas e do Mapa, ordem dos links | `.4notes/settings.json` (`stores/settings.ts`) | É configuração da pessoa: vai junto com a pasta e vale em todos os aparelhos. |
+| Abas abertas, aba ativa, lista lateral, pastas abertas, último módulo, mapa aberto | No aparelho (`lib/storage/device-state.ts`: `localStorage` do app, uma chave por workspace) | O celular não deve abrir as abas que você deixou no computador — e dois aparelhos gravando o mesmo arquivo de estado gerariam conflitos de sincronização a toda hora. |
+| Posições dos nós dos mapas | `.4notes/mindmap.json` (só `layouts`) | Faz parte do mapa: ele tem a mesma cara nos dois aparelhos. |
+| Qual workspace abrir | No aparelho (`config.json` no desktop; `localStorage` no Android) | Cada aparelho tem o próprio caminho até a pasta. |
+
+```json
+{
+  "version": 1,
+  "theme": "system",
+  "modules": { "disabled": [], "order": ["notes", "tasks", "mindmap", "links"], "navStyle": "icon-label" },
+  "notes": { "autoCategory": false, "folderCase": "typed" },
+  "mindmap": { "settingsVersion": 2, "showOrphans": true, "nodeStyle": "card", "labels": "selected" },
+  "links": { "sort": "recent" }
+}
+```
+
+- Cada parte do app lê e grava só a sua seção (`settingsSection` / `updateSettingsSection`) e valida o que leu: um arquivo editado à mão não quebra nada, e chaves desconhecidas (de outra versão) continuam no arquivo. A gravação espera 0,25 s e só acontece quando algo mudou.
+- **Mudou no outro aparelho?** O app relê o workspace quando você volta para ele (`focus` e `visibilitychange` da janela, `resume` do Android) e a cada 60 s com ele aberto (`stores/app.ts`). `refreshSettings` compara o arquivo com o último lido ou gravado e avisa só as seções que mudaram (`onSettingsChange`): o tema troca, um módulo some do menu, o mapa muda de estilo. As posições dos nós são relidas do mesmo jeito (`mindmap.refreshFromDisk`, que espera as gravações pendentes) e o mapa desliza para elas (`GraphCanvas` → `setPositions`).
+- **Tema**: é do workspace, mas o aparelho guarda uma cópia para abrir já com a cor certa, antes de ler a pasta (no desktop, no `config.json`, que também aplica o `nativeTheme` aos menus do Windows).
+- **Passagem da 1.4.3** (`lib/storage/settings-migration.ts`): ao abrir um workspace sem `settings.json`, as configurações saem de `notes.json` (`settings`), `mindmap.json` (`settings` + `settingsVersion`), `links.json` (`sort`) e `app.json` (`modules`), e o tema vem do aparelho; o estado da tela (abas, último módulo, mapa aberto) vai para o aparelho — só se ele ainda não tiver um. Depois de gravado o `settings.json`, os arquivos antigos vão para `.4notes/backups/1.5.0/` e o `mindmap.json` fica só com as posições. Um `settings.json` com erro ganha uma cópia em `.4notes/backups/` e as configurações voltam ao padrão, com aviso.
+
+### 4) Tamanhos de tela (o Galaxy Z Fold e os outros)
+
+`composables/useLayoutSize.ts` classifica a janela em três tamanhos — a ideia das "classes de tamanho" do Android — e marca o `<html>` com `data-layout`, `data-touch` (tela de toque, sem mouse), `data-keyboard` (teclado aberto) e `data-platform`. O CSS de cada componente reage a essas marcas (`html[data-layout='compact'] .x` no `<style scoped>`); `assets/css/mobile.css` tem só o que vale para o app inteiro (margens seguras, barra de baixo, toque).
+
+| Tamanho | Quando | Exemplos | Como fica |
+| --- | --- | --- | --- |
+| `compact` | largura ≤ 599 px | celular em pé, tela externa do Fold (344–412 px) | uma coisa por vez: módulos na barra de baixo (`MobileNav.vue`, com **Mais**), Notas alternando entre lista e nota, listas das Tarefas e dos Links em gavetas (`MobileDrawer.vue`), menus e opções em folhas que sobem de baixo (`UiSheet.vue`, `ContextMenuHost` em modo folha), painéis em tela cheia |
+| `medium` | com toque e largura ≤ 839 px, ou altura ≤ 479 px | tela interna do Fold, em pé e deitado (690–832 px); celular deitado | menu lateral, lista e conteúdo lado a lado, com listas e painéis mais estreitos; sem a barra de status das Notas quando a altura é pequena |
+| `expanded` | o resto | tablet grande, computador | o layout do desktop |
+
+- Com o **teclado aberto**, o WebView encolhe (o plugin `SystemBars` tira a altura do teclado): para o layout não "pular" no meio da digitação, a classificação usa a altura de antes do teclado, e `data-keyboard` esconde a barra de baixo.
+- Girar ou abrir/fechar o Fold **não recria a tela**: o `AndroidManifest.xml` declara `configChanges` (tamanho, orientação, densidade…), então o Android só informa o novo tamanho e a interface se reorganiza — o que você estava digitando continua lá. A gaveta aberta fecha sozinha quando a tela deixa de ser `compact`.
+- **Margens seguras**: o app vai de ponta a ponta (atrás da barra de status e da barra de gestos). O `SystemBars` informa as medidas em `--safe-area-inset-*`, que viram `--safe-top/right/bottom/left` no padding das barras, gavetas e folhas.
+
+### 5) Toque
+
+- **Toque prolongado = clique direito** (`lib/touch/long-press.ts`): segurar ~0,5 s sem mexer o dedo (até 10 px) dispara um `contextmenu` no que está embaixo do dedo — e o app inteiro, que já tratava o clique direito, abre o mesmo menu. Não vale em textos editáveis (lá o toque prolongado é do Android: selecionar, colar); o toque que termina o gesto não vira clique; uma vibração curta confirma.
+- **Voltar do Android** (`composables/useBackButton.ts`): primeiro manda um `Esc` — tudo que fecha com Esc no desktop (menus, diálogos, painéis, gavetas, tutorial) fecha com o voltar; se nada tratou, as telas registradas com `onBackButton()` voltam um passo (da nota para a lista de notas; tirar a seleção do mapa); no fim, o app vai para o fundo (`App.minimizeApp`), sem fechar nada.
+- **Sem depender do mouse por cima**: o que só aparecia com o mouse (× das abas, ações das tarefas e das linhas) fica visível no toque, vai para o toque prolongado ou vira botão. Os alvos de toque têm cerca de 40 px ou mais.
+- **Reorganizar arrastando** (`useSortableList.ts`): no toque, só pela alça (`touchHandle`, o ⠿ das Configurações), para não brigar com a rolagem. O arrastar-e-soltar do HTML5 (abas, notas, links) não começa por toque: os menus têm **Mover para…** e **Mover para cima/baixo** (categorias das Notas, das Tarefas e dos Links; módulos).
+- **Editor**: no toque, a barra de formatação fica fixa acima do teclado enquanto a nota tem o foco (`FormatToolbar` `docked`), com **Inserir imagem** e, com o cursor num link, **Abrir o link**.
+- **Tutoriais**: no toque, cada tutorial ganha a seção **No toque** (campo `touch` em `lib/modules.ts`), e os atalhos aparecem como "com teclado físico".
+
+### 6) Mapa Mental no toque — `graph-view.ts`
+
+O mapa é um `<canvas>` com eventos de ponteiro (mouse, toque e caneta chegam pelo mesmo caminho):
+
+- **Um dedo** arrasta a nota ou o mapa; só vira arraste depois de 9 px (o dedo treme mais que o mouse).
+- **Dois dedos (pinça)**: zoom e movimento juntos — o ponto do mapa que estava entre os dedos continua entre eles (`startPinch` / `updatePinch`).
+- **Conectar sem Shift**: a nota selecionada ganha uma **alça com seta** ao lado (`handleCenter`, `drawConnectHandle`); arrastar a alça faz o mesmo que Shift + arrastar — soltar numa nota conecta, no vazio pede o nome e cria uma nota conectada.
+- **Toque duplo no vazio** cria uma nota (o duplo clique do desktop); **segurar** abre o menu da nota ou do fundo.
+- No `compact`, o primeiro toque numa nota **seleciona** (barra com **Abrir** e **⋯**) e o segundo abre; a nota aberta ocupa a tela inteira e o voltar retorna ao mapa.
+- O `pointerdown` do toque chama `preventDefault()`: assim o navegador não gera, depois do toque, os eventos de mouse "de compatibilidade", que fechariam o diálogo recém-aberto pelo toque duplo.
+
+### 7) O projeto Android — `android/`
+
+Gerado pelo Capacitor (`npx cap add android`) e ajustado para o 4notes:
+
+- `AndroidManifest.xml`: permissões (`INTERNET` para os links, `VIBRATE`, `MANAGE_EXTERNAL_STORAGE` e as antigas de armazenamento para o Android ≤ 10, com `requestLegacyExternalStorage`), `configChanges` e `resizeableActivity` (dobráveis e tela dividida).
+- `FourNotesPlugin.java` (registrado no `MainActivity.java`): a permissão de arquivos, a impressão (PDF) e abrir links no navegador.
+- Ícone adaptativo (com a versão monocromática dos ícones temáticos), tela de abertura e cores dos temas claro e escuro (`res/values*/`).
+- `app/build.gradle`: a versão vem do `package.json` (`1.5.0` → `versionCode` 10500); o APK de release é assinado com `android/keystore.properties`, se existir, ou com a chave de testes do Android Studio.
+- `capacitor.config.ts`: `appId` `com.kauan.fournotes`, `webDir` `.output/public` (a mesma saída do `nuxt generate` que o Electron usa) e o `SystemBars` de ponta a ponta.
+- Ficam fora do Git, porque o `cap sync` os gera: `app/src/main/assets/public` (a interface), `capacitor.config.json`, `capacitor.plugins.json` e `capacitor-cordova-android-plugins/`.
+
+**Build** (`scripts/android.mjs`, item 14): `nuxt generate` → `npx cap sync android` → `gradlew assembleRelease` → `release/android/4notes-<versão>.apk`.
+
+**Por que Capacitor?** Ele usa exatamente a interface que já existe (o `nuxt generate` gera arquivos estáticos, que é tudo de que ele precisa), o código continua em TypeScript (o Java se resume a um plugin pequeno) e arquivos, HTTP, barras do sistema e o "voltar" vêm prontos. Alternativas: um PWA (site instalável) não grava numa pasta qualquer do celular nem tem as permissões e o "voltar" de um app; o Tauri Mobile exigiria Rust e o NDK do Android; React Native ou Flutter obrigariam a reescrever a interface inteira.
+
+**iOS**: o mesmo código serviria (`@capacitor/ios`), mas o build exige um Mac com o Xcode, e o iOS não deixa um app usar uma pasta qualquer como workspace (só a pasta do próprio app ou pastas escolhidas pelo app Arquivos) — a camada `lib/mobile` precisaria de um modo para isso. `npm run build:ios` explica os passos.
+
+### 8) Sincronização
+
+O 4notes **não sincroniza**: ele lê e grava a pasta, e quem a mantém igual nos aparelhos é um serviço de sincronização — no Windows, o Google Drive para computador (modo "Espelhar arquivos"); no Android, um app como o Autosync ou o FolderSync (o app do Google Drive para Android não sincroniza pastas). Assim o app continua 100% local, sem conta nem servidor, e funciona com qualquer serviço. O que o 4notes faz para conviver bem com isso:
+
+- arquivos pequenos e separados (uma nota por arquivo) gravados de forma atômica — o sincronizador nunca pega um arquivo pela metade;
+- o estado de cada tela fica fora da pasta (item 3): nada de dois aparelhos disputando o mesmo arquivo de abas;
+- releitura ao voltar e a cada minuto, sem passar por cima do que você está editando (uma nota com mudanças ainda não gravadas não é recarregada);
+- o mesmo arquivo mudado nos dois aparelhos antes de sincronizar é um conflito que o sincronizador resolve — por isso a recomendação é usar um aparelho de cada vez.
+
+---
+
 ## Decisões de arquitetura (resumo)
 
 | Decisão | Escolha | Motivo |
@@ -825,6 +980,7 @@ Arquivos: `app/lib/modules.ts` (lista dos módulos + tutoriais + regras puras da
 | Workspaces | Workspace = pasta de dados; nome = nome da pasta | Nada de cadastro paralelo de nomes; qualquer pasta abre; backup continua sendo copiar a pasta. |
 | Imagens | `attachments/` + caminho relativo + protocolo `workspace://` só para imagens | Imagens junto dos dados, notas compatíveis com outros editores, interface sem acesso livre ao disco. |
 | Blocos de código | Detecção própria por padrões + `@codemirror/language-data` | Sem serviço externo; cores para dezenas de linguagens, cada uma carregada só quando usada. |
+| Edição dos blocos | Um CodeMirror dentro do cartão (`block-editor.ts`), espelhando as mudanças no editor da nota | O bloco mantém o tamanho ao editar e ganha seleção, duplo clique e `Ctrl+D` de editor de código; o arquivo e o desfazer continuam sendo um só (o da nota). |
 | Blocos de texto | ` ```text ` (Markdown comum), criado só pelo botão da barra; conteúdo = o texto da tela (regras do Exportar TXT); mesmo cartão dos blocos de código | Continua legível em qualquer editor; nada vira bloco de texto sem você pedir; nenhuma marcação aparece dentro do bloco. |
 | `Ctrl+D` | Seleções múltiplas do CodeMirror, criadas só pelo `Ctrl+D`; busca no texto do arquivo pulando o que fica escondido | Funciona como nos editores de código sem mudar o resto do editor (Ctrl+clique continua abrindo links). |
 | Tarefas | Um `tasks.json` | Dados estruturados; gravação atômica de tudo de uma vez; fácil de fazer backup. |
@@ -843,14 +999,21 @@ Arquivos: `app/lib/modules.ts` (lista dos módulos + tutoriais + regras puras da
 | Grafo | Canvas próprio + layout radial próprio | Posições estáveis (o mapa não "flutua") e um "Reorganizar" que evita cruzamentos; sem biblioteca de física. |
 | Estado/estilo | `reactive()` do Vue + CSS com variáveis | Sem Pinia/Tailwind: menos dependências; tema claro/escuro por variáveis CSS. |
 | Ícones | SVG próprios | Sem biblioteca de ícones. |
+| Celular (1.5.0) | Capacitor (app Android com WebView) + `app/lib/mobile/` oferecendo a mesma `FourNotesApi` do Electron | Uma interface só para Windows e Android, toda em TypeScript (o Java é um plugin pequeno); uma mudança no código vale para os dois. |
+| Pasta do workspace no Android | "Acesso a todos os arquivos" + caminhos de verdade no armazenamento interno | O workspace fica numa pasta escolhida por você, visível para os apps de sincronização, com escrita atômica e rápida (o seletor do Android — SAF — não tem caminhos nem renomear atômico). |
+| Sincronização | Fora do app: Google Drive para computador + Autosync/FolderSync no Android | Continua 100% local, sem conta nem servidor; qualquer serviço que sincronize pastas serve. |
+| Configurações × estado da tela | `.4notes/settings.json` no workspace × `localStorage` de cada aparelho | O que é da pessoa vai junto com a pasta; o que é da tela fica em cada aparelho (sem abas "pulando" entre aparelhos nem conflitos de sincronização). |
+| Tamanhos de tela | Três classes (`compact` / `medium` / `expanded`) marcadas no `<html>` + CSS de cada componente | Um layout certo para cada tela do Fold (e para celulares e tablets) sem duplicar componentes. |
+| Toque | Toque prolongado gera o `contextmenu`; o "voltar" do Android manda `Esc` | O app inteiro já tratava o clique direito e o Esc: menus, diálogos e painéis funcionam no toque sem reescrever cada um. |
 
-Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 entrou `@codemirror/language-data`, para colorir o código dos blocos), `electron`, `electron-builder` e `esbuild` (build). Para testes: `vitest`. (O `d3-force` da 1.0.0 saiu: o mapa não usa mais física.) A 1.3.1 não trouxe dependências: o SQLite que lê os favoritos do Firefox/Zen é o do próprio Node.js do Electron (`node:sqlite`), o LZ4 das cópias `.jsonlz4` é um descompactador de ~40 linhas e o PDF é impresso pelo próprio Chromium do Electron.
+Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 entrou `@codemirror/language-data`, para colorir o código dos blocos), `electron`, `electron-builder` e `esbuild` (build). Para testes: `vitest`. (O `d3-force` da 1.0.0 saiu: o mapa não usa mais física.) A 1.3.1 não trouxe dependências: o SQLite que lê os favoritos do Firefox/Zen é o do próprio Node.js do Electron (`node:sqlite`), o LZ4 das cópias `.jsonlz4` é um descompactador de ~40 linhas e o PDF é impresso pelo próprio Chromium do Electron. A 1.5.0 trouxe só o Capacitor: `@capacitor/core`, `@capacitor/cli` e `@capacitor/android` (o app Android), `@capacitor/app` (voltar, voltar para o app, versão) e `@capacitor/filesystem` (arquivos) — o resto (HTTP nativo, barras do sistema) já vem no `@capacitor/core`. O desktop não carrega nada disso.
 
 ## Testes
 
-- `npm test` — testes unitários das regras puras (datas, recorrência, tarefas, títulos, nomes de arquivo, formatação, marcação de listas/tarefas, níveis e numeração automática das listas, blocos de código e detecção de linguagem, caminhos das imagens, menções em tarefas e notas (inclusive a tarefas), links refeitos ao mover uma nota de pasta, categorias e `categorias.json`, pastas pelo título, primeira linha como título, nomes de workspace, `mapa.json`, conversão da 1.0.0, grafo, layout sem cruzamentos e compactação, marcação escondida (proteção, formatos guardados, marcações válidas, links), endereços e links repetidos, título e ícone de páginas, favoritos do Chromium/Opera e HTML, `links.json` e plano da importação; na 1.3.1: categoria automática pelo título, exportar TXT e PDF, biblioteca de imagens (uso, cópias iguais, adotar, excluir), favoritos do Firefox/Zen — `profiles.ini`, `places.sqlite`, `.jsonlz4` com LZ4 —, foto das categorias dos Links e ordem pela URL; na 1.3.2: bloco de texto — linhas próprias, formatos cortados, listas, cerca maior, dentro de blocos — e `Ctrl+D` — maiúsculas, palavra inteira, volta ao começo, partes escondidas, só o `Ctrl+D` cria seleções — em `tests/text-blocks-and-multiselect.test.ts`; na 1.4.0: lista dos módulos e tutoriais completos, preferências dos módulos — leitura tolerante, só desativados, nunca todos desligados — em `tests/modules.test.ts`; na 1.4.1: ordem dos módulos — guardada, completa, tolerante, desativados no lugar ao reorganizar, mover para cima/baixo — e o "Botão direito" de cada tutorial em `tests/modules.test.ts`, e versões das notas — número no título, comparação, anterior com pulos, mesma categoria no store — em `tests/note-versions.test.ts`).
+- `npm test` — testes unitários das regras puras (datas, recorrência, tarefas, títulos, nomes de arquivo, formatação, marcação de listas/tarefas, níveis e numeração automática das listas, blocos de código e detecção de linguagem, caminhos das imagens, menções em tarefas e notas (inclusive a tarefas), links refeitos ao mover uma nota de pasta, categorias e `categorias.json`, pastas pelo título, primeira linha como título, nomes de workspace, `mapa.json`, conversão da 1.0.0, grafo, layout sem cruzamentos e compactação, marcação escondida (proteção, formatos guardados, marcações válidas, links), endereços e links repetidos, título e ícone de páginas, favoritos do Chromium/Opera e HTML, `links.json` e plano da importação; na 1.3.1: categoria automática pelo título, exportar TXT e PDF, biblioteca de imagens (uso, cópias iguais, adotar, excluir), favoritos do Firefox/Zen — `profiles.ini`, `places.sqlite`, `.jsonlz4` com LZ4 —, foto das categorias dos Links e ordem pela URL; na 1.3.2: bloco de texto — linhas próprias, formatos cortados, listas, cerca maior, dentro de blocos — e `Ctrl+D` — maiúsculas, palavra inteira, volta ao começo, partes escondidas, só o `Ctrl+D` cria seleções — em `tests/text-blocks-and-multiselect.test.ts`; na 1.4.0: lista dos módulos e tutoriais completos, preferências dos módulos — leitura tolerante, só desativados, nunca todos desligados — em `tests/modules.test.ts`; na 1.4.1: ordem dos módulos — guardada, completa, tolerante, desativados no lugar ao reorganizar, mover para cima/baixo — e o "Botão direito" de cada tutorial em `tests/modules.test.ts`, e versões das notas — número no título, comparação, anterior com pulos, mesma categoria no store — em `tests/note-versions.test.ts`; na 1.4.3: a próxima versão (regra e store) e o `Ctrl+D` — o código dos blocos fora da seleção da nota, e a variante de texto puro dos blocos e da tela cheia; na 1.5.0: `tests/settings-sync.test.ts` — passagem da 1.4.3 para o `settings.json`, estado da tela por aparelho e por workspace, seção gravada mantendo chaves de outras versões, releitura do que mudou em outro aparelho, arquivo com erro —, `tests/mobile-platform.test.ts` — a API do Android sobre um disco na memória com as regras do Android: maiúsculas, nada escapando do workspace, renomear, lixeira do workspace, imagens, criar/abrir/copiar workspace, permissão, biblioteca de imagens —, `tests/layout-size.test.ts` — os tamanhos do Fold, de celulares e de tablets — e as dicas de toque dos tutoriais).
 - `npm run typecheck` — TypeScript estrito na interface e no Electron.
-- Durante o desenvolvimento, o app também foi testado de ponta a ponta dirigindo o Electron real (workspaces, notas, abas, formatação, listas, checklists e numeração automática, código e imagens colados e apagados, menus do clique direito, tarefas recorrentes com datas simuladas e app fechado, menções em tarefas e notas depois de reabrir, categorias criadas/renomeadas/excluídas com imagem e cor nas abas, notas arrastadas para categorias, pastas pelo título, menções a tarefas nas Notas e no Mapa, mapas mentais com conversão da 1.0.0, conexões e notas novas por arraste, cores, vários mapas, layout salvo, fechamento seguro; na 1.3.0: ícones nas categorias, + nas pastas pelo título, fechar notas de categoria sem pergunta, Markdown escondido com teclado, mouse e acentos compostos, links e blocos de código no editor, e o módulo Links inteiro com sites locais de teste e perfis falsos do Brave/Opera; na 1.3.1: as abas das Configurações com o "?", iniciar com o computador (simulado), configurações dos módulos gravadas no workspace, categoria automática pelo título, CAIXA ALTA nas pastas, exportar TXT/PDF (conferido com `pdftotext`), biblioteca de imagens — enviar, escolher, inserir, remover da nota, excluir, `Esc` com modais empilhados —, fotos nas categorias das Notas e dos Links, "Sem categoria", ordem pela URL, importação de perfis falsos do Zen — `places.sqlite` com `-wal` — e do Firefox — só a cópia `.jsonlz4` —, menções a links com o ícone do site, e o tema escuro; na 1.3.2: bloco de texto pela barra — cartão, copiar, editar no cartão, tela cheia, remover e desfazer, listas e negrito, bloco grande com rolagem, tema escuro —, colar texto/listas/trechos longos sem virar bloco (e código continuando a virar), `Ctrl+D` com duplo clique, digitação, `Ctrl+Z`, `Esc`, `Ctrl+clique` e `Ctrl+B`, nas Notas e no Mapa Mental, e o painel das Tarefas fechando ao clicar fora — com os casos que não podem fechar; na 1.4.0: ligar/desligar módulos pelo botão direito e pelas Configurações (quadros da animação, prévia do menu por cima do fundo, último módulo não desliga), dados intactos, `app.json`, "só o ícone", desligar o módulo aberto, `Ctrl+2` e menção para módulo desligado com "Ativar", tutoriais por F1, "?", Configurações e trocando de módulo, tema escuro e reinício do app; na 1.4.1: tela cheia do bloco de texto com a margem do editor, a corrente de versões (`1.4.1` → `1.4.0` → `1.3.2`, ignorando outra categoria) e o botão sumindo, desfoque das Configurações › Módulos começando depois da barra de título e do menu, arrastar no menu lateral e nas Configurações — com módulo desativado, só ícone, `Esc`, clique simples ainda abrindo o módulo —, "Mover para cima" no botão direito, ordem depois de reiniciar, `Ctrl+2` preso às Tarefas, os sons na hora certa e um só em liga/desliga seguidos — e renderizados para medir volume e duração —, o tutorial fechando ao clicar fora e não fechando ao clicar dentro, no **?**, no "Abrir" das Configurações ou arrastando um módulo; na 1.4.2: barra e rodapé do mapa sem o botão de configurações, sem o `Ctrl K` e sem a dica fixa — com `Ctrl+K` ainda indo para a busca —, a engrenagem, e a animação de clique em 14 tipos de ícone (módulos, tema, tutorial, configurações, abas, fechar, reorganizar, zoom, +, blocos de código, lista, opções), pelo teclado, medida quadro a quadro, e os casos que não animam — × de aba, caixa de concluir tarefa, "reduzir movimento"). O instalador do Windows foi testado no Wine (tela "Atalhos", reinstalação e desinstalação).
+- Durante o desenvolvimento, o app também foi testado de ponta a ponta dirigindo o Electron real (workspaces, notas, abas, formatação, listas, checklists e numeração automática, código e imagens colados e apagados, menus do clique direito, tarefas recorrentes com datas simuladas e app fechado, menções em tarefas e notas depois de reabrir, categorias criadas/renomeadas/excluídas com imagem e cor nas abas, notas arrastadas para categorias, pastas pelo título, menções a tarefas nas Notas e no Mapa, mapas mentais com conversão da 1.0.0, conexões e notas novas por arraste, cores, vários mapas, layout salvo, fechamento seguro; na 1.3.0: ícones nas categorias, + nas pastas pelo título, fechar notas de categoria sem pergunta, Markdown escondido com teclado, mouse e acentos compostos, links e blocos de código no editor, e o módulo Links inteiro com sites locais de teste e perfis falsos do Brave/Opera; na 1.3.1: as abas das Configurações com o "?", iniciar com o computador (simulado), configurações dos módulos gravadas no workspace, categoria automática pelo título, CAIXA ALTA nas pastas, exportar TXT/PDF (conferido com `pdftotext`), biblioteca de imagens — enviar, escolher, inserir, remover da nota, excluir, `Esc` com modais empilhados —, fotos nas categorias das Notas e dos Links, "Sem categoria", ordem pela URL, importação de perfis falsos do Zen — `places.sqlite` com `-wal` — e do Firefox — só a cópia `.jsonlz4` —, menções a links com o ícone do site, e o tema escuro; na 1.3.2: bloco de texto pela barra — cartão, copiar, editar no cartão, tela cheia, remover e desfazer, listas e negrito, bloco grande com rolagem, tema escuro —, colar texto/listas/trechos longos sem virar bloco (e código continuando a virar), `Ctrl+D` com duplo clique, digitação, `Ctrl+Z`, `Esc`, `Ctrl+clique` e `Ctrl+B`, nas Notas e no Mapa Mental, e o painel das Tarefas fechando ao clicar fora — com os casos que não podem fechar; na 1.4.0: ligar/desligar módulos pelo botão direito e pelas Configurações (quadros da animação, prévia do menu por cima do fundo, último módulo não desliga), dados intactos, `app.json`, "só o ícone", desligar o módulo aberto, `Ctrl+2` e menção para módulo desligado com "Ativar", tutoriais por F1, "?", Configurações e trocando de módulo, tema escuro e reinício do app; na 1.4.1: tela cheia do bloco de texto com a margem do editor, a corrente de versões (`1.4.1` → `1.4.0` → `1.3.2`, ignorando outra categoria) e o botão sumindo, desfoque das Configurações › Módulos começando depois da barra de título e do menu, arrastar no menu lateral e nas Configurações — com módulo desativado, só ícone, `Esc`, clique simples ainda abrindo o módulo —, "Mover para cima" no botão direito, ordem depois de reiniciar, `Ctrl+2` preso às Tarefas, os sons na hora certa e um só em liga/desliga seguidos — e renderizados para medir volume e duração —, o tutorial fechando ao clicar fora e não fechando ao clicar dentro, no **?**, no "Abrir" das Configurações ou arrastando um módulo; na 1.4.2: barra e rodapé do mapa sem o botão de configurações, sem o `Ctrl K` e sem a dica fixa — com `Ctrl+K` ainda indo para a busca —, a engrenagem, e a animação de clique em 14 tipos de ícone (módulos, tema, tutorial, configurações, abas, fechar, reorganizar, zoom, +, blocos de código, lista, opções), pelo teclado, medida quadro a quadro, e os casos que não animam — × de aba, caixa de concluir tarefa, "reduzir movimento"; na 1.4.3: o cartão do bloco sem crescer ao clicar, ao dar duplo clique e digitando, com rolagem interna; duplo clique e seleção destacada (código e texto, no cartão e na tela cheia), `Ctrl+D` e edição das ocorrências juntas, `Ctrl+Z` pelo histórico da nota (teclado e menu), outras ocorrências só contornadas, `↑`/`↓`/`Esc` entrando e saindo, `Ctrl+D` da nota sem entrar nos blocos, `Ctrl+F` da nota mostrando o achado no bloco, `Enter` em ` ```py `, a cerca crescendo, `Backspace` num bloco vazio, botões do cabeçalho, o mesmo no painel da nota do Mapa Mental, texto mudado por fora, nota com 40 blocos, tema escuro e os botões de versão anterior/próxima). O instalador do Windows foi testado no Wine (tela "Atalhos", reinstalação e desinstalação).
+- Na 1.5.0, a interface do Android foi testada num Chromium com toque de verdade (vários dedos, pelo protocolo do Chrome) e o disco do Android na memória, nos tamanhos do Galaxy Z Fold — tela externa 344×882 e deitada, interna 690×829 e deitada — e de um celular comum, nos temas claro e escuro: criar o workspace pelo seletor de pastas, Notas (lista ↔ nota, barra de formatação fixa, voltar), toque prolongado e menus em folha, Tarefas e Links nas gavetas, **Mais**, tema gravado no workspace, abrir e fechar o Fold no meio do uso; no mapa, pinça, arrastar nota e mapa, alça de conexão, soltar no vazio, toque duplo, menu, abrir e voltar. No Electron real: a passagem de um workspace da 1.4.3 (configurações, backups, `mindmap.json` só com as posições), configurações mudadas "em outro aparelho" aplicadas ao voltar para a janela e o desktop igual a antes (menus, Shift+arrastar, F1 sem a parte do toque, abas e último módulo restaurados depois de reiniciar). O APK em si é compilado no computador de quem gera (`npm run build:android`).
 
 ## Onde mexer para…
 
@@ -868,7 +1031,8 @@ Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 
 | Ajustar a detecção de código colado | `app/lib/editor/code-detect.ts` (linguagens: `languages.ts`) |
 | Mudar o cartão do bloco de código / as cores do código | `app/lib/editor/code-blocks.ts`, `app/lib/editor/theme.ts` (`--code-*` em `tokens.css`) |
 | Mudar o bloco de texto | `app/lib/editor/text-blocks.ts` (criar a partir da seleção), `app/lib/editor/code-blocks.ts` (cartão), `.cm-textblock` em `app/lib/editor/theme.ts`, `CodeFullscreen.vue` (tela cheia) |
-| Mudar o `Ctrl+D` (várias ocorrências) | `app/lib/editor/multi-select.ts` |
+| Mudar o `Ctrl+D` (várias ocorrências) | `app/lib/editor/multi-select.ts` (`plainMultipleSelections` nos blocos e na tela cheia) |
+| Mudar como o código é editado no cartão do bloco | `app/lib/editor/block-editor.ts` (editor de dentro: teclas, saída, tema), `app/lib/editor/code-blocks.ts` (ponte com a nota: `blockHost`, `revealInBlocks`, `longerFences`), `blockEditorTheme` em `app/lib/editor/theme.ts` |
 | Mudar quando o painel das Tarefas fecha | `app/pages/tasks.vue` (`onPagePointerDown`/`onPageClick`), `app/components/tasks/TaskDrawer.vue` (`contains`, `hasDraft`) |
 | Mudar como as imagens são salvas/mostradas | `electron/files.ts` (`saveImage`), `app/lib/editor/images.ts`, `app/lib/editor/paste.ts` |
 | Mudar a biblioteca de imagens | `electron/library.ts` (listar, uso, enviar, excluir), `app/components/shell/ImageLibraryDialog.vue`, `app/composables/useImageLibrary.ts` |
@@ -879,7 +1043,7 @@ Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 
 | Mudar o menu lateral ou a animação de ligar/desligar | `app/components/shell/NavRail.vue` (tempos em `EFFECT_MS`, `stores/modules.ts`) |
 | Mudar os sons de ligar/desligar | `app/lib/sounds.ts` (som e volume), `SOUND_AT_MS` em `app/stores/modules.ts` (quando toca) |
 | Mudar o arrastar para reorganizar | `app/composables/useSortableList.ts`; a ordem: `reorderedIds`/`movedBy` em `app/lib/modules.ts` |
-| Mudar a versão anterior das notas | `app/lib/notes/versions.ts` (regra), `previousVersionOf` em `app/stores/notes.ts` (grupo), `NotesTabs.vue` (botão) |
+| Mudar a versão anterior/próxima das notas | `app/lib/notes/versions.ts` (regra), `previousVersionOf`/`nextVersionOf` em `app/stores/notes.ts` (grupo), `NotesTabs.vue` (botões) |
 | Mudar o painel dos tutoriais | `app/components/shell/TutorialPanel.vue`, `app/composables/useTutorial.ts` |
 | Mudar a categoria automática pelo título | `app/lib/notes/auto-category.ts` (regra), `app/stores/notes.ts` (`considerAutoCategory`) |
 | Mudar as menções | `app/lib/tasks/mentions.ts` (tarefas), `app/lib/editor/mentions.ts` + `app/lib/notes/mention-links.ts` (notas), `app/stores/mentions.ts` (ponte) |
@@ -895,3 +1059,15 @@ Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 
 | Mudar a tela de Links | `app/pages/links.vue`, `app/components/links/` |
 | Mudar como o título/ícone dos sites é buscado | `electron/links.ts` (rede), `shared/link-meta.ts` (leitura do HTML e escolha do ícone) |
 | Adicionar um navegador à importação | `electron/links.ts` (`browserDirs` para os Chromium, `geckoBrowsers` para os derivados do Firefox), `shared/bookmarks.ts` (formatos) |
+| Adicionar um pedido à plataforma (desktop **e** Android) | `shared/ipc.ts` (contrato) → `electron/preload.ts` + `electron/ipc.ts` (desktop) e `app/lib/mobile/api.ts` (Android) |
+| Mudar o que o celular faz com os arquivos | `app/lib/mobile/workspace.ts` (regras), `app/lib/mobile/fs.ts` (plugin de arquivos), regras comuns em `shared/files.ts` e `shared/library.ts` |
+| Esconder algo que uma plataforma não tem | `PlatformCapabilities` em `shared/ipc.ts`; `capabilities()`/`canReveal()`/`trashPlace()` em `app/lib/platform.ts` |
+| Mudar a permissão de arquivos, a impressão ou abrir links no Android | `android/app/src/main/java/com/kauan/fournotes/FourNotesPlugin.java`, `app/lib/mobile/native.ts` |
+| Mudar permissões, nome, ícone ou cores do app Android | `android/app/src/main/AndroidManifest.xml`, `android/app/src/main/res/`, `capacitor.config.ts` |
+| Mudar o build do Android ou do iOS | `scripts/android.mjs`, `scripts/ios.mjs`, `android/app/build.gradle` (versão e assinatura) |
+| Mudar uma configuração / o que vai para o `settings.json` | `app/stores/settings.ts` (arquivo), a seção no store do módulo; a passagem da 1.4.3: `app/lib/storage/settings-migration.ts` |
+| Mudar o que fica guardado em cada aparelho | `app/lib/storage/device-state.ts` |
+| Mudar os tamanhos de tela (compact/medium/expanded) | `app/composables/useLayoutSize.ts` (limites), `app/assets/css/mobile.css` e o `<style>` de cada componente |
+| Mudar a barra de baixo, as gavetas ou as folhas do celular | `app/components/shell/MobileNav.vue`, `app/components/ui/MobileDrawer.vue`, `app/components/ui/UiSheet.vue`, modo folha do `ContextMenuHost.vue` |
+| Mudar o toque prolongado ou o "voltar" do Android | `app/lib/touch/long-press.ts`, `app/composables/useBackButton.ts` |
+| Mudar os gestos do mapa no toque | `app/lib/mindmap/graph-view.ts` (pinça, alça de conexão, toque duplo), `app/pages/mindmap.vue` (selecionar e abrir no compact) |

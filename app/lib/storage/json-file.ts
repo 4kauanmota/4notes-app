@@ -57,5 +57,7 @@ export function createJsonWriter(path: string, delay = 400) {
       }
       await queue.idle()
     },
+    /** Há uma gravação agendada ou acontecendo agora. */
+    pending: () => scheduled.pending() || queue.busy,
   }
 }

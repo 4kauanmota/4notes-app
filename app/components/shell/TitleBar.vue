@@ -6,7 +6,9 @@
  */
 import { computed, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
-import { separator, showContextMenu } from '~/composables/useContextMenu'
+import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { useLayoutSize } from '~/composables/useLayoutSize'
+import { canReveal } from '~/lib/platform'
 import { noteTitle, useNotesStore } from '~/stores/notes'
 import { useMindmapStore } from '~/stores/mindmap'
 import { useTasksStore } from '~/stores/tasks'
@@ -19,20 +21,18 @@ const notes = useNotesStore()
 const tasks = useTasksStore()
 const mindmap = useMindmapStore()
 const links = useLinksStore()
+const { isCompact } = useLayoutSize()
 
 const platform = computed(() => app.state.bootstrap?.platform ?? 'win32')
 const workspace = computed(() => (app.state.phase === 'ready' ? app.workspaceName() : ''))
 
 async function workspaceMenu(event: MouseEvent) {
-  const choice = await showContextMenu(
-    [
-      { id: 'open', label: 'Abrir outro workspace…' },
-      { id: 'create', label: 'Criar workspace…' },
-      separator,
-      { id: 'reveal', label: 'Mostrar no Explorador' },
-    ],
-    event.currentTarget as Element,
-  )
+  const items: MenuItemSpec[] = [
+    { id: 'open', label: 'Abrir outro workspace…' },
+    { id: 'create', label: 'Criar workspace…' },
+  ]
+  if (canReveal()) items.push(separator, { id: 'reveal', label: 'Mostrar no Explorador' })
+  const choice = await showContextMenu(items, event.currentTarget as Element)
   if (choice === 'open') await app.openWorkspace(false)
   else if (choice === 'create') await app.createWorkspace(false)
   else if (choice === 'reveal') await app.revealDataFolder()
@@ -101,7 +101,7 @@ watchEffect(() => {
       <div v-if="moduleLabel" :key="moduleLabel" class="titlebar-crumbs">
         <span class="sep">/</span>
         <span class="crumb">{{ moduleLabel }}</span>
-        <template v-if="context">
+        <template v-if="context && !isCompact">
           <span class="sep">/</span>
           <span class="crumb current">{{ context }}</span>
         </template>
@@ -115,9 +115,10 @@ watchEffect(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: var(--titlebar-h);
+  /* No Android a barra de status fica por cima: a barra começa abaixo dela */
+  height: calc(var(--titlebar-h) + var(--safe-top));
   /* A logo fica centralizada sobre o menu lateral (que estreita com "só o ícone") */
-  padding: 0 14px 0 calc(var(--rail-w) / 2 - 12px);
+  padding: var(--safe-top) 14px 0 calc(var(--rail-w) / 2 - 12px);
   /* Reserva o espaço dos botões nativos (Window Controls Overlay) */
   padding-right: calc(100% - env(titlebar-area-width, 100%) + 14px);
   background: var(--chrome);
@@ -129,6 +130,13 @@ watchEffect(() => {
 }
 .titlebar.platform-darwin {
   padding-left: 84px;
+}
+.titlebar.platform-android {
+  padding-right: 14px;
+}
+/* Celular: sem o menu lateral, a logo fica na margem */
+html[data-layout='compact'] .titlebar {
+  padding-left: 14px;
 }
 .titlebar-brand {
   display: flex;

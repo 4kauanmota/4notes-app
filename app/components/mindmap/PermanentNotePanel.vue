@@ -3,13 +3,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MarkdownEditor from '~/components/editor/MarkdownEditor.vue'
 import { confirmDialog } from '~/composables/useDialog'
-import { separator, showContextMenu } from '~/composables/useContextMenu'
+import { revealItem, separator, showContextMenu } from '~/composables/useContextMenu'
 import type { MentionHost } from '~/lib/editor/host'
 import { paletteVar, type PaletteColor } from '~/lib/colors'
 import { countWords } from '~/lib/notes/title'
 import { DATA_PATHS } from '~/lib/storage/paths'
 import { describeMention, mentionRevision, openMentionPath, savedLinkIcon, searchMentions } from '~/stores/mentions'
 import { useMindmapStore } from '~/stores/mindmap'
+import { trashPlace } from '~/lib/platform'
 
 const emit = defineEmits<{ newLinked: [] }>()
 const mindmap = useMindmapStore()
@@ -80,7 +81,7 @@ const status = computed(() => {
 async function remove() {
   const ok = await confirmDialog({
     title: `Excluir “${note.value.title}”?`,
-    message: 'O arquivo vai para a Lixeira e as conexões dela são removidas.',
+    message: `O arquivo vai para ${trashPlace()} e as conexões dela são removidas.`,
     confirmLabel: 'Excluir nota',
     danger: true,
   })
@@ -91,7 +92,7 @@ async function openMenu() {
   const choice = await showContextMenu([
     { id: 'rename', label: 'Renomear' },
     { id: 'linked', label: 'Nova nota conectada…' },
-    { id: 'reveal', label: 'Mostrar no Explorador' },
+    ...revealItem(),
     separator,
     { id: 'delete', label: 'Excluir nota…', danger: true },
   ])
@@ -116,7 +117,7 @@ defineExpose({ focusEditor: () => editor.value?.focusEnd(), focusTitle: () => do
           <AppIcon name="node-plus" :size="17" />
         </button>
         <button
-          class="icon-btn"
+          class="icon-btn expand-btn"
           :data-tip="mindmap.state.panelExpanded ? 'Reduzir' : 'Expandir'"
           aria-label="Expandir painel"
           @click="mindmap.state.panelExpanded = !mindmap.state.panelExpanded"
@@ -219,6 +220,22 @@ defineExpose({ focusEditor: () => editor.value?.focusEnd(), focusTitle: () => do
   --editor-padding-x: 26px;
   --editor-padding-top: 6px;
   --editor-font-size: 14.5px;
+}
+/* Celular: a nota ocupa a tela (o mapa fica embaixo dela); "expandir" não faz sentido */
+html[data-layout='compact'] .note-panel {
+  width: 100%;
+  border-left: none;
+  box-shadow: none;
+  --editor-padding-x: 18px;
+  --editor-font-size: 15.5px;
+}
+html[data-layout='compact'] .expand-btn {
+  display: none;
+}
+/* Tela média (Fold aberto): mais estreito, sobra mais mapa (a mesma largura de pages/mindmap.vue) */
+html[data-layout='medium'] .note-panel:not(.expanded) {
+  width: min(380px, 100%);
+  --editor-padding-x: 20px;
 }
 .note-panel.expanded {
   width: min(820px, 100%);

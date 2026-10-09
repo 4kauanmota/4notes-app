@@ -6,6 +6,8 @@
  * `scrimInset` limita o escurecido/desfoque a uma parte da janela (as Configurações ›
  * Módulos deixam a barra de cima e o menu lateral nítidos); clicar fora do cartão
  * continua fechando em qualquer lugar.
+ * No celular (layout compact) o cartão ocupa a largura da tela; com `fullOnCompact`,
+ * a tela inteira (janelas grandes: configurações, biblioteca de imagens…).
  */
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { closeModal, isTopModal, openModal } from '~/composables/useModalStack'
@@ -16,6 +18,8 @@ const props = defineProps<{
   label?: string
   /** Onde fica o fundo escurecido (valor do `inset` do CSS; padrão: a janela toda). */
   scrimInset?: string
+  /** No celular, ocupa a tela inteira. */
+  fullOnCompact?: boolean
 }>()
 const emit = defineEmits<{ close: [] }>()
 const id = Symbol('modal')
@@ -54,7 +58,7 @@ onBeforeUnmount(() => setOpen(false))
       <div
         v-if="open"
         class="modal-backdrop"
-        :class="{ partial: !!scrimInset }"
+        :class="{ partial: !!scrimInset, 'full-compact': fullOnCompact }"
         :style="{ zIndex: layer, '--scrim-inset': scrimInset ?? '0px' }"
         @mousedown.self="emit('close')"
       >
@@ -100,6 +104,29 @@ onBeforeUnmount(() => setOpen(false))
   border: 1px solid var(--border);
   background: var(--elevated);
   box-shadow: var(--shadow-lg);
+}
+
+/* ── Celular ── */
+html[data-layout='compact'] .modal-backdrop {
+  padding: calc(12px + var(--safe-top)) 10px calc(12px + var(--safe-bottom));
+}
+html[data-layout='compact'] .modal-backdrop .modal-card {
+  width: 100% !important;
+  max-height: 100%;
+}
+html[data-layout='compact'] .modal-backdrop.full-compact {
+  padding: 0;
+}
+html[data-layout='compact'] .modal-backdrop.full-compact .modal-card {
+  height: 100%;
+  max-height: none;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  border: none;
+  border-radius: 0;
+}
+html[data-layout='medium'] .modal-card {
+  max-height: calc(100dvh - 48px - var(--safe-top) - var(--safe-bottom));
 }
 
 .modal-enter-active,

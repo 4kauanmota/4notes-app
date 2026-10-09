@@ -2,7 +2,9 @@
  * Persistência do Mapa Mental:
  *   - cada mapa é uma pasta: <pasta de dados>/mindmap/<Nome do mapa>/
  *       com as notas (.md) e o mapa.json (conexões e cores) — ver model.ts
- *   - preferências do grafo, último mapa aberto e posições dos nós: .4notes/mindmap.json
+ *   - posições dos nós de cada mapa: .4notes/mindmap.json (iguais em todos os aparelhos)
+ *   - preferências do grafo: settings.json do workspace (stores/settings.ts); o mapa
+ *     aberto: deste aparelho (lib/storage/device-state.ts)
  */
 import type { FileEntry } from '#shared/ipc'
 import { basename, joinPath, nameKey, stripExtension } from '../files/filename'
@@ -40,13 +42,23 @@ export interface MapInfo {
   notes: number
 }
 
+/** O .4notes/mindmap.json. */
 export interface MindmapUiState {
-  settings: GraphSettings
-  currentMap: string | null
   /** Posições dos nós por mapa: nome do mapa → (id do nó → [x, y]). */
   layouts: Record<string, Layout>
   /** Posições no formato da 1.0.0 (um mapa só) — usadas uma vez, na migração. */
   legacyLayout: Layout | null
+}
+
+/** Preferências do grafo a partir da seção "mindmap" do settings.json (tolerante). */
+export function normalizeGraphSettings(section: unknown): GraphSettings {
+  const raw = (section && typeof section === 'object' ? section : {}) as Partial<GraphSettings> & { settingsVersion?: unknown }
+  const current = raw.settingsVersion === GRAPH_SETTINGS_VERSION
+  return {
+    showOrphans: raw.showOrphans !== false,
+    nodeStyle: current && raw.nodeStyle === 'circle' ? 'circle' : 'card',
+    labels: current && (raw.labels === 'auto' || raw.labels === 'always') ? raw.labels : 'selected',
+  }
 }
 
 export type MapFileResult = { status: 'ok' | 'missing'; data: MapFile } | { status: 'invalid'; raw: string; error: string }
@@ -135,22 +147,11 @@ export const mindmapRepository = {
   async readUiState(): Promise<MindmapUiState> {
     const result = await readJsonFile(DATA_PATHS.mindmapUiState)
     const data = (result.status === 'ok' && result.data && typeof result.data === 'object' ? result.data : {}) as Record<string, unknown>
-    const raw = (data.settings ?? {}) as Partial<GraphSettings>
     const layouts: Record<string, Layout> = {}
     if (data.layouts && typeof data.layouts === 'object') {
       for (const [map, layout] of Object.entries(data.layouts as Record<string, unknown>)) layouts[map] = readLayout(layout)
     }
-    const current = data.settingsVersion === GRAPH_SETTINGS_VERSION
-    return {
-      settings: {
-        showOrphans: raw.showOrphans !== false,
-        nodeStyle: current && raw.nodeStyle === 'circle' ? 'circle' : 'card',
-        labels: current && (raw.labels === 'auto' || raw.labels === 'always') ? raw.labels : 'selected',
-      },
-      currentMap: typeof data.currentMap === 'string' ? data.currentMap : null,
-      layouts,
-      legacyLayout: data.layout ? readLayout(data.layout) : null,
-    }
+    return { layouts, legacyLayout: data.layout ? readLayout(data.layout) : null }
   },
 
   /**

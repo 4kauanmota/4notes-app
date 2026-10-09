@@ -1,8 +1,11 @@
 /**
  * Título e ícone de uma página web, lidos do HTML dela (só o <head> interessa).
- * Funções puras (sem Node e sem Vue): usadas pelo processo principal ao salvar um
- * link e testadas em tests/links.test.ts.
+ * Sem Node e sem Vue: usadas pelo processo principal (electron/links.ts) e pelo app
+ * Android (app/lib/mobile) ao salvar um link — cada um só diz como buscar um endereço
+ * e onde gravar o ícone (LinkMetaIo). Testadas em tests/links-module.test.ts.
  */
+import { decodeDataUrl } from './files'
+import type { LinkMeta } from './ipc'
 
 export interface IconCandidate {
   href: string
@@ -156,4 +159,88 @@ export function iconFileBase(host: string): string {
       .replace(/^\.+|\.+$/g, '')
       .slice(0, 100) || 'site'
   )
+}
+
+// ── Buscar o título e o ícone ───────────────────────────────────────────────
+
+export const PAGE_LIMIT = 768 * 1024
+export const ICON_LIMIT = 1024 * 1024
+
+/** Resposta de um endereço (corpo cortado no limite pedido). */
+export interface Fetched {
+  url: string
+  contentType: string
+  body: Uint8Array
+}
+
+/** O que a busca precisa da plataforma. */
+export interface LinkMetaIo {
+  /** Busca um endereço (com limite de tempo e de tamanho); null = falhou. */
+  fetch(url: string, accept: string, limit: number, timeout: number): Promise<Fetched | null>
+  /** Grava o ícone do site em links/icons/ e devolve o nome do arquivo. */
+  writeIcon(host: string, data: Uint8Array, format: IconFormat): Promise<string>
+}
+
+/** Texto da página no charset certo (cabeçalho HTTP, <meta charset> ou UTF-8). */
+export function decodePage(page: Fetched): string {
+  const fromHeader = /charset=([\w-]+)/i.exec(page.contentType)?.[1]
+  const sample = new TextDecoder('latin1').decode(page.body.subarray(0, 4096))
+  const charset = fromHeader ?? declaredCharset(sample) ?? 'utf-8'
+  try {
+    return new TextDecoder(charset).decode(page.body)
+  } catch {
+    return new TextDecoder('utf-8').decode(page.body)
+  }
+}
+
+/** Baixa o primeiro ícone que for mesmo uma imagem. */
+export async function downloadIcon(io: LinkMetaIo, urls: string[]): Promise<{ data: Uint8Array; format: IconFormat } | null> {
+  for (const url of urls) {
+    if (url.startsWith('data:')) {
+      const data = decodeDataUrl(url)
+      const format = data && data.byteLength <= ICON_LIMIT ? sniffImage(data) : null
+      if (data && format) return { data, format }
+      continue
+    }
+    const icon = await io.fetch(url, 'image/avif,image/webp,image/svg+xml,image/*,*/*;q=0.8', ICON_LIMIT + 1, 6000)
+    if (!icon || !icon.body.byteLength || icon.body.byteLength > ICON_LIMIT) continue
+    const format = sniffImage(icon.body, icon.contentType)
+    if (format) return { data: icon.body, format }
+  }
+  return null
+}
+
+/**
+ * Título e ícone de um endereço http(s) já validado. O ícone é gravado (se `withIcon`).
+ * Sem internet (ou site fora do ar), devolve o que conseguiu — nunca lança erro por isso.
+ */
+export async function fetchLinkMetaWith(io: LinkMetaIo, url: string, withIcon: boolean): Promise<LinkMeta> {
+  const host = new URL(url).hostname
+  const page = await io.fetch(url, 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8', PAGE_LIMIT, 9000)
+  let title: string | null = null
+  let candidates: string[] = []
+  if (page && /html|xml/.test(page.contentType || 'text/html')) {
+    const head = parseHead(decodePage(page))
+    title = head.title
+    candidates = iconUrls(head, page.url)
+  } else {
+    candidates = iconUrls({ title: null, icons: [], base: null }, page?.url ?? url)
+  }
+  let icon: string | null = null
+  if (withIcon) {
+    const found = await downloadIcon(io, candidates)
+    if (found) icon = await io.writeIcon(host, found.data, found.format).catch(() => null)
+  }
+  return { title, icon, reachable: !!page }
+}
+
+/** Endereço aceito para buscar título e ícone (null = inválido). */
+export function validLinkUrl(rawUrl: unknown): string | null {
+  if (typeof rawUrl !== 'string' || !/^https?:\/\//i.test(rawUrl.trim()) || rawUrl.length > 4096) return null
+  try {
+    new URL(rawUrl.trim())
+    return rawUrl.trim()
+  } catch {
+    return null
+  }
 }
