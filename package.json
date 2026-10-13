@@ -2,12 +2,16 @@
   "name": "4notes",
   "productName": "4notes",
   "version": "1.6.2",
+  "version": "1.6.2",
   "description": "Aplicativo pessoal de notas, tarefas, mapa mental, links e timer — 100% local, no computador (Windows) e no celular (Android).",
   "author": "Kauan",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.cjs",
+  "updates": {
+    "github": ""
+  },
   "updates": {
     "github": ""
   },
@@ -26,6 +30,7 @@
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
+    "release": "node scripts/release.mjs",
     "release": "node scripts/release.mjs",
     "test": "vitest run",
     "typecheck": "nuxt typecheck && tsc -p electron --noEmit",
@@ -48,6 +53,7 @@
     "@lezer/highlight": "^1.2.5",
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
     "electron-updater": "^6.8.9",
     "esbuild": "^0.28.2",
     "nuxt": "^4.5.2",
