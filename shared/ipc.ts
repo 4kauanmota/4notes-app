@@ -13,8 +13,10 @@
  */
 
 import type { BookmarkFolder, BrowserSource } from './bookmarks'
+import type { UpdateCheck, UpdateInstallResult } from './updates'
 
 export type { BookmarkFolder, BookmarkLink, BookmarkNode, BrowserSource } from './bookmarks'
+export type { UpdateCheck, UpdateInfo, UpdateInstallResult } from './updates'
 
 export type ThemePreference = 'system' | 'light' | 'dark'
 
@@ -300,6 +302,21 @@ export interface FourNotesApi {
     /** Executa a ação escolhida no menu de texto ("replace" e "learn" recebem a palavra). */
     runTextAction(action: TextMenuAction, word?: string): Promise<void>
   }
+  /**
+   * Atualizações pelo GitHub Releases (shared/updates.ts). Ausente = esta plataforma não
+   * se atualiza sozinha.
+   */
+  updates?: {
+    /** Procura uma versão mais nova que a instalada. */
+    check(): Promise<UpdateCheck>
+    /**
+     * Baixa e instala a versão encontrada. Windows: o 4notes fecha, instala e abre de novo.
+     * Android: abre o instalador do sistema (ou a permissão para instalar apps).
+     */
+    install(): Promise<UpdateInstallResult>
+    /** Andamento do download (0–100). */
+    onProgress(handler: (percent: number) => void): void
+  }
 }
 
 /** Nomes dos canais IPC (iguais nos dois lados). */
@@ -343,6 +360,9 @@ export const IPC = {
   openExternal: 'shell:open-external',
   textMenu: 'menu:text',
   textMenuAction: 'menu:text-action',
+  updatesCheck: 'updates:check',
+  updatesInstall: 'updates:install',
+  updatesProgress: 'updates:progress',
 } as const
 
 /**

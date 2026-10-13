@@ -12,8 +12,10 @@ const bootstrap = ipcRenderer.sendSync(IPC.bootstrap) as BootstrapInfo
 
 let beforeCloseHandler: (() => Promise<void>) | null = null
 let textMenuHandler: ((request: TextMenuRequest) => void) | null = null
+let updateProgressHandler: ((percent: number) => void) | null = null
 
 ipcRenderer.on(IPC.textMenu, (_event, request: TextMenuRequest) => textMenuHandler?.(request))
+ipcRenderer.on(IPC.updatesProgress, (_event, percent: number) => updateProgressHandler?.(percent))
 
 ipcRenderer.on(IPC.beforeClose, async () => {
   try {
@@ -93,6 +95,13 @@ const api: FourNotesApi = {
       textMenuHandler = handler
     },
     runTextAction: (action, word) => ipcRenderer.invoke(IPC.textMenuAction, action, word),
+  },
+  updates: {
+    check: () => ipcRenderer.invoke(IPC.updatesCheck),
+    install: () => ipcRenderer.invoke(IPC.updatesInstall),
+    onProgress: (handler) => {
+      updateProgressHandler = handler
+    },
   },
 }
 

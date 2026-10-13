@@ -8,6 +8,11 @@
 //  - Durante o desenvolvimento (`npm run dev`) o Nuxt sobe um servidor Vite
 //    em http://127.0.0.1:3141 e o Electron abre essa URL (com hot reload).
 
+import { readFileSync } from 'node:fs'
+
+/** "usuario/repositorio" das atualizações (package.json → "updates"."github") — o app Android lê daqui. */
+const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { updates?: { github?: string } }
+
 export default defineNuxtConfig({
   compatibilityDate: '2026-10-01',
 
@@ -31,6 +36,12 @@ export default defineNuxtConfig({
   },
 
   css: ['~/assets/css/main.css'],
+
+  runtimeConfig: {
+    public: {
+      updatesRepository: packageJson.updates?.github ?? '',
+    },
+  },
 
   // Componentes são registrados pelo nome do arquivo (ex.: <TaskItem />),
   // independentemente da subpasta em que estão.

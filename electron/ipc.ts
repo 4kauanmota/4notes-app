@@ -23,6 +23,7 @@ import { adoptIntoLibrary, listLibrary, removeFromLibrary, uploadToLibrary } fro
 import { fetchLinkMeta, findBrowserSources, pickBookmarksFile, readBrowserBookmarks, saveDataIcon } from './links'
 import { APP_ORIGIN } from './protocol'
 import { launchAtLogin, setLaunchAtLogin } from './system'
+import { checkForUpdate, installUpdate } from './updates'
 import { setTitleBarColors } from './window'
 
 interface IpcContext {
@@ -172,6 +173,14 @@ export function registerIpc(context: IpcContext): void {
   // ── Sistema ──
   handle(IPC.launchAtLogin, () => launchAtLogin())
   handle(IPC.setLaunchAtLogin, (_event, enabled: unknown) => setLaunchAtLogin(enabled))
+
+  // ── Atualizações (GitHub Releases) ──
+  handle(IPC.updatesCheck, () => checkForUpdate())
+  handle(IPC.updatesInstall, (event) =>
+    installUpdate((percent) => {
+      if (!event.sender.isDestroyed()) event.sender.send(IPC.updatesProgress, percent)
+    }),
+  )
 
   handle(IPC.openExternal, async (_event, url: string) => {
     if (typeof url !== 'string' || !/^(https?:|mailto:)/i.test(url)) throw new AppError('EINVAL', 'Link não permitido.')

@@ -50,6 +50,8 @@
 
     <!-- Título e ícone dos sites salvos no módulo Links -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Atualizações: abrir o instalador do Android com o APK da versão nova (GitHub Releases) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Vibração curta ao abrir um menu com o toque prolongado -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <!--
