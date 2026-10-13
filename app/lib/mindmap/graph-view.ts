@@ -12,6 +12,11 @@
  *   aproximam, afastam e movem; tocar seleciona; dois toques no vazio criam uma nota;
  *   segurar abre o menu (o "clique direito"). A nota selecionada ganha uma alça (→):
  *   arrastar a alça puxa a seta de conexão — o Shift + arrastar do toque.
+ * - Seleção múltipla: Ctrl + arrastar desenha uma área e seleciona as notas que ela
+ *   toca (somando às que já estavam selecionadas); Ctrl + clique põe ou tira uma nota.
+ *   Arrastar uma das selecionadas move todas juntas (as conexões não mudam). No toque,
+ *   "Selecionar área" (startAreaSelection) faz o próximo arraste desenhar a área, e
+ *   tocar numa nota com a seleção ativa põe ou tira ela.
  *
  * Esta classe não conhece Vue nem arquivos: recebe dados (GraphData) e cores
  * (GraphTheme) e avisa o que aconteceu por callbacks (GraphViewEvents).
@@ -65,6 +70,10 @@ export interface GraphViewEvents {
   backgroundClick?(): void
   backgroundDoubleClick?(world: { x: number; y: number }): void
   backgroundContextMenu?(world: { x: number; y: number }, event: MouseEvent): void
+  /** A seleção múltipla mudou (ids dos nós, na ordem em que entraram). */
+  selectionChange?(ids: string[]): void
+  /** O modo "Selecionar área" terminou (a área foi desenhada ou cancelada). */
+  areaSelectionEnd?(): void
   /** As posições mudaram (nota movida, nova nota posicionada, mapa reorganizado). */
   layoutSettled?(positions: Record<string, [number, number]>): void
   /** A câmera mudou (zoom/arraste): útil para esconder elementos sobrepostos. */
@@ -122,8 +131,12 @@ interface PointerState {
   node: Node | null
   edgeId: string | null
   shift: boolean
+  /** Ctrl (ou ⌘) apertado — ou o modo "Selecionar área": arrastar desenha a área de seleção. */
+  select: boolean
   moved: boolean
-  action: 'none' | 'link' | 'move' | 'pan'
+  action: 'none' | 'link' | 'move' | 'pan' | 'select'
+  /** Notas que andam junto com a arrastada (a seleção múltipla). */
+  group: Node[] | null
   /** Dedo (toque): precisa mexer mais para virar arraste. */
   touch: boolean
 }
@@ -180,6 +193,12 @@ export class GraphView {
   private badgeHovered = false
   private selectedId: string | null = null
   private selectedEdgeId: string | null = null
+  /** Seleção múltipla (ids dos nós). */
+  private multi = new Set<string>()
+  /** Área de seleção sendo desenhada (na tela) e a seleção de antes dela (a área soma). */
+  private marquee: { x0: number; y0: number; x1: number; y1: number; base: Set<string> } | null = null
+  /** "Selecionar área": o próximo arraste desenha a área (sem Ctrl — toque e menu). */
+  private areaMode = false
   private matches: Set<string> | null = null
   private insetRight = 0
   private pointer: PointerState | null = null
@@ -292,6 +311,11 @@ export class GraphView {
     if (this.hovered && !nextMap.has(this.hovered.id)) this.hovered = null
     if (this.hoveredEdge && !this.edges.some((edge) => edge.id === this.hoveredEdge!.id)) this.hoveredEdge = null
     if (this.pointer?.node && !nextMap.has(this.pointer.node.id)) this.pointer = null
+    const kept = [...this.multi].filter((id) => nextMap.has(id))
+    if (kept.length !== this.multi.size) {
+      this.multi = new Set(kept)
+      this.events.selectionChange?.(kept)
+    }
     if (!this.fitted && this.width > 10 && this.nodes.length) this.fit(false)
     this.wake()
   }
@@ -311,6 +335,31 @@ export class GraphView {
   setSelected(id: string | null): void {
     this.selectedId = id
     this.wake()
+  }
+
+  /** Seleção múltipla vinda de fora (ex.: limpar depois de excluir). Não avisa de volta. */
+  setMultiSelection(ids: readonly string[]): void {
+    const next = new Set(ids.filter((id) => this.nodeMap.has(id)))
+    if (next.size === this.multi.size && [...next].every((id) => this.multi.has(id))) return
+    this.multi = next
+    this.wake()
+  }
+
+  multiSelection(): string[] {
+    return [...this.multi]
+  }
+
+  /** "Selecionar área": o próximo arraste (dedo ou mouse) desenha a área de seleção. */
+  startAreaSelection(): void {
+    this.areaMode = true
+    this.updateCursor()
+  }
+
+  cancelAreaSelection(): void {
+    if (!this.areaMode) return
+    this.areaMode = false
+    this.updateCursor()
+    this.events.areaSelectionEnd?.()
   }
 
   setSelectedEdge(id: string | null): void {
@@ -673,6 +722,7 @@ export class GraphView {
   }
 
   private focusNodeNow(): Node | null {
+    if (this.pointer?.action === 'select') return null
     if (this.pointer?.action === 'link') return this.pointer.node
     if (this.pointer?.node && this.pointer.moved) return this.pointer.node
     return this.hovered
@@ -688,8 +738,8 @@ export class GraphView {
     for (const node of this.nodes) {
       let target = 1
       if (this.pointer?.action === 'link') target = 1
-      else if (related) target = related.has(node.id) || node.id === this.selectedId ? 1 : 0.18
-      else if (this.matches) target = this.matches.has(node.id) || node.id === this.selectedId ? 1 : 0.16
+      else if (related) target = related.has(node.id) || node.id === this.selectedId || this.multi.has(node.id) ? 1 : 0.18
+      else if (this.matches) target = this.matches.has(node.id) || node.id === this.selectedId || this.multi.has(node.id) ? 1 : 0.16
       const emphasisTarget = node === focus || node === this.linkTarget ? 1 : 0
       node.alpha += (target - node.alpha) * smoothing
       node.emphasis += (emphasisTarget - node.emphasis) * smoothing
@@ -748,6 +798,29 @@ export class GraphView {
     this.drawConnectHandle()
 
     if (!this.cardMode) this.drawLabels()
+    this.drawMarquee()
+  }
+
+  /** Área de seleção (Ctrl + arrastar): retângulo discreto com a cor da seleção. */
+  private drawMarquee(): void {
+    const marquee = this.marquee
+    if (!marquee) return
+    const { ctx, dpr, theme } = this
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const x = Math.min(marquee.x0, marquee.x1)
+    const y = Math.min(marquee.y0, marquee.y1)
+    const width = Math.abs(marquee.x1 - marquee.x0)
+    const height = Math.abs(marquee.y1 - marquee.y0)
+    ctx.beginPath()
+    ctx.roundRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(width), Math.round(height), 6)
+    ctx.globalAlpha = 0.4
+    ctx.fillStyle = theme.selectedHalo
+    ctx.fill()
+    ctx.globalAlpha = 0.9
+    ctx.strokeStyle = theme.selected
+    ctx.lineWidth = 1.25
+    ctx.stroke()
+    ctx.globalAlpha = 1
   }
 
   private drawGrid(): void {
@@ -947,9 +1020,13 @@ export class GraphView {
     return Math.hypot(world.x - handle.x, world.y - handle.y) <= handle.r + 12 / this.camera.k ? handle.node : null
   }
 
+  private isSelected(node: Node): boolean {
+    return node.id === this.selectedId || this.multi.has(node.id)
+  }
+
   private drawCircle(node: Node): void {
     const { ctx, theme, camera } = this
-    const selected = node.id === this.selectedId
+    const selected = this.isSelected(node)
     const scale = easeOutBack(node.appear) * (1 + node.emphasis * 0.2)
     const radius = Math.max(0.1, node.radius * scale)
     const fill = this.colorOf(node)
@@ -975,7 +1052,7 @@ export class GraphView {
 
   private drawCard(node: Node): void {
     const { ctx, theme, camera } = this
-    const selected = node.id === this.selectedId
+    const selected = this.isSelected(node)
     const scale = easeOutBack(node.appear) * (1 + node.emphasis * 0.06)
     const width = node.width * scale
     const height = node.height * scale
@@ -1026,14 +1103,14 @@ export class GraphView {
       // "Ao selecionar": só a nota selecionada (e o alvo da seta / resultados da busca)
       const important =
         mode === 'selected'
-          ? node === this.linkTarget || node.id === this.selectedId || !!this.matches?.has(node.id)
-          : node === focus || node === this.linkTarget || node.id === this.selectedId || !!neighbors?.has(node.id) || !!this.matches?.has(node.id)
+          ? node === this.linkTarget || this.isSelected(node) || !!this.matches?.has(node.id)
+          : node === focus || node === this.linkTarget || this.isSelected(node) || !!neighbors?.has(node.id) || !!this.matches?.has(node.id)
       const alpha = (important ? 1 : zoomFade) * node.alpha * node.appear
       if (alpha < 0.03) continue
       const { x, y } = this.toScreen(node)
       const offset = node.radius * (1 + node.emphasis * 0.2) * camera.k + 6
       if (x < -150 || x > this.width + 150 || y < -40 || y > this.height + 40) continue
-      ctx.font = `${important && (node === focus || node.id === this.selectedId) ? 650 : 500} 12px ${theme.fontFamily}`
+      ctx.font = `${important && (node === focus || this.isSelected(node)) ? 650 : 500} 12px ${theme.fontFamily}`
       ctx.globalAlpha = alpha
       ctx.lineWidth = 4
       ctx.strokeStyle = theme.background
@@ -1103,6 +1180,7 @@ export class GraphView {
     const action = this.pointer?.action
     let cursor = 'default'
     if (action === 'pan' || action === 'move') cursor = 'grabbing'
+    else if (action === 'select' || (this.areaMode && !this.pointer)) cursor = 'crosshair'
     else if (action === 'link') cursor = this.linkTarget ? 'copy' : 'crosshair'
     else if (this.badgeHovered || this.hovered || this.hoveredEdge) cursor = 'pointer'
     this.canvas.style.cursor = cursor
@@ -1141,7 +1219,11 @@ export class GraphView {
     let kind: PointerKind = 'background'
     let node: Node | null = null
     let edge: Edge | null = null
-    if (event.button === 0) {
+    // Ctrl (⌘ no Mac) ou "Selecionar área": arrastar desenha a área; clicar numa nota põe/tira ela
+    const select = event.button === 0 && (event.ctrlKey || event.metaKey || this.areaMode)
+    if (select) {
+      if ((node = this.hitTest(point))) kind = 'node'
+    } else if (event.button === 0) {
       if (this.hitBadge(point)) kind = 'badge'
       else if ((node = this.hitHandle(point))) kind = 'handle'
       else if ((node = this.hitTest(point))) kind = 'node'
@@ -1157,8 +1239,10 @@ export class GraphView {
       node,
       edgeId: edge?.id ?? null,
       shift: event.shiftKey,
+      select,
       moved: false,
       action: 'none',
+      group: null,
       touch: event.pointerType === 'touch',
     }
     this.canvas.setPointerCapture(event.pointerId)
@@ -1184,17 +1268,29 @@ export class GraphView {
       return
     }
 
-    const dx = point.x - pointer.x
-    const dy = point.y - pointer.y
+    let dx = point.x - pointer.x
+    let dy = point.y - pointer.y
     pointer.x = point.x
     pointer.y = point.y
     const threshold = pointer.touch ? TOUCH_DRAG_THRESHOLD : DRAG_THRESHOLD
     if (!pointer.moved && Math.hypot(point.x - pointer.startX, point.y - pointer.startY) > threshold) {
       pointer.moved = true
-      // Arrastar move a nota; Shift + arrastar (ou a alça, no toque) puxa uma seta para conectar
-      if (pointer.kind === 'handle') pointer.action = 'link'
-      else if (pointer.kind === 'node') pointer.action = pointer.shift || event.shiftKey ? 'link' : 'move'
-      else if (pointer.kind !== 'badge') pointer.action = 'pan'
+      // O arraste conta desde onde começou (a nota não fica para trás do mouse)
+      dx = point.x - pointer.startX
+      dy = point.y - pointer.startY
+      // Arrastar move a nota (e as outras selecionadas junto); Shift + arrastar (ou a alça,
+      // no toque) puxa uma seta para conectar; Ctrl + arrastar desenha a área de seleção
+      if (pointer.select && pointer.kind !== 'handle' && pointer.kind !== 'badge') {
+        pointer.action = 'select'
+        this.hovered = null
+        this.marquee = { x0: pointer.startX, y0: pointer.startY, x1: point.x, y1: point.y, base: new Set(this.multi) }
+      } else if (pointer.kind === 'handle') pointer.action = 'link'
+      else if (pointer.kind === 'node') {
+        pointer.action = pointer.shift || event.shiftKey ? 'link' : 'move'
+        if (pointer.action === 'move' && pointer.node && this.multi.has(pointer.node.id) && this.multi.size > 1) {
+          pointer.group = [...this.multi].map((id) => this.nodeMap.get(id)).filter((item): item is Node => !!item)
+        }
+      } else if (pointer.kind !== 'badge') pointer.action = 'pan'
       this.events.viewChange?.()
       this.events.nodeHover?.(null, null)
       this.updateCursor()
@@ -1202,10 +1298,18 @@ export class GraphView {
     if (!pointer.moved) return
 
     if (pointer.action === 'move' && pointer.node) {
-      const world = this.toWorld(point)
-      pointer.node.x = pointer.node.tx = world.x
-      pointer.node.y = pointer.node.ty = world.y
+      // A nota (ou o grupo selecionado) anda o mesmo tanto: as posições entre elas não mudam
+      const shiftX = dx / this.camera.k
+      const shiftY = dy / this.camera.k
+      for (const node of pointer.group ?? [pointer.node]) {
+        node.x = node.tx = node.tx + shiftX
+        node.y = node.ty = node.ty + shiftY
+      }
       this.positionsDirty = true
+    } else if (pointer.action === 'select' && this.marquee) {
+      this.marquee.x1 = point.x
+      this.marquee.y1 = point.y
+      this.updateMarqueeSelection()
     } else if (pointer.action === 'link' && pointer.node) {
       this.linkEnd = this.toWorld(point)
       const target = this.hitTest(point, pointer.node)
@@ -1235,6 +1339,18 @@ export class GraphView {
     this.pointer = null
     if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId)
     const completed = event.type === 'pointerup'
+    // "Selecionar área" vale para um arraste (ou um toque) só
+    const endArea = this.areaMode && (pointer.moved || completed)
+    if (endArea) this.areaMode = false
+
+    if (pointer.action === 'select') {
+      this.marquee = null
+      if (endArea) this.events.areaSelectionEnd?.()
+      this.updateCursor()
+      this.wake()
+      return
+    }
+    if (endArea) this.events.areaSelectionEnd?.()
 
     // Toque duplo no vazio: nota nova ali (como o duplo clique)
     if (pointer.touch && completed && !pointer.moved && pointer.kind === 'background') {
@@ -1256,14 +1372,46 @@ export class GraphView {
       this.events.connectToNew?.(pointer.node.id, this.linkEnd!)
     } else if (!pointer.moved && completed) {
       if (pointer.kind === 'badge' && this.selectedEdgeId) this.events.edgeRemove?.(this.selectedEdgeId)
+      else if (pointer.kind === 'node' && pointer.node && (pointer.select || (pointer.touch && this.multi.size))) this.toggleInSelection(pointer.node, pointer.select)
       else if (pointer.kind === 'node' && pointer.node) this.events.nodeClick?.(this.info(pointer.node))
       else if (pointer.kind === 'edge' && pointer.edgeId) this.events.edgeClick?.(pointer.edgeId)
-      else if (pointer.kind === 'background') this.events.backgroundClick?.()
+      // Ctrl + clique no vazio (ou um toque no modo "Selecionar área") não desfaz a seleção
+      else if (pointer.kind === 'background' && !pointer.select) this.events.backgroundClick?.()
     }
     this.linkTarget = null
     this.linkEnd = null
     this.updateCursor()
     this.wake()
+  }
+
+  /** Nós que a área de seleção toca (somados aos que já estavam selecionados). */
+  private updateMarqueeSelection(): void {
+    const marquee = this.marquee
+    if (!marquee) return
+    const a = this.toWorld({ x: Math.min(marquee.x0, marquee.x1), y: Math.min(marquee.y0, marquee.y1) })
+    const b = this.toWorld({ x: Math.max(marquee.x0, marquee.x1), y: Math.max(marquee.y0, marquee.y1) })
+    const next = new Set(marquee.base)
+    for (const node of this.nodes) {
+      const halfW = this.cardMode ? node.width / 2 : node.radius
+      const halfH = this.cardMode ? node.height / 2 : node.radius
+      if (node.x + halfW >= a.x && node.x - halfW <= b.x && node.y + halfH >= a.y && node.y - halfH <= b.y) next.add(node.id)
+    }
+    if (next.size === this.multi.size && [...next].every((id) => this.multi.has(id))) return
+    this.multi = next
+    this.events.selectionChange?.([...next])
+  }
+
+  /**
+   * Ctrl + clique (ou toque com a seleção ativa): põe ou tira a nota da seleção. O primeiro
+   * Ctrl + clique leva junto a nota que estava aberta, como no Explorador de Arquivos.
+   */
+  private toggleInSelection(node: Node, withCtrl: boolean): void {
+    const starting = this.multi.size === 0
+    if (starting && withCtrl && this.selectedId && this.nodeMap.has(this.selectedId)) this.multi.add(this.selectedId)
+    if (!starting && this.multi.has(node.id)) this.multi.delete(node.id)
+    else this.multi.add(node.id)
+    this.events.nodeHover?.(null, null)
+    this.events.selectionChange?.([...this.multi])
   }
 
   private onPointerLeave = (): void => {
@@ -1275,6 +1423,7 @@ export class GraphView {
     if (!a || !b) return
     // O que o primeiro dedo estava fazendo para por aqui (a nota arrastada fica onde está)
     this.pointer = null
+    this.marquee = null
     this.linkTarget = null
     this.linkEnd = null
     this.lastTap = null

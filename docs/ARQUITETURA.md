@@ -1,6 +1,6 @@
 # Arquitetura do 4notes
 
-Este documento explica, de forma didática, como o 4notes funciona por dentro: como o **Nuxt** é usado, o que transforma o projeto em um **aplicativo desktop** — e, desde a 1.5.0, num **app Android** (item 17) —, como os **arquivos** são lidos e salvos e como funcionam **tarefas recorrentes**, o **Mapa Mental** e os **Links**.
+Este documento explica, de forma didática, como o 4notes funciona por dentro: como o **Nuxt** é usado, o que transforma o projeto em um **aplicativo desktop** — e, desde a 1.5.0, num **app Android** (item 17) —, como os **arquivos** são lidos e salvos e como funcionam **tarefas recorrentes**, o **Mapa Mental**, os **Links** e, desde a 1.6.0, o **Timer** (item 18). Na 1.6.1, as **menções** passaram a achar itens de todos os módulos (item 10) e o mapa ganhou a **seleção de várias notas** (item 9).
 
 ---
 
@@ -19,7 +19,8 @@ Cada um roda em um **processo** separado, e eles conversam por mensagens (**IPC*
 │  PROCESSO PRINCIPAL (Node.js)                PROCESSO DA INTERFACE (Chromium)│
 │  electron/                                   app/  ← o app Nuxt (Vue 3)      │
 │  ├─ main.ts       ciclo de vida do app       ├─ pages/       Notas, Tarefas, │
-│  ├─ window.ts     janela, fechar seguro      │                Mapa, Links    │
+│  ├─ window.ts     janela, fechar seguro      │                Mapa, Links,   │
+│  │                                           │                Timer          │
 │  ├─ protocol.ts   interface + imagens        ├─ components/  telas e peças   │
 │  ├─ ipc.ts        atende os pedidos  ◀─IPC─▶ ├─ stores/      estado          │
 │  ├─ files.ts      lê/grava arquivos          ├─ lib/         regras + disco  │
@@ -37,6 +38,7 @@ Cada um roda em um **processo** separado, e eles conversam por mensagens (**IPC*
    ├── tasks/tasks.json
    ├── mindmap/<mapa>/ (.md + mapa.json)
    ├── links/links.json (+ icons/, os ícones dos sites)
+   ├── timer/timer.json (categorias, histórico e a sessão em andamento — 1.6.0)
    ├── attachments/ (biblioteca de imagens)
    └── .4notes/ (settings.json: configurações; mindmap.json: posições dos nós)
 ```
@@ -68,27 +70,30 @@ Notas        → stores/notes.ts   → lib/notes/   → notes/*.md, notes/<categ
 Tarefas      → stores/tasks.ts   → lib/tasks/   → tasks/tasks.json
 Mapa Mental  → stores/mindmap.ts → lib/mindmap/ → mindmap/<mapa>/*.md + mapa.json (conexões e cores)
 Links        → stores/links.ts   → lib/links/   → links/links.json + links/icons/ (ícones dos sites)
+Timer        → stores/timer.ts   → lib/timer/   → timer/timer.json (categorias, histórico, sessão em andamento)
 ```
 
-Os módulos não importam uns aos outros. Eles compartilham **infraestrutura** (editor de Markdown, ícones, diálogos, a API de arquivos) e `stores/app.ts` conhece os quatro só para tarefas gerais: carregar tudo ao abrir, salvar tudo antes de fechar e reler os arquivos quando você volta para a janela. A **lista dos módulos** (nome, ícone, rota, atalho e tutorial) fica num lugar só, `lib/modules.ts`, e quais estão ativos em `stores/modules.ts` (item 16).
+Os módulos não importam uns aos outros. Eles compartilham **infraestrutura** (editor de Markdown, ícones, diálogos, a API de arquivos) e `stores/app.ts` conhece os cinco só para tarefas gerais: carregar tudo ao abrir, salvar tudo antes de fechar e reler os arquivos quando você volta para a janela. A **lista dos módulos** (nome, ícone, rota, atalho e tutorial) fica num lugar só, `lib/modules.ts`, e quais estão ativos em `stores/modules.ts` (item 16).
 
-A **única ligação** entre módulos é a que foi pedida: **menções** — tarefas mencionam notas (1.1.0); notas das Notas mencionam notas (1.1.1) e tarefas (1.2.0); notas do Mapa Mental mencionam notas e tarefas (1.2.0); notas (das Notas e do Mapa) mencionam **links salvos** (1.3.1). Ela é explícita e fica num lugar só (ver item 10):
+A **única ligação** entre módulos é a que foi pedida: **menções** — tarefas mencionam notas (1.1.0); notas das Notas mencionam notas (1.1.1) e tarefas (1.2.0); notas do Mapa Mental mencionam notas e tarefas (1.2.0); notas (das Notas e do Mapa) mencionam **links salvos** (1.3.1); na 1.6.1, notas e tarefas mencionam itens de **todos os módulos** — notas, notas dos mapas, mapas inteiros, tarefas, links salvos e registros do Timer —, e o Timer e os Links ganharam o **"Ver menções"**. Ela é explícita e fica num lugar só (ver item 10):
 
 ```
 Notas / Mapa Mental ──(avisam "nota renomeada / movida")──▶ lib/note-events.ts
                                                                 │
-stores/mentions.ts  ◀───────────────────────────────────────────┘   lista notas, tarefas e links, abre o que foi
-       │        ◀── (observa os títulos das tarefas) ── stores/tasks.ts  mencionado, corrige as menções
-       │        ◀── (lê os links salvos e os ícones) ── stores/links.ts
+stores/mentions.ts  ◀───────────────────────────────────────────┘   um provedor por tipo de item: lista para o "@",
+       │        ◀── (títulos das tarefas) ─────────── stores/tasks.ts     descreve o mencionado, abre no módulo dele,
+       │        ◀── (links salvos: títulos, ícones, endereços) stores/links.ts   procura onde foi mencionado
+       │        ◀── (registros: atividade, categoria, data) stores/timer.ts      ("Ver menções") e corrige as menções
        ▼
 stores/tasks.ts   → tasks.json ("mentions": [...])
 stores/notes.ts   → links no texto das Notas (rewriteContents)
 stores/mindmap.ts → links no texto do mapa aberto (rewriteContents) e dos outros mapas, nos arquivos (rewriteAllMaps)
+stores/timer.ts   → revealSession (o Histórico mostra o registro mencionado)
 ```
 
-Notas e Mapa Mental não sabem quem os menciona: só publicam o aviso de renomeação (e oferecem funções genéricas para reescrever o texto das notas, que a ponte usa). Tarefas não sabem que são mencionadas: a ponte observa os títulos delas.
+Notas e Mapa Mental não sabem quem os menciona: só publicam o aviso de renomeação (e oferecem funções genéricas para reescrever o texto das notas, que a ponte usa). Tarefas e registros do Timer não sabem que são mencionados: a ponte observa os títulos deles.
 
-O módulo **Links** não sabe que é mencionado: a ponte só lê a lista de links salvos (para o `@` e para o ícone do site na frente de um link mencionado). Ele também compartilha a infraestrutura (o seletor de ícones, o avatar das categorias e a **biblioteca de imagens**, que é de todo o app — ver item 12).
+O módulo **Links** não sabe que é mencionado: a ponte só lê a lista de links salvos (para o `@`, para o ícone do site na frente de um link mencionado e para acompanhar um endereço trocado). Ele também compartilha a infraestrutura (o seletor de ícones, o avatar das categorias e a **biblioteca de imagens**, que é de todo o app — ver item 12). O Timer e os Links só chamam a ponte para abrir o "Ver menções" (`showMentionsOf`).
 
 ---
 
@@ -104,7 +109,7 @@ Isso significa:
 
 - **Não existe servidor em produção.** `nuxt generate` gera arquivos estáticos (`.output/public/index.html` + JavaScript/CSS em `_nuxt/`). O Electron carrega esses arquivos.
 - O Nuxt continua oferecendo o que tem de melhor para organizar a interface:
-  - **Rotas por arquivo**: `app/pages/notes.vue` → `/notes`, `tasks.vue` → `/tasks`, `mindmap.vue` → `/mindmap`, `links.vue` → `/links`. O `<NuxtPage :keepalive>` mantém as quatro telas vivas ao alternar (o editor não perde o histórico de desfazer e o mapa não recalcula).
+  - **Rotas por arquivo**: `app/pages/notes.vue` → `/notes`, `tasks.vue` → `/tasks`, `mindmap.vue` → `/mindmap`, `links.vue` → `/links`, `timer.vue` → `/timer`. O `<NuxtPage :keepalive>` mantém as telas dos módulos vivas ao alternar (o editor não perde o histórico de desfazer e o mapa não recalcula).
   - **Componentes automáticos**: qualquer `.vue` em `app/components/` pode ser usado pelo nome (`<TaskItem />`), sem importar.
   - **Plugins** (`app/plugins/theme.client.ts` aplica o tema antes da tela aparecer).
   - **Transições de página**, `app.vue` como "casca", `error.vue`, tela de carregamento.
@@ -217,12 +222,14 @@ Pessoal/
 ├── links/
 │   ├── links.json              Links salvos + categorias (um arquivo só)
 │   └── icons/                  ícones dos sites, um por site (nuxt.com.png, store.steampowered.com.ico…)
+├── timer/
+│   └── timer.json              Timer (1.6.0): categorias, histórico das sessões e a sessão em andamento
 ├── attachments/                Biblioteca de imagens: coladas nas notas (imagem-20261002-141503.png), enviadas, fotos das categorias
 └── .4notes/
-    ├── settings.json           configurações (1.5.0): tema, módulos, Notas, Mapa Mental, ordem dos links — as mesmas em todos os aparelhos
+    ├── settings.json           configurações (1.5.0): tema, módulos, Notas, Mapa Mental, ordem dos links, Timer — as mesmas em todos os aparelhos
     ├── mindmap.json            posições dos nós de cada mapa
     ├── trash/                  no Android: o que foi excluído (não há Lixeira)
-    └── backups/                tasks-segunda.json … tasks-domingo.json e links-segunda.json … (7 dias), conversões do mapa e, em 1.5.0/, os arquivos de estado da 1.4.3
+    └── backups/                tasks-segunda.json … tasks-domingo.json, links-segunda.json … e timer-segunda.json … (7 dias), conversões do mapa e, em 1.5.0/, os arquivos de estado da 1.4.3
 ```
 
 Formatos escolhidos:
@@ -235,6 +242,8 @@ Formatos escolhidos:
 | Imagens das notas | Arquivos em `attachments/` + `![](../attachments/x.png)` na nota | A imagem fica no workspace (backup = copiar a pasta) e o caminho relativo também funciona no Obsidian/VS Code. |
 | Categorias das Notas | Pastas em `notes/` + `notes/categorias.json` (ordem, cor, ícone, imagem) | A categoria de uma nota é a pasta onde o arquivo está: aparece igual no Explorador e no Obsidian, sem cadastro paralelo que possa ficar diferente. |
 | Links | JSON (`links/links.json`) + ícones em `links/icons/` | Uma lista de registros (endereço, título, categoria): JSON é o formato natural e continua editável à mão. Os ícones ficam no workspace para aparecer sem internet e ir junto no backup. |
+| Timer (1.6.0) | JSON (`timer/timer.json`) | Registros com datas, durações e trechos de tempo; a sessão em andamento fica no mesmo arquivo, para continuar depois de reabrir o app (ou em outro aparelho). |
+| Descrição das tarefas (1.6.0) | Markdown dentro do `tasks.json` (`"notes"`) | A mesma formatação das notas, num campo de texto do JSON — o arquivo continua um só. |
 | Configurações (tema e módulos) | `.4notes/settings.json` (1.5.0) | Valem para o workspace (cada workspace com as suas) e vão junto com a pasta: as mesmas no computador e no celular. |
 | Estado da interface (abas abertas, último módulo, mapa aberto) | No aparelho (`localStorage` do app, por workspace — 1.5.0) | É de cada aparelho; perder não perde nada importante. |
 
@@ -508,21 +517,23 @@ No editor aparece só a imagem — o texto `![](…)` nunca aparece (1.3.0). Cli
 
 **Remover** (botão sobre a imagem) tira a imagem **só da nota** (1.3.1): o arquivo continua na biblioteca, para usar de novo — ele só sai de lá pela própria biblioteca, quando nada mais o usa. **Desfazer** (no aviso ou com Ctrl+Z) devolve a imagem para a nota. (Até a 1.3.0, Remover mandava o arquivo para a Lixeira.)
 
-### Menções a notas, tarefas e links — `mentions.ts`, `lib/notes/mention-links.ts`
+### Menções a itens de todos os módulos — `mentions.ts`, `lib/notes/mention-links.ts`
 
-Nas Notas e nas notas do Mapa Mental, digitar **`@`** abre a lista: notas das Notas (de todas as categorias), notas de todos os mapas (sem a própria nota), **tarefas** (as concluídas no fim) e **links salvos** (1.3.1, depois das notas e tarefas; a busca procura no título e no endereço do link). A escolhida entra como um **link Markdown comum**, relativo à pasta da nota, então o arquivo continua legível e o link funciona no Obsidian/VS Code:
+Nas Notas e nas notas do Mapa Mental, digitar **`@`** abre a lista: notas das Notas (de todas as categorias), notas de todos os mapas (sem a própria nota), **mapas inteiros** (1.6.1), **tarefas** (as concluídas no fim), **links salvos** (1.3.1) e **registros do histórico do Timer** (1.6.1, os mais recentes primeiro). Cada item mostra de onde é — módulo, categoria, data, duração (`Timer · Estudo · 12/10 · 1 h`, `Tarefa · Estudos · 14/10`, `Link · Dev · nuxt.com`, `Mapa mental · 12 notas`) — para diferenciar nomes iguais; a busca procura no título e nesse "de onde é", palavra por palavra (`@estudo 12/10`). O escolhido entra como um **link Markdown comum**, relativo à pasta da nota, então o arquivo continua legível e o link funciona no Obsidian/VS Code:
 
 ```
-[Ideias](Ideias.md)                              nota das Notas (na mesma pasta)
-[Reunião](Trabalho/Reuni%C3%A3o.md)                nota de uma categoria
-[Godot](../mindmap/Principal/Godot.md)           nota de um mapa (vista das Notas)
-[Estudar Godot](../tasks/tasks.json#t_k3j9x0)    tarefa: o tasks.json + o id dela depois do "#"
-[Nuxt](https://nuxt.com/)                        link salvo: um link comum
+[Ideias](Ideias.md)                                nota das Notas (na mesma pasta)
+[Reunião](Trabalho/Reuni%C3%A3o.md)                  nota de uma categoria
+[Godot](../mindmap/Principal/Godot.md)             nota de um mapa (vista das Notas)
+[Principal](../mindmap/Principal/mapa.json)        o mapa inteiro (1.6.1)
+[Estudar Godot](../tasks/tasks.json#t_k3j9x0)      tarefa: o tasks.json + o id dela depois do "#"
+[Estudando Godot](../timer/timer.json#s_k3j9x0)    registro do Timer: o timer.json + o id (1.6.1)
+[Nuxt](https://nuxt.com/)                          link salvo: um link comum
 ```
 
 Um link salvo **não vira chip**: ele é um link como os outros (o texto continua editável) e ganha o **ícone do site** na frente (`formatting.ts → LinkIconWidget`, pelo `MentionHost.linkIcon`). Vale para qualquer link do texto cujo endereço é um link salvo no módulo Links (`savedLinkIcon` em `stores/mentions.ts`, comparando com `urlKey`); quando os ícones chegam ou mudam, o `revision()` da ponte muda e os editores redesenham.
 
-No editor, o link vira um **chip** com o título atual (um bloco só: o cursor passa por cima e Backspace apaga a menção inteira): roxo para notas, amarelo para tarefas — a tarefa concluída aparece riscada. Clicar abre a nota no módulo dela ou a tarefa no painel das Tarefas. O que não existe mais aparece riscado e cinza. Os chips são redesenhados quando um título ou estado muda fora do editor (o `revision()` da ponte muda e o editor recebe o efeito `refreshMentions`). Mudanças vindas de fora (menção corrigida, arquivo editado em outro programa) não entram no Desfazer.
+No editor, o link vira um **chip** com o título atual (um bloco só: o cursor passa por cima e Backspace apaga a menção inteira): roxo para notas e mapas, amarelo para tarefas e registros do Timer — a tarefa concluída aparece riscada; a dica do chip diz o que o clique faz e de onde é o item. Clicar abre o item no módulo dele: a nota (trocando de mapa se precisar), o mapa, a tarefa no painel das Tarefas, o registro no Histórico do Timer (destacado). O que não existe mais aparece riscado e cinza; clicar só avisa — nada quebra e a nota continua igual. Os chips são redesenhados quando um título ou estado muda fora do editor (o `revision()` da ponte muda e o editor recebe o efeito `refreshMentions`). Mudanças vindas de fora (menção corrigida, arquivo editado em outro programa) não entram no Desfazer.
 
 Os caminhos dos links codificam só o que quebraria o link (espaços, parênteses, `#`…) e mantêm os acentos legíveis (`lib/files/workspace-path.ts`).
 
@@ -559,6 +570,13 @@ Arquivo: `app/stores/mindmap.ts` (+ `app/lib/mindmap/model.ts` e `repository.ts`
 > **Painel de edição** (1.3.2, `pages/tasks.vue` + `TaskDrawer.vue`): clicar fora do painel — na lista, nas categorias, no cabeçalho — fecha o painel, como o clique no vazio do Mapa Mental fecha o painel da nota. O clique continua fazendo o que faria (concluir, trocar de lista…): a página observa o clique (`pointerdown`/`click` na fase de captura) e só fecha o painel **depois** dele, se ele mesmo não mexeu no painel — clicar em outra tarefa abre a outra, "Nova tarefa" abre a criação. Não contam: cliques dentro do painel, o que abre por cima dele (lista de notas para mencionar, diálogo de categoria, menus — ficam fora da tela de Tarefas), arrastar para selecionar texto do painel até fora dele, o "clique" do teclado (`Enter` num botão) e um painel de **Nova tarefa** com algo já escrito (para não perder o rascunho).
 
 Arquivos: `app/lib/tasks/recurrence.ts` (regras puras), `app/lib/tasks/model.ts` (concluir/pular/agrupar) e `app/stores/tasks.ts`.
+
+> **Descrição formatada** (1.6.0, `TaskDrawer.vue` + `lib/tasks/description.ts`): a descrição é o **mesmo editor das notas** (`MarkdownEditor.vue`, com todas as extensões de `lib/editor/setup.ts`), não um editor separado — negrito, itálico, sublinhado, cor, marca-texto, títulos, listas que se renumeram, checklists, código, blocos de texto, links, imagens coladas e `Ctrl+D`. O texto é salvo em Markdown no `"notes"` da tarefa (descrições antigas, texto simples, continuam iguais; `trimDescription` só tira as linhas vazias do começo e os espaços do fim). Cada tarefa é um documento do editor (`docKey` `task:<id>`; "Nova tarefa", `task-new:<n>`), então o desfazer de uma não mistura com o de outra. A pasta "da descrição" é `tasks/` (`DESCRIPTION_DIR`): uma imagem colada vira `![](../attachments/x.png)`, e a biblioteca de imagens conta as descrições das tarefas como uso (item 12).
+> - **Painel estreito**: o campo cresce com o texto (o painel rola) e a barra de formatação pode sair dos limites do editor (`toolbarOverflow`); quando o editor é mais estreito que a barra, os botões quebram em duas fileiras (`maxWidth` no `FormatToolbar`) em vez de serem cortados — isso vale para qualquer editor estreito. No toque, a barra fica fixa embaixo do campo, como nas notas.
+> - **`@` na descrição**: a lista do editor (`MentionHost.search` → `searchNoteMentions`) mostra só as notas (das Notas e dos mapas); escolher (`MentionHost.choose`) deixa o título no texto e põe a nota em "Notas mencionadas" — a mesma menção estruturada do título e da barra rápida (`tasks.json → "mentions"`). Nenhuma ligação nova entre os módulos.
+> - **Na lista**, a primeira linha aparece como no editor, sem a marcação (`descriptionPreview`, com as regras do Exportar TXT: `**` some, itens de lista viram •, ☐/☑).
+> - **`Esc`** fecha o painel, menos quando é de algo aberto nele ou por cima dele: a lista do `@`, a tela cheia de um bloco, o campo do link na barra, a lista de notas ou um diálogo (`escapeBelongsElsewhere` em `pages/tasks.vue`). Com isso, o `Esc` com "Nova categoria" ou "Mencionar nota" abertos fecha só eles (antes fechava o painel junto).
+> - O `Enter` escolhe a menção da lista do `@` mesmo dentro de um trecho formatado (`breakOutOfMarkup` deixa o `Enter` para a lista aberta) — valia também nas Notas.
 
 ### A ideia central
 
@@ -650,26 +668,28 @@ Os nós **ficam onde você os deixa** (arrastar move uma nota). Nota nova aparec
 - Interações: zoom com a roda (em direção ao cursor), arrastar o fundo para mover a câmera, arrastar um nó para movê-lo, Shift + arrastar para conectar, clique abre a nota, clique no vazio tira a seleção, duplo clique ou botão direito no vazio criam uma nota ali, botão direito no nó abre o menu (renomear, cor, excluir…).
 - Com o mouse sobre uma nota, ela e as conexões dela ganham destaque; as **setas que saem dela** ficam com a **cor da nota** (`Edge.tint`).
 - Ao abrir/fechar o painel, a câmera desliza para manter o centro; se você pega o mapa no meio desse ajuste, ele termina na hora (abrir e fechar rápido não deixa o mapa deslocado).
+- **Seleção de várias notas** (1.6.1): **Ctrl + arrastar** desenha uma área (um retângulo discreto na cor da seleção) e seleciona as notas que ela toca, somando às que já estavam; **Ctrl + clique** põe ou tira uma nota; no toque, "Selecionar área" fica no menu do vazio (segurar o dedo) e, com notas selecionadas, tocar numa nota põe ou tira ela. **Arrastar uma das selecionadas move todas** pelo mesmo tanto (as posições entre elas e as conexões não mudam). Uma barra embaixo mostra quantas estão selecionadas, com **Cor** e **Excluir** (Delete também); o botão direito numa delas tem cor e "Excluir N notas…" para o grupo. Excluir em lote (`mindmap.deleteNotes`) manda os arquivos para a Lixeira e tira as conexões delas, com **um Desfazer** que traz todas de volta com conexões, cores e posições. Clicar numa nota sem Ctrl volta ao normal (abre a nota e desfaz a seleção); clicar no vazio ou `Esc` limpam. A seleção fica na `GraphView` (`multi`) e é avisada à página (`selectionChange`); a área testa cada nó contra o retângulo (rápido mesmo com centenas de notas).
 - Ajustes (desde a 1.3.1 em **Configurações → Módulos → Mapa Mental**, `components/mindmap/GraphSettings.vue`; desde a 1.4.2 não há mais um atalho para elas na barra do mapa): esconder notas sem conexões e nós em **cards** (padrão, com o nome dentro) ou **círculos** (estilo Obsidian). Nos círculos, os nomes aparecem **só na nota selecionada** (padrão), conforme o zoom ou sempre. **Reorganizar o mapa** continua no próprio mapa: botão na barra e no clique direito do fundo. A barra do mapa (`GraphToolbar.vue`) tem só o seletor de mapas, a busca (o atalho `Ctrl+K` funciona, mas só aparece no tutorial), **Nova nota** e **Reorganizar**; o rodapé mostra o resumo do mapa, o zoom e, com uma conexão selecionada, como removê-la (a dica fixa "Arraste para mover…" saiu na 1.4.2 — está no tutorial).
 - Os ajustes ficam na seção `mindmap` do `.4notes/settings.json` (até a 1.4.3, no `.4notes/mindmap.json`) com `settingsVersion`: na primeira abertura da 1.1.0, os ajustes gravados pelas versões anteriores (que sempre salvavam os padrões antigos) passam para os novos padrões — cards e nomes ao selecionar — uma única vez.
 
 ---
 
-## 10. Menções (tarefas, Notas e Mapa Mental)
+## 10. Menções (entre todos os módulos)
 
-Arquivos: `app/lib/tasks/mentions.ts` (menções nas tarefas), `app/lib/notes/mention-links.ts` (links nas notas), `app/stores/mentions.ts` (ponte entre os módulos), `app/lib/note-events.ts` (avisos de renomeação), `components/tasks/NotePicker.vue` e `MentionChip.vue`.
+Arquivos: `app/stores/mentions.ts` (a ponte: provedores, busca, abrir, "Ver menções", correções), `app/lib/mentions/refs.ts` (menções guardadas nas tarefas), `app/lib/mentions/catalog.ts` (ícone e textos de cada tipo, ordem da lista), `app/lib/notes/mention-links.ts` (links nas notas), `app/lib/note-events.ts` (avisos de renomeação), `components/tasks/MentionPicker.vue`, `MentionChip.vue` e `components/shell/MentionsDialog.vue`.
 
-- Digitar **`@`** na barra de criação rápida, no título ou nos detalhes da tarefa abre a lista de notas (`composables/useMentionTrigger.ts`); o botão **Mencionar nota** do painel abre a mesma lista com busca. Entram as notas das Notas e de **todos os mapas** (as dos mapas fechados são listadas direto da pasta, sem carregá-los).
-- A menção é salva **na tarefa**, no `tasks.json`, como uma referência estruturada — onde a nota está + o último título conhecido:
-  `{ "kind": "note", "path": "notes/Ideias.md", "title": "Ideias" }` ou `{ "kind": "map", "map": "Principal", "note": "Godot.md", "title": "Godot" }`.
-  O texto da tarefa fica limpo (`@ide` vira `Ideias de jogo`); a menção aparece como um chip.
-- **Clicar no chip** abre a nota no módulo dela (troca de mapa se precisar). Se a nota não existir mais, aparece um aviso — a tarefa não é alterada.
-- **Dentro das notas** (Notas e Mapa Mental), a menção é um link Markdown no texto (ver "Menções a notas, tarefas e links" no item 6). Os links salvos entram como links comuns, com o ícone do site.
+- **O que dá para mencionar** (1.6.1): notas das Notas, notas dos mapas, mapas inteiros, tarefas, links salvos e registros do histórico do Timer. **Onde**: nas Notas, nas notas do Mapa Mental e nas Tarefas (barra de criação rápida, título, descrição e o botão **Mencionar**). Os Links e o Timer não têm campo de texto: neles entra o **"Ver menções"**.
+- **Um provedor por tipo** (`PROVIDERS` em `stores/mentions.ts`): cada um lista os itens para o `@` (título, "de onde é", palavras extras para a busca e a fila), descreve um item mencionado (título atual, concluída, ou `null` = não existe mais) e abre o item no módulo dele. O `@` das notas, o das tarefas, os chips e o "Ver menções" usam os mesmos provedores — **um módulo novo mencionável** entra com um provedor e uma linha em `lib/mentions/catalog.ts` (`MENTION_KINDS`), sem integração separada.
+- **Caminho de menção**: todo item tem um identificador em texto, o mesmo das notas — o caminho da nota (`notes/Ideias.md`, `mindmap/Principal/Godot.md`), o `mapa.json` do mapa (`mindmap/Principal/mapa.json`) ou, para quem tem id, o arquivo + `#id` (`tasks/tasks.json#t_x1`, `timer/timer.json#s_x1`, `links/links.json#l_x1`). Tarefas, registros e links são achados **pelo id**, que nunca muda; notas e mapas, pelo caminho, que a ponte corrige quando muda.
+- **Nas tarefas**, a menção fica no `tasks.json`, numa lista estruturada (`"mentions"`), com o último título conhecido: `{ "kind": "note", "path": … }`, `{ "kind": "map", "map": …, "note": … }` (nota de mapa) e, na 1.6.1, `{ "kind": "mindmap", "map": … }`, `{ "kind": "task", "id": … }`, `{ "kind": "timer", "id": … }`, `{ "kind": "link", "id": …, "url": … }`. As de antes continuam iguais. O texto da tarefa fica limpo (`@ide` vira `Ideias de jogo`); a menção aparece como um chip na seção **Menções** (e na lista de tarefas). A lista do `@` não mostra a própria tarefa nem o que já está mencionado.
+- **Clicar** abre o item no módulo dele (`openMentionPath`/`openRef`): nota (troca de mapa se precisar), mapa, tarefa (painel), link (no navegador), registro (**Histórico do Timer**: `timer.revealSession` tira os filtros que o escondem, vai para o período dele, rola até ele e o destaca). Módulo desativado: aviso com "Ativar". Item que não existe mais: chip riscado e um aviso ao clicar — nada quebra.
+- **"Ver menções"** (Timer: menu do registro e diálogo de edição; Links: menu do link e diálogo de edição): `findMentionPlaces` procura nas Notas, nas notas de **todos os mapas** (os fechados são lidos da pasta) e nas tarefas (lista de menções e descrição); o diálogo lista os lugares e leva até eles. Para um link salvo, também contam os links comuns para o mesmo endereço.
 - **Renomear ou mover no app** (título de uma nota rápida, nota movida de categoria, categoria renomeada, nota ou mapa do Mapa Mental) publica um aviso em `note-events.ts` (`note-renamed`, `notes-folder-renamed`, `map-note-renamed`, `map-renamed`). O store de menções:
   - corrige as tarefas afetadas (o `tasks.json` é salvo);
-  - reescreve os links das Notas e do mapa aberto na hora (`renameMentionLinks`, com a pasta de cada nota; o texto do link acompanha o novo título);
+  - reescreve os links das Notas e do mapa aberto na hora (`renameMentionLinks`, com a pasta de cada nota; o texto do link acompanha o novo título — e, num mapa renomeado, o novo nome do mapa);
   - reescreve os arquivos dos **outros mapas** em lote, 1,2 s depois (`mindmap.rewriteAllMaps`, que não roda junto com a troca de mapa). Antes de o app fechar, o que estiver pendente é aplicado.
-- **Título de tarefa mudou**: a ponte observa os títulos e, 1 s depois que você para de digitar, atualiza o texto das menções àquela tarefa nas notas (`retitleTaskLinks`). O link aponta pelo id, então ele nunca quebra; o texto só fica igual ao título.
+- **Título novo de tarefa ou de registro do Timer**: a ponte observa os títulos e, 1 s depois que você para de digitar, atualiza o texto das menções nas notas (`retitleIdLinks`). O link aponta pelo id, então nunca quebra; o texto só fica igual ao título.
+- **Link salvo com endereço novo** (1.6.1): os links das notas para o endereço antigo passam para o novo (`relinkUrl`) e as menções das tarefas guardam o endereço novo.
 - Por isso as referências continuam funcionando depois de fechar e reabrir o app. Arquivos renomeados **por fora** do app não têm como ser acompanhados: o chip mostra o último título conhecido e avisa ao clicar.
 
 ---
@@ -721,7 +741,7 @@ Arquivos: `electron/library.ts` (processo principal), `components/shell/ImageLib
 Toda imagem enviada ao 4notes fica em **`attachments/`** — coladas nas notas, enviadas pela biblioteca (**Enviar imagens…**, com o nome original do arquivo, até 40 MB) e escolhidas como foto de categoria — e pode ser usada de novo sem enviar outra vez: **Escolher imagem/foto…** nas categorias das Notas e dos Links, **Inserir imagem…** no editor e **Configurações → Geral → Biblioteca de imagens…**.
 
 - **Sem repetidas**: `listLibrary` junta as imagens de `attachments/` e as fotos das categorias das Notas que estão só na pasta da categoria (de antes da biblioteca), e imagens com o mesmo conteúdo aparecem uma vez só (compara o tamanho e, só quando ele empata, um hash SHA-1). Enviar de novo uma imagem que já está lá devolve a que existe, sem criar outra cópia.
-- **Onde é usada**: cada imagem mostra o uso — notas (`.md` em `notes/` e `mindmap/` que citam o arquivo: `referencedFiles` lê os links e imagens do texto e resolve os caminhos relativos), foto de categoria das Notas (`categorias.json`) e dos Links (`links.json`). Antes de listar, o app grava o que estiver pendente (`flushEverything`), para o "em uso" ficar certo.
+- **Onde é usada**: cada imagem mostra o uso — notas (`.md` em `notes/` e `mindmap/` que citam o arquivo: `referencedFiles` lê os links e imagens do texto e resolve os caminhos relativos), a descrição das tarefas (1.6.0: o `"notes"` de cada tarefa do `tasks.json`, com os caminhos relativos a `tasks/`), foto de categoria das Notas (`categorias.json`) e dos Links (`links.json`). Antes de listar, o app grava o que estiver pendente (`flushEverything`), para o "em uso" ficar certo.
 - **Excluir** só aparece nas imagens sem uso (e só em `attachments/`); o arquivo — e as cópias iguais a ele — vão para a Lixeira (`removeFromLibrary` confere o uso de novo antes). Tirar uma imagem de uma nota ou de uma categoria nunca apaga o arquivo da biblioteca.
 - **Adotar** (`library.adopt`): uma foto que está fora de `attachments/` (a foto antiga de uma categoria) ganha uma cópia na biblioteca quando é escolhida para outro lugar ou quando sai da categoria.
 - **Modais empilhados** (`composables/useModalStack.ts`): a biblioteca abre por cima de outro diálogo (a categoria, as Configurações); o `Esc` fecha só o de cima e o aberto por último fica por cima, mesmo que tenha sido montado antes.
@@ -733,7 +753,7 @@ Toda imagem enviada ao 4notes fica em **`attachments/`** — coladas nas notas, 
 `components/shell/SettingsDialog.vue`, em duas abas (`app.openSettings(aba, módulo)`):
 
 - **Geral**: tema; **Tutoriais e atalhos** (abre o painel do item 16); **Iniciar com o computador**; workspace (pasta, abrir/criar outro) e a biblioteca de imagens.
-- **Módulos**: primeiro as **configurações gerais dos módulos** (1.4.0, item 16) — módulos ativos (arraste para mudar a ordem, 1.4.1) e **Menu lateral** (ícone e nome / só o ícone). Depois, os ajustes de cada módulo **ativo** que fazem sentido como configuração permanente, guardados **no workspace** (`.4notes/settings.json`, uma seção por módulo — 1.5.0): Notas (`NotesSettings.vue`: categoria automática pelo título, exibição das pastas pelo título), Mapa Mental (`GraphSettings.vue`: notas sem conexões, estilo dos nós, nomes), e Tarefas e Links com "Sem nenhuma configuração disponível no momento.". As de um módulo desativado somem da lista (continuam guardadas). **Critério**: o que se usa toda hora fica na tela do próprio módulo — ordenar os links, as opções de criação das tarefas, reorganizar o mapa.
+- **Módulos**: primeiro as **configurações gerais dos módulos** (1.4.0, item 16) — módulos ativos (arraste para mudar a ordem, 1.4.1) e **Menu lateral** (ícone e nome / só o ícone). Depois, os ajustes de cada módulo **ativo** que fazem sentido como configuração permanente, guardados **no workspace** (`.4notes/settings.json`, uma seção por módulo — 1.5.0): Notas (`NotesSettings.vue`: categoria automática pelo título, exibição das pastas pelo título), Mapa Mental (`GraphSettings.vue`: notas sem conexões, estilo dos nós, nomes), Timer (1.6.0, `TimerSettings.vue`: som ao terminar, aviso do sistema — só no computador — e o dia em que a semana começa) e Tarefas e Links com "Sem nenhuma configuração disponível no momento.". As de um módulo desativado somem da lista (continuam guardadas). **Critério**: o que se usa toda hora fica na tela do próprio módulo — ordenar os links, as opções de criação das tarefas, reorganizar o mapa, a duração do temporizador e os ciclos do Pomodoro.
 - Os **atalhos** de teclado saíram das Configurações (até a 1.3.2 havia uma aba "Atalhos"): ficam nos tutoriais de cada módulo (item 16).
 
 **Desfoque só atrás do painel** (1.4.1): o fundo do `UiModal` (escurecido + `backdrop-filter`) é um `::before` com `inset` configurável (`scrimInset`). Na aba **Módulos**, ele começa abaixo da barra de título e à direita do menu lateral (`var(--titlebar-h) 0 0 var(--rail-w)`), então o nome do workspace e o menu ficam nítidos enquanto você liga, desliga e reorganiza; o resto da janela continua bloqueado para cliques. Na aba Geral, a janela inteira fica embaçada, como nos outros diálogos.
@@ -810,7 +830,7 @@ Para gerar o instalador em outra máquina (para desenvolver lá), instale o Node
 
 Arquivos: `app/lib/modules.ts` (lista dos módulos + tutoriais + regras puras das preferências), `app/stores/modules.ts` (preferências no workspace), `components/shell/NavRail.vue` (menu lateral e animação), `composables/useSortableList.ts` (arrastar para reorganizar, 1.4.1), `lib/sounds.ts` (sons de ligar/desligar, 1.4.1), `components/shell/TutorialPanel.vue` + `composables/useTutorial.ts` (tutoriais), `SettingsDialog.vue` (configurações gerais dos módulos).
 
-**Uma lista só** (`MODULES` em `lib/modules.ts`): id, nome curto (menu) e completo, ícone, rota, tecla do atalho (`Ctrl+1…4`), uma linha de descrição e o **tutorial** (obrigatório no tipo). O menu lateral, os atalhos do `app.vue`, as Configurações, o título e os Tutoriais leem essa lista — um módulo novo entra em todos esses lugares (inclusive no atalho "Ir para …" do tutorial Geral) só sendo acrescentado ali.
+**Uma lista só** (`MODULES` em `lib/modules.ts`): id, nome curto (menu) e completo, ícone, rota, tecla do atalho (`Ctrl+1…5`), uma linha de descrição e o **tutorial** (obrigatório no tipo). O menu lateral, os atalhos do `app.vue`, as Configurações, o título e os Tutoriais leem essa lista — um módulo novo entra em todos esses lugares (inclusive no atalho "Ir para …" do tutorial Geral) só sendo acrescentado ali.
 
 **Ativar/desativar = preferência de exibição**, guardada na seção `modules` do `.4notes/settings.json` (`stores/modules.ts`; até a 1.4.3 ficava em `.4notes/app.json`, junto do último módulo aberto — que agora é de cada aparelho):
 
@@ -824,7 +844,7 @@ Arquivos: `app/lib/modules.ts` (lista dos módulos + tutoriais + regras puras da
 - `Ctrl+<n>` ou uma **menção** para um módulo desativado não abre uma tela fora do menu: um aviso oferece **Ativar** (`requireModule`), que ativa e segue para o que foi pedido.
 - Onde mudar: **Configurações › Módulos › Geral** (switches por módulo) ou **botão direito no menu lateral** (no módulo clicado: "Mover para cima/baixo" e "Desativar <módulo>"; depois as caixas por módulo, "Mostrar os nomes", "Configurações dos módulos…", "Tutorial").
 
-**Ordem do menu** (1.4.1): `order` guarda **todos** os ids (os desativados também, no lugar deles). `normalizePrefs` tolera arquivo editado à mão: ids repetidos ou inválidos saem, módulos que faltam entram no fim na ordem padrão, ids desconhecidos (de outra versão) ficam no lugar. Reorganizar mexe só nos módulos mostrados: `reorderedIds(order, mostrados)` põe a nova sequência nos lugares que eles ocupavam e deixa os outros onde estavam — um módulo desativado volta, ao ser ativado, ao lugar em que estava. As Configurações, os tutoriais e o menu leem `ordered`/`enabled` (já na ordem); os atalhos `Ctrl+1…4` continuam presos a cada módulo (a tecla é do módulo, não da posição). Só a exibição muda: nada nos dados nem nas configurações dos módulos.
+**Ordem do menu** (1.4.1): `order` guarda **todos** os ids (os desativados também, no lugar deles). `normalizePrefs` tolera arquivo editado à mão: ids repetidos ou inválidos saem, módulos que faltam entram no fim na ordem padrão, ids desconhecidos (de outra versão) ficam no lugar. Reorganizar mexe só nos módulos mostrados: `reorderedIds(order, mostrados)` põe a nova sequência nos lugares que eles ocupavam e deixa os outros onde estavam — um módulo desativado volta, ao ser ativado, ao lugar em que estava. As Configurações, os tutoriais e o menu leem `ordered`/`enabled` (já na ordem); os atalhos `Ctrl+1…5` continuam presos a cada módulo (a tecla é do módulo, não da posição). Um módulo novo (o Timer, na 1.6.0) entra no fim do menu, já ativo, num workspace que tinha uma ordem guardada. Só a exibição muda: nada nos dados nem nas configurações dos módulos.
 
 **Arrastar** (`useSortableList.ts`, usado no menu lateral e na lista das Configurações): eventos de ponteiro, não o arrastar-e-soltar do navegador (os itens do menu são links). Passando de 5 px o item "levanta" e segue o mouse (preso dentro da lista); os outros abrem espaço quando a borda dele passa do meio do vizinho; ao soltar, `onReorder` grava a ordem e um FLIP faz cada item deslizar até o lugar novo. O clique que encerra um arraste é engolido (não abre o módulo); um clique sem arrastar continua normal; `Esc` cancela. Nas Configurações, os switches não iniciam arraste. No menu, não dá para arrastar durante a animação de ligar/desligar; "Mover para cima/baixo" usa o mesmo FLIP.
 
@@ -961,6 +981,87 @@ O 4notes **não sincroniza**: ele lê e grava a pasta, e quem a mantém igual no
 - releitura ao voltar e a cada minuto, sem passar por cima do que você está editando (uma nota com mudanças ainda não gravadas não é recarregada);
 - o mesmo arquivo mudado nos dois aparelhos antes de sincronizar é um conflito que o sincronizador resolve — por isso a recomendação é usar um aparelho de cada vez.
 
+
+---
+
+## 18. Timer (1.6.0)
+
+Arquivos: `app/lib/timer/` — `model.ts` (dados, `timer.json`, categorias, atividades), `engine.ts` (o relógio), `stats.ts` (períodos, estatísticas, comparação), `format.ts` (tempos escritos), `settings.ts` (seção `timer` do `settings.json`), `repository.ts` (disco) —, `app/stores/timer.ts` (estado, relógio, avisos), `app/pages/timer.vue` e `app/components/timer/`.
+
+### 1) Dados — `timer/timer.json`
+
+```json
+{
+  "app": "4notes",
+  "version": 1,
+  "categories": [{ "id": "estudo", "name": "Estudo", "color": "purple", "createdAt": "…" }],
+  "sessions": [
+    {
+      "id": "s_k3j9x0a2qm",
+      "mode": "pomodoro",
+      "activity": "Estudando Godot",
+      "categoryId": "estudo",
+      "start": "2026-10-09T13:00:00.000Z",
+      "end": "2026-10-09T15:10:00.000Z",
+      "duration": 6000,
+      "measured": 6000,
+      "status": "completed",
+      "target": 1500,
+      "cycles": 4,
+      "breaks": 1200,
+      "notes": "",
+      "spans": [["2026-10-09T13:00:00.000Z", "2026-10-09T13:25:00.000Z"], "…"]
+    }
+  ],
+  "active": null
+}
+```
+
+- `duration` é o **tempo válido** (segundos) — o que conta nas estatísticas; `measured`, o tempo medido (sem pausas e sem as pausas do Pomodoro). Uma sessão cancelada tem `duration` 0 (a não ser os ciclos de foco completos do Pomodoro, ou um tempo que você der editando o registro). `duration` nunca passa de `end − start`.
+- `spans` são os **trechos de tempo efetivo**: é com eles que as estatísticas dividem o tempo pelos dias e horas em que ele aconteceu (uma sessão que passa da meia-noite conta um pouco em cada dia).
+- `status`: `completed`, `interrupted` (temporizador parado antes do fim; Pomodoro finalizado no meio de um foco — o tempo feito conta) ou `canceled`.
+- `active` é a **sessão em andamento** (modo, atividade, categoria, `startedAt`, trechos já fechados, `runningSince` e, no Pomodoro, a etapa, os ciclos e a configuração com que começou). Ela fica no arquivo para continuar depois de fechar e abrir o app — ou no outro aparelho, com a pasta sincronizada.
+- **Sem duplicar**: finalizar passa a sessão para o histórico **com o mesmo id**; um id repetido no arquivo (cópia manual, conflito de sincronização) fica uma vez só, e uma sessão "em andamento" que já está no histórico não volta.
+- **Categorias** são só do Timer (as das Tarefas continuam no `tasks.json`). Excluir uma categoria **não apaga o histórico**: as sessões dela (e a em andamento) ficam sem categoria (`withoutCategory`). O diálogo é o mesmo das Tarefas (`CategoryDialog.vue` com `source`, `lib/category-source.ts`).
+- Gravação: na hora (iniciar, pausar, retomar, trocar de etapa, finalizar, excluir) ou 0,3 s depois de editar um texto — **nunca a cada segundo**. Escrita atômica, uma cópia por dia da semana em `.4notes/backups/timer-<dia>.json`, e um arquivo com JSON inválido não é sobrescrito (a tela mostra o erro, como nas Tarefas). O arquivo só é criado quando há algo para guardar.
+
+### 2) O relógio — `engine.ts`
+
+Nada depende de um contador somado a cada segundo. A sessão guarda **quando** cada trecho começou e terminou, e o tempo é sempre calculado a partir de `Date.now()`:
+
+```
+tempo efetivo = soma dos trechos fechados + (agora − runningSince, se estiver contando)
+```
+
+- O **tique** da tela (`stores/timer.ts`, 4 por segundo) só atualiza o que aparece — e só com a janela visível. Um **alarme** (`setTimeout` único, não repetido — o Chromium não o atrasa com a janela minimizada) marca o fim do temporizador ou da etapa do Pomodoro. Ao voltar para a janela (`visibilitychange`, `focus`), o relógio recalcula na hora.
+- `advance(sessão, agora)` leva a sessão até agora: o temporizador que acabou (fechado no **horário do fim**, não na hora em que você olhou) e as etapas do Pomodoro que terminaram. Com o **início automático**, a próxima etapa começa exatamente quando a outra acabou — se isso aconteceu há pouco (até 15 s, `AUTO_START_TOLERANCE_MS`). Uma etapa que terminou há mais tempo (computador suspenso) espera você: senão, o tempo em que você não estava ali contaria como foco.
+- **Ao abrir o app** (`recover`): a sessão em andamento continua (o cronômetro contou o tempo com o app fechado, como um cronômetro de verdade); um temporizador que acabou com o app fechado é registrado no horário certo, com o aviso "terminou às 14:32, com o 4notes fechado"; uma etapa do Pomodoro que terminou com o app fechado **nunca** puxa a próxima sozinha.
+- **Pomodoro**: uma sessão só, com a atividade principal. Etapas `focus` → `short` → … → `long` a cada `rounds` focos; só o foco vira trecho efetivo (as pausas somam em `breaks`). "Pular pausa" começa o próximo foco na hora. A configuração (foco, pausa curta, pausa longa, focos até a longa, início automático) é copiada para a sessão quando ela começa: mudar os ciclos não mexe na sessão em andamento.
+- **Finalizar** e **Cancelar** (`finish`) devolvem o registro do histórico — ou nada: um clique sem querer (menos de 1 s) e uma sessão cancelada com menos de 1 minuto e sem tempo válido não são registrados. Os dois têm **Desfazer** (a sessão volta como estava, e o registro sai).
+
+### 3) Avisos
+
+Quando o temporizador ou uma etapa termina: a tela do Timer mostra o aviso (até você dispensar), um **som** curto (`lib/sounds.ts`, `timer-end`/`phase-end`, sintetizado como os sons dos módulos, desligável) e, com o 4notes minimizado ou em segundo plano, um **aviso do Windows** (`Notification` da própria interface, desligável; não existe no Android). O áudio é "preparado" no clique em Iniciar (`primeAudio`), porque o navegador só deixa tocar som depois de uma interação — assim o aviso toca mesmo minimizado. No ícone do Timer (menu lateral e barra do celular), um ponto amarelo mostra que há uma sessão contando (cinza = pausada).
+
+### 4) Estatísticas — `stats.ts`
+
+- **Períodos** do calendário (fuso local): dia, semana (começando na segunda ou no domingo — Configurações), mês, ano ou um intervalo; ‹ › (ou `←`/`→`) vão para o anterior e o próximo do mesmo tamanho.
+- `aggregate` junta o tempo **válido** de um trecho de tempo: espalha o `duration` de cada sessão pelos `spans` dela (proporcionalmente — uma sessão editada para menos conta menos em cada trecho) e divide cada pedaço pelas horas do relógio: por dia, por hora do dia, por dia da semana, dias × horas (o mapa de calor), por categoria (uma categoria excluída conta como "sem categoria") e por atividade (a mesma atividade escrita de jeitos diferentes — maiúsculas, espaços — é uma só).
+- `evolution` monta as colunas: horas (dia), dias (semana, mês, intervalo de até 62 dias) ou meses (ano, intervalos maiores), marcando o que ainda não chegou.
+- **Comparação** (`comparisonRanges` + `compare`): com o período **em andamento**, compara só o mesmo trecho dos dois — de segunda até agora × de segunda até a mesma hora da semana passada (um mês mais curto fica inteiro, sem invadir o mês seguinte); períodos que já acabaram comparam inteiros. Variação percentual só quando o anterior tem tempo (`variation` → null; a tela mostra "novo" ou "antes: nada registrado", nunca "+∞%"); dois períodos vazios mostram uma mensagem, sem gráfico.
+- Só **dados reais**: sem nenhuma sessão, a tela explica e oferece começar uma; um período vazio mostra "Nenhum tempo registrado…" no lugar do gráfico. A sessão em andamento entra quando for finalizada (o resumo de **Hoje**, na aba Sessão, já soma ela).
+
+### 5) A tela — `pages/timer.vue` e `components/timer/`
+
+- **Menções** (1.6.1): os registros do histórico podem ser mencionados nas notas e nas tarefas (item 10). Abrir uma menção chama `timer.revealSession(id)`: a aba vira **Histórico**, os filtros que esconderiam o registro saem, o período vai para o dele e a linha é destacada. "Ver menções" fica no menu do registro e no diálogo de edição.
+
+- Três áreas em abas: **Sessão** (`TimerSession.vue`: modo, mostrador `TimerDial.vue`, controles, atividade e categoria opcionais — `TimerCategoryPicker.vue` —, durações do temporizador, ciclos do Pomodoro em `PomodoroDialog.vue`, atividades recentes e o resumo de hoje), **Histórico** (`TimerHistory.vue` + `TimerSessionDialog.vue`) e **Estatísticas** (`TimerStats.vue`). A aba escolhida e o modo ficam no aparelho (`device-state`, "timer"); a duração do temporizador e os ciclos do Pomodoro, no `settings.json` (seção `timer`).
+- **Período**: `PeriodNav.vue`, o mesmo no Histórico (com "Tudo") e nas Estatísticas.
+- **Gráficos** próprios, em SVG/HTML (sem biblioteca): colunas (`TimerColumns.vue`, até 24 px, canto arredondado só em cima, grade fina, o maior valor escrito, balão por posição — mouse, toque ou teclado — e, comparando, o anterior em cinza ao lado, com legenda), rosca por categoria com a lista de nomes, tempos e porcentagens (`TimerDonut.vue`, no máximo 6 fatias, separadas por 2 px), barras horizontais com o valor escrito (`TimerBarList.vue`), mapa dias × horas numa cor só, do claro ao forte (`TimerHeatmap.vue`), comparação lado a lado (`TimerCompare.vue`) e, para cada gráfico de colunas, a **Tabela**. As cores das categorias são as que você escolhe; o nome aparece sempre junto (a cor nunca é o único jeito de saber qual é qual).
+- **Resumo / Detalhado**: o Detalhado acrescenta quando você registra tempo (dias × horas, partes do dia, dias da semana) e a tabela por categoria (tempo, %, sessões, média).
+- **Atalhos**: `Espaço` (iniciar, pausar, retomar — fora de campos e botões), `Ctrl+Enter` (finalizar), `Ctrl+N` (vai para a atividade), `←`/`→` (período). Celular: abas no topo, toque prolongado nos registros e nas categorias.
+- **Android**: com o app em segundo plano, o Android pode pausar a interface; a contagem continua certa (vem do relógio) e o aviso de fim aparece quando você volta. Um aviso do sistema no celular precisaria de um plugin de notificações (não incluído).
+
 ---
 
 ## Decisões de arquitetura (resumo)
@@ -994,6 +1095,12 @@ O 4notes **não sincroniza**: ele lê e grava a pasta, e quem a mantém igual no
 | Módulos | Lista única em `lib/modules.ts` (com o tutorial de cada um); ativos/menu em `.4notes/app.json` guardando só os desativados | Ativar/desativar nunca toca nos dados; um módulo novo aparece no menu, nos atalhos, nas Configurações e nos tutoriais sem mais nada. |
 | Tutoriais | Painel ao lado do menu (`?`/F1), não modal, com os atalhos de cada módulo | Ajuda rápida sem sair do módulo; os atalhos ficam junto do módulo, num lugar só. |
 | Recorrência | Data da próxima ocorrência + regra, calculado ao abrir | Funciona com o app fechado, sem processo em segundo plano. |
+| Descrição das tarefas (1.6.0) | O mesmo `MarkdownEditor` das notas, salvando Markdown no `"notes"` do `tasks.json`; o `@` põe a nota na lista estruturada da tarefa | Um editor só para manter; a formatação é idêntica à das notas; nada muda no formato do arquivo nem nas menções das tarefas. |
+| Timer: contagem (1.6.0) | Horários de início/fim de cada trecho + `Date.now()`; um alarme `setTimeout` para o fim; `advance` ao voltar | Certo com o app minimizado, em outro módulo, suspenso ou fechado — nunca depende de um contador da tela. |
+| Timer: dados (1.6.0) | `timer/timer.json` com categorias, histórico (com os trechos) e a sessão em andamento | Um arquivo legível; a sessão em andamento sobrevive a fechar o app e vai junto na sincronização; o id único evita registros duplicados. |
+| Timer: gráficos (1.6.0) | SVG/HTML próprios + tabela | Sem dependência nova; tema claro/escuro pelas variáveis CSS; leves no celular. |
+| Menções entre todos os módulos (1.6.1) | Um provedor por tipo de item na ponte (`stores/mentions.ts`); itens com id (tarefas, registros, links) pelo id, notas e mapas pelo caminho corrigido nas renomeações; nas notas continua um link Markdown comum | Um lugar só para o `@`, os chips e o "Ver menções"; um módulo novo entra sem integração separada; os arquivos continuam legíveis fora do app. Notas não ganharam um id próprio: isso mudaria o formato dos arquivos, e as renomeações feitas no app já são acompanhadas. |
+| Seleção de várias notas no mapa (1.6.1) | Ctrl + arrastar (área) e Ctrl + clique; no toque, "Selecionar área" no menu do vazio | Não briga com arrastar nota, Shift + arrastar (conectar) e arrastar o fundo (mover o mapa). |
 | Estado da interface | `.4notes/` | Separado dos dados; pode ser apagado. |
 | Editor | CodeMirror 6 | Editor de Markdown "de verdade" (o mesmo motor do Obsidian), com busca, desfazer e prévia ao vivo da formatação, listas, código e imagens. |
 | Grafo | Canvas próprio + layout radial próprio | Posições estáveis (o mapa não "flutua") e um "Reorganizar" que evita cruzamentos; sem biblioteca de física. |
@@ -1006,19 +1113,28 @@ O 4notes **não sincroniza**: ele lê e grava a pasta, e quem a mantém igual no
 | Tamanhos de tela | Três classes (`compact` / `medium` / `expanded`) marcadas no `<html>` + CSS de cada componente | Um layout certo para cada tela do Fold (e para celulares e tablets) sem duplicar componentes. |
 | Toque | Toque prolongado gera o `contextmenu`; o "voltar" do Android manda `Esc` | O app inteiro já tratava o clique direito e o Esc: menus, diálogos e painéis funcionam no toque sem reescrever cada um. |
 
-Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 entrou `@codemirror/language-data`, para colorir o código dos blocos), `electron`, `electron-builder` e `esbuild` (build). Para testes: `vitest`. (O `d3-force` da 1.0.0 saiu: o mapa não usa mais física.) A 1.3.1 não trouxe dependências: o SQLite que lê os favoritos do Firefox/Zen é o do próprio Node.js do Electron (`node:sqlite`), o LZ4 das cópias `.jsonlz4` é um descompactador de ~40 linhas e o PDF é impresso pelo próprio Chromium do Electron. A 1.5.0 trouxe só o Capacitor: `@capacitor/core`, `@capacitor/cli` e `@capacitor/android` (o app Android), `@capacitor/app` (voltar, voltar para o app, versão) e `@capacitor/filesystem` (arquivos) — o resto (HTTP nativo, barras do sistema) já vem no `@capacitor/core`. O desktop não carrega nada disso.
+Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 entrou `@codemirror/language-data`, para colorir o código dos blocos), `electron`, `electron-builder` e `esbuild` (build). Para testes: `vitest`. (O `d3-force` da 1.0.0 saiu: o mapa não usa mais física.) A 1.3.1 não trouxe dependências: o SQLite que lê os favoritos do Firefox/Zen é o do próprio Node.js do Electron (`node:sqlite`), o LZ4 das cópias `.jsonlz4` é um descompactador de ~40 linhas e o PDF é impresso pelo próprio Chromium do Electron. A 1.6.0 não trouxe dependências (Timer e gráficos feitos com o que o projeto já tinha). A 1.5.0 trouxe só o Capacitor: `@capacitor/core`, `@capacitor/cli` e `@capacitor/android` (o app Android), `@capacitor/app` (voltar, voltar para o app, versão) e `@capacitor/filesystem` (arquivos) — o resto (HTTP nativo, barras do sistema) já vem no `@capacitor/core`. O desktop não carrega nada disso.
 
 ## Testes
 
-- `npm test` — testes unitários das regras puras (datas, recorrência, tarefas, títulos, nomes de arquivo, formatação, marcação de listas/tarefas, níveis e numeração automática das listas, blocos de código e detecção de linguagem, caminhos das imagens, menções em tarefas e notas (inclusive a tarefas), links refeitos ao mover uma nota de pasta, categorias e `categorias.json`, pastas pelo título, primeira linha como título, nomes de workspace, `mapa.json`, conversão da 1.0.0, grafo, layout sem cruzamentos e compactação, marcação escondida (proteção, formatos guardados, marcações válidas, links), endereços e links repetidos, título e ícone de páginas, favoritos do Chromium/Opera e HTML, `links.json` e plano da importação; na 1.3.1: categoria automática pelo título, exportar TXT e PDF, biblioteca de imagens (uso, cópias iguais, adotar, excluir), favoritos do Firefox/Zen — `profiles.ini`, `places.sqlite`, `.jsonlz4` com LZ4 —, foto das categorias dos Links e ordem pela URL; na 1.3.2: bloco de texto — linhas próprias, formatos cortados, listas, cerca maior, dentro de blocos — e `Ctrl+D` — maiúsculas, palavra inteira, volta ao começo, partes escondidas, só o `Ctrl+D` cria seleções — em `tests/text-blocks-and-multiselect.test.ts`; na 1.4.0: lista dos módulos e tutoriais completos, preferências dos módulos — leitura tolerante, só desativados, nunca todos desligados — em `tests/modules.test.ts`; na 1.4.1: ordem dos módulos — guardada, completa, tolerante, desativados no lugar ao reorganizar, mover para cima/baixo — e o "Botão direito" de cada tutorial em `tests/modules.test.ts`, e versões das notas — número no título, comparação, anterior com pulos, mesma categoria no store — em `tests/note-versions.test.ts`; na 1.4.3: a próxima versão (regra e store) e o `Ctrl+D` — o código dos blocos fora da seleção da nota, e a variante de texto puro dos blocos e da tela cheia; na 1.5.0: `tests/settings-sync.test.ts` — passagem da 1.4.3 para o `settings.json`, estado da tela por aparelho e por workspace, seção gravada mantendo chaves de outras versões, releitura do que mudou em outro aparelho, arquivo com erro —, `tests/mobile-platform.test.ts` — a API do Android sobre um disco na memória com as regras do Android: maiúsculas, nada escapando do workspace, renomear, lixeira do workspace, imagens, criar/abrir/copiar workspace, permissão, biblioteca de imagens —, `tests/layout-size.test.ts` — os tamanhos do Fold, de celulares e de tablets — e as dicas de toque dos tutoriais).
+- `npm test` — testes unitários das regras puras (datas, recorrência, tarefas, títulos, nomes de arquivo, formatação, marcação de listas/tarefas, níveis e numeração automática das listas, blocos de código e detecção de linguagem, caminhos das imagens, menções em tarefas e notas (inclusive a tarefas), links refeitos ao mover uma nota de pasta, categorias e `categorias.json`, pastas pelo título, primeira linha como título, nomes de workspace, `mapa.json`, conversão da 1.0.0, grafo, layout sem cruzamentos e compactação, marcação escondida (proteção, formatos guardados, marcações válidas, links), endereços e links repetidos, título e ícone de páginas, favoritos do Chromium/Opera e HTML, `links.json` e plano da importação; na 1.3.1: categoria automática pelo título, exportar TXT e PDF, biblioteca de imagens (uso, cópias iguais, adotar, excluir), favoritos do Firefox/Zen — `profiles.ini`, `places.sqlite`, `.jsonlz4` com LZ4 —, foto das categorias dos Links e ordem pela URL; na 1.3.2: bloco de texto — linhas próprias, formatos cortados, listas, cerca maior, dentro de blocos — e `Ctrl+D` — maiúsculas, palavra inteira, volta ao começo, partes escondidas, só o `Ctrl+D` cria seleções — em `tests/text-blocks-and-multiselect.test.ts`; na 1.4.0: lista dos módulos e tutoriais completos, preferências dos módulos — leitura tolerante, só desativados, nunca todos desligados — em `tests/modules.test.ts`; na 1.4.1: ordem dos módulos — guardada, completa, tolerante, desativados no lugar ao reorganizar, mover para cima/baixo — e o "Botão direito" de cada tutorial em `tests/modules.test.ts`, e versões das notas — número no título, comparação, anterior com pulos, mesma categoria no store — em `tests/note-versions.test.ts`; na 1.4.3: a próxima versão (regra e store) e o `Ctrl+D` — o código dos blocos fora da seleção da nota, e a variante de texto puro dos blocos e da tela cheia; na 1.5.0: `tests/settings-sync.test.ts` — passagem da 1.4.3 para o `settings.json`, estado da tela por aparelho e por workspace, seção gravada mantendo chaves de outras versões, releitura do que mudou em outro aparelho, arquivo com erro —, `tests/mobile-platform.test.ts` — a API do Android sobre um disco na memória com as regras do Android: maiúsculas, nada escapando do workspace, renomear, lixeira do workspace, imagens, criar/abrir/copiar workspace, permissão, biblioteca de imagens —, `tests/layout-size.test.ts` — os tamanhos do Fold, de celulares e de tablets — e as dicas de toque dos tutoriais; na 1.6.0: `tests/timer.test.ts` — cronômetro com pausas, temporizador que termina com o app fechado no horário certo, Pomodoro (etapas, pausa longa, início automático, etapa que terminou com o app fechado esperando você, pular pausa, interrompida, cancelada com os ciclos completos), `timer.json` (ida e volta, arquivo editado à mão, sem duplicar, categoria excluída sem perder o histórico), atividades recentes, configurações, períodos (semana na segunda ou no domingo, anterior/próximo, nomes), estatísticas (sessão que passa da meia-noite, pausas fora, tempo editado, filtro de categoria, evolução, comparação com o mesmo trecho, mês mais curto, variação sem "+∞%"), textos e durações digitadas — em três fusos —, a descrição das tarefas (Markdown guardado, prévia sem marcação) e as imagens das descrições na biblioteca; na 1.6.1: `tests/mentions-all-modules.test.ts` — caminhos de menção de todos os tipos, links das notas para registros do Timer e mapas, título novo de registro/tarefa, mapa renomeado, link salvo com endereço novo, links de um texto, menções das tarefas de todos os tipos (ida e volta, leitura tolerante, renomeações, `tasks.json`) e a ordem da lista do `@` (palavra por palavra, mais recentes primeiro)).
 - `npm run typecheck` — TypeScript estrito na interface e no Electron.
 - Durante o desenvolvimento, o app também foi testado de ponta a ponta dirigindo o Electron real (workspaces, notas, abas, formatação, listas, checklists e numeração automática, código e imagens colados e apagados, menus do clique direito, tarefas recorrentes com datas simuladas e app fechado, menções em tarefas e notas depois de reabrir, categorias criadas/renomeadas/excluídas com imagem e cor nas abas, notas arrastadas para categorias, pastas pelo título, menções a tarefas nas Notas e no Mapa, mapas mentais com conversão da 1.0.0, conexões e notas novas por arraste, cores, vários mapas, layout salvo, fechamento seguro; na 1.3.0: ícones nas categorias, + nas pastas pelo título, fechar notas de categoria sem pergunta, Markdown escondido com teclado, mouse e acentos compostos, links e blocos de código no editor, e o módulo Links inteiro com sites locais de teste e perfis falsos do Brave/Opera; na 1.3.1: as abas das Configurações com o "?", iniciar com o computador (simulado), configurações dos módulos gravadas no workspace, categoria automática pelo título, CAIXA ALTA nas pastas, exportar TXT/PDF (conferido com `pdftotext`), biblioteca de imagens — enviar, escolher, inserir, remover da nota, excluir, `Esc` com modais empilhados —, fotos nas categorias das Notas e dos Links, "Sem categoria", ordem pela URL, importação de perfis falsos do Zen — `places.sqlite` com `-wal` — e do Firefox — só a cópia `.jsonlz4` —, menções a links com o ícone do site, e o tema escuro; na 1.3.2: bloco de texto pela barra — cartão, copiar, editar no cartão, tela cheia, remover e desfazer, listas e negrito, bloco grande com rolagem, tema escuro —, colar texto/listas/trechos longos sem virar bloco (e código continuando a virar), `Ctrl+D` com duplo clique, digitação, `Ctrl+Z`, `Esc`, `Ctrl+clique` e `Ctrl+B`, nas Notas e no Mapa Mental, e o painel das Tarefas fechando ao clicar fora — com os casos que não podem fechar; na 1.4.0: ligar/desligar módulos pelo botão direito e pelas Configurações (quadros da animação, prévia do menu por cima do fundo, último módulo não desliga), dados intactos, `app.json`, "só o ícone", desligar o módulo aberto, `Ctrl+2` e menção para módulo desligado com "Ativar", tutoriais por F1, "?", Configurações e trocando de módulo, tema escuro e reinício do app; na 1.4.1: tela cheia do bloco de texto com a margem do editor, a corrente de versões (`1.4.1` → `1.4.0` → `1.3.2`, ignorando outra categoria) e o botão sumindo, desfoque das Configurações › Módulos começando depois da barra de título e do menu, arrastar no menu lateral e nas Configurações — com módulo desativado, só ícone, `Esc`, clique simples ainda abrindo o módulo —, "Mover para cima" no botão direito, ordem depois de reiniciar, `Ctrl+2` preso às Tarefas, os sons na hora certa e um só em liga/desliga seguidos — e renderizados para medir volume e duração —, o tutorial fechando ao clicar fora e não fechando ao clicar dentro, no **?**, no "Abrir" das Configurações ou arrastando um módulo; na 1.4.2: barra e rodapé do mapa sem o botão de configurações, sem o `Ctrl K` e sem a dica fixa — com `Ctrl+K` ainda indo para a busca —, a engrenagem, e a animação de clique em 14 tipos de ícone (módulos, tema, tutorial, configurações, abas, fechar, reorganizar, zoom, +, blocos de código, lista, opções), pelo teclado, medida quadro a quadro, e os casos que não animam — × de aba, caixa de concluir tarefa, "reduzir movimento"; na 1.4.3: o cartão do bloco sem crescer ao clicar, ao dar duplo clique e digitando, com rolagem interna; duplo clique e seleção destacada (código e texto, no cartão e na tela cheia), `Ctrl+D` e edição das ocorrências juntas, `Ctrl+Z` pelo histórico da nota (teclado e menu), outras ocorrências só contornadas, `↑`/`↓`/`Esc` entrando e saindo, `Ctrl+D` da nota sem entrar nos blocos, `Ctrl+F` da nota mostrando o achado no bloco, `Enter` em ` ```py `, a cerca crescendo, `Backspace` num bloco vazio, botões do cabeçalho, o mesmo no painel da nota do Mapa Mental, texto mudado por fora, nota com 40 blocos, tema escuro e os botões de versão anterior/próxima). O instalador do Windows foi testado no Wine (tela "Atalhos", reinstalação e desinstalação).
 - Na 1.5.0, a interface do Android foi testada num Chromium com toque de verdade (vários dedos, pelo protocolo do Chrome) e o disco do Android na memória, nos tamanhos do Galaxy Z Fold — tela externa 344×882 e deitada, interna 690×829 e deitada — e de um celular comum, nos temas claro e escuro: criar o workspace pelo seletor de pastas, Notas (lista ↔ nota, barra de formatação fixa, voltar), toque prolongado e menus em folha, Tarefas e Links nas gavetas, **Mais**, tema gravado no workspace, abrir e fechar o Fold no meio do uso; no mapa, pinça, arrastar nota e mapa, alça de conexão, soltar no vazio, toque duplo, menu, abrir e voltar. No Electron real: a passagem de um workspace da 1.4.3 (configurações, backups, `mindmap.json` só com as posições), configurações mudadas "em outro aparelho" aplicadas ao voltar para a janela e o desktop igual a antes (menus, Shift+arrastar, F1 sem a parte do toque, abas e último módulo restaurados depois de reiniciar). O APK em si é compilado no computador de quem gera (`npm run build:android`).
+- Na 1.6.0, no Electron real: a descrição das tarefas (texto antigo, `Ctrl+B`, listas, checklist, barra de formatação dentro do painel e quebrando em fileiras, itálico pela barra, `@` com só notas, `Esc` fechando só a lista, `Enter` escolhendo dentro de um trecho em itálico, menção indo para "Notas mencionadas", reabrir, trocar de tarefa, título, clicar fora, nova tarefa formatada, prévia na lista, tema escuro) e o Timer inteiro (cronômetro com troca de módulo, pausa e retomada, ponto no menu, finalizar/Desfazer/`Ctrl+Enter`; temporizador de 5 s pela tela e terminando com o app fechado; cronômetro contando com o app fechado; cancelar curto; Pomodoro com a etapa terminada com o app fechado, pausa, pular pausa e finalizar no meio do foco; categoria nova e excluída sem perder o histórico; histórico com busca, agrupamentos, edição do tempo válido e limite, excluir/Desfazer e `←`; estatísticas — total, colunas, rosca, comparação com o mesmo trecho, colunas lado a lado, tabela, detalhado, filtro de categoria, mês, dia, período vazio —; configurações do Timer no workspace e o tutorial pelo F1). Num Chromium com toque e o disco do Android na memória, nos tamanhos do Fold (344×882 e 690×829): o Timer em **Mais**, iniciar e finalizar pelo toque, as três áreas sem rolagem para o lado, toque prolongado num registro e a barra de formatação fixa na descrição da tarefa.
+- Na 1.6.1, no Electron real: a seleção de várias notas do mapa (Ctrl + arrastar, Ctrl + clique para pôr e tirar, Ctrl + clique no vazio mantendo a seleção, mover o grupo com as posições relativas e as conexões iguais e gravadas, menu do grupo, Delete em lote com um Desfazer que traz notas, conexões, cor e posições, Esc, convivência com Shift + arrastar, arrastar uma nota sozinha, mover o mapa e clicar para abrir, "Selecionar área" pelo menu, cor para o grupo, mapa com 400 notas, tema escuro) e as menções (lista do `@` nas notas com registros do Timer, mapas, links e tarefas — com "de onde é" e busca por categoria + data —, chips, abrir no módulo certo com o registro destacado no Histórico, título novo de registro, registro excluído e Desfazer, endereço novo de link, mapa renomeado, `@` no título, no "Mencionar" e na descrição das tarefas sem a própria tarefa, `@` nas notas do mapa, "Ver menções" no Timer — menu e diálogo — e nos Links levando até a tarefa e a nota, depois de reiniciar o app). Num Chromium com toque, no Fold fechado: "Selecionar área" segurando o dedo, tocar para pôr e tirar, mover o grupo com o dedo, excluir e Desfazer pela barra, e o `@` de uma nota do mapa listando registros do Timer.
 
 ## Onde mexer para…
 
 | Quero… | Arquivo |
 | --- | --- |
+| Mudar a descrição das tarefas (editor, prévia na lista) | `app/components/tasks/TaskDrawer.vue`, `app/lib/tasks/description.ts` |
+| Mudar como o Timer conta o tempo (pausas, Pomodoro, fim) | `app/lib/timer/engine.ts` (regras), `app/stores/timer.ts` (relógio, avisos, gravação) |
+| Mudar o `timer.json` (formato, categorias, sem duplicar) | `app/lib/timer/model.ts`, `app/lib/timer/repository.ts` |
+| Mudar as estatísticas / a comparação / os períodos | `app/lib/timer/stats.ts`, `app/components/timer/TimerStats.vue`, `TimerCompare.vue`, `PeriodNav.vue` |
+| Mudar os gráficos do Timer | `app/components/timer/TimerColumns.vue`, `TimerDonut.vue`, `TimerBarList.vue`, `TimerHeatmap.vue`, `ChartTip.vue` |
+| Mudar a tela de sessão / o histórico do Timer | `app/components/timer/TimerSession.vue`, `TimerDial.vue`, `TimerHistory.vue`, `TimerSessionDialog.vue` |
+| Mudar as configurações ou o som do Timer | `app/lib/timer/settings.ts`, `app/components/timer/TimerSettings.vue`, `app/lib/sounds.ts` (`timer-end`, `phase-end`) |
 | Mudar cores/tema | `app/assets/css/tokens.css` |
 | Mudar a regra do título das notas | `app/lib/notes/title.ts` (e `app/lib/editor/title-line.ts`, a primeira linha como título) |
 | Mudar as categorias das Notas | `app/lib/notes/categories.ts` (regras e `categorias.json`), `app/stores/notes.ts` (mover, renomear, excluir), `app/components/notes/NoteCategoryDialog.vue` |
@@ -1046,7 +1162,9 @@ Dependências usadas no app: `nuxt`/`vue`, `@codemirror/*` (editor — na 1.1.0 
 | Mudar a versão anterior/próxima das notas | `app/lib/notes/versions.ts` (regra), `previousVersionOf`/`nextVersionOf` em `app/stores/notes.ts` (grupo), `NotesTabs.vue` (botões) |
 | Mudar o painel dos tutoriais | `app/components/shell/TutorialPanel.vue`, `app/composables/useTutorial.ts` |
 | Mudar a categoria automática pelo título | `app/lib/notes/auto-category.ts` (regra), `app/stores/notes.ts` (`considerAutoCategory`) |
-| Mudar as menções | `app/lib/tasks/mentions.ts` (tarefas), `app/lib/editor/mentions.ts` + `app/lib/notes/mention-links.ts` (notas), `app/stores/mentions.ts` (ponte) |
+| Mudar as menções | `app/stores/mentions.ts` (provedores: listar, descrever, abrir; "Ver menções"; correções), `app/lib/mentions/refs.ts` (menções das tarefas), `app/lib/mentions/catalog.ts` (ícones, textos, ordem do `@`), `app/lib/editor/mentions.ts` + `app/lib/notes/mention-links.ts` (notas), `MentionPicker.vue`/`MentionChip.vue` (tarefas), `MentionsDialog.vue` |
+| Deixar um módulo novo ser mencionado | um provedor em `PROVIDERS` (`app/stores/mentions.ts`) + uma linha em `MENTION_KINDS` (`app/lib/mentions/catalog.ts`) + o tipo em `lib/notes/mention-links.ts`/`lib/mentions/refs.ts` |
+| Mudar a seleção de várias notas do mapa | `app/lib/mindmap/graph-view.ts` (área, Ctrl + clique, mover o grupo), `app/pages/mindmap.vue` (barra, menu do grupo, Delete), `deleteNotes`/`setColors` em `app/stores/mindmap.ts` |
 | Mudar Tab/Shift+Tab ou a numeração das listas | `app/lib/editor/lists.ts` |
 | Mudar a animação de clique dos ícones | `app/plugins/icon-tap.client.ts` (movimento, quais controles, exceções) |
 | Mudar os desenhos dos ícones (engrenagem das Configurações etc.) | `app/lib/icons.ts` |

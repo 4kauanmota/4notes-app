@@ -1,7 +1,7 @@
 /**
- * Sons curtos dos módulos (ligar/desligar), sintetizados com a Web Audio API — sem
- * arquivos de áudio. Saem pela saída padrão do sistema: seguem o volume e o mudo
- * do Windows.
+ * Sons curtos dos módulos (ligar/desligar) e do Timer (o tempo acabou, a etapa do
+ * Pomodoro terminou), sintetizados com a Web Audio API — sem arquivos de áudio.
+ * Saem pela saída padrão do sistema: seguem o volume e o mudo do Windows.
  *
  * - Ligar: um clique suave de encaixe e duas notas subindo (sol → ré).
  * - Desligar: um "pop" abafado e duas notas descendo (dó → mi), a segunda caindo.
@@ -12,6 +12,9 @@
  */
 
 export type ModuleSound = 'connect' | 'disconnect'
+/** Timer: o temporizador (ou a sessão) acabou; uma etapa do Pomodoro terminou. */
+export type TimerSound = 'timer-end' | 'phase-end'
+type SoundKind = ModuleSound | TimerSound
 
 /** Volume geral (0–1): discreto. */
 const MASTER = 0.55
@@ -40,7 +43,7 @@ interface SoundSpec {
   click: { at: number; gain: number; freq: number; q: number; length: number }
 }
 
-const SOUNDS: Record<ModuleSound, SoundSpec> = {
+const SOUNDS: Record<SoundKind, SoundSpec> = {
   connect: {
     click: { at: 0, gain: 0.16, freq: 2600, q: 1.4, length: 0.018 },
     voices: [
@@ -58,15 +61,38 @@ const SOUNDS: Record<ModuleSound, SoundSpec> = {
       { freq: 330, to: 300, type: 'sine', at: 0.09, gain: 0.035, decay: 0.22 },
     ],
   },
+  // Timer: um sininho de três notas subindo (dó → mi → sol), com um brilho por cima.
+  // Um pouco mais presente que os sons dos módulos (é um aviso), sem repetir.
+  'timer-end': {
+    click: { at: 0, gain: 0.05, freq: 3200, q: 1.2, length: 0.012 },
+    voices: [
+      { freq: 1047, type: 'sine', at: 0.0, gain: 0.13, decay: 0.42 },
+      { freq: 2094, type: 'sine', at: 0.0, gain: 0.02, decay: 0.2 },
+      { freq: 1319, type: 'sine', at: 0.2, gain: 0.13, decay: 0.42 },
+      { freq: 2638, type: 'sine', at: 0.2, gain: 0.02, decay: 0.2 },
+      { freq: 1568, type: 'sine', at: 0.4, gain: 0.15, decay: 0.62 },
+      { freq: 3136, type: 'sine', at: 0.4, gain: 0.02, decay: 0.3 },
+    ],
+  },
+  // Etapa do Pomodoro: duas notas (sol → dó), mais curto
+  'phase-end': {
+    click: { at: 0, gain: 0.04, freq: 2800, q: 1.2, length: 0.012 },
+    voices: [
+      { freq: 784, type: 'sine', at: 0.0, gain: 0.12, decay: 0.32 },
+      { freq: 1568, type: 'sine', at: 0.0, gain: 0.015, decay: 0.16 },
+      { freq: 1047, type: 'sine', at: 0.18, gain: 0.13, decay: 0.46 },
+      { freq: 2094, type: 'sine', at: 0.18, gain: 0.015, decay: 0.22 },
+    ],
+  },
 }
 
 /** Duração de um som (s): a última nota e o rabo dela. */
-export function soundLength(kind: ModuleSound): number {
+export function soundLength(kind: SoundKind): number {
   return Math.max(...SOUNDS[kind].voices.map((voice) => voice.at + voice.decay * 1.6)) + 0.02
 }
 
 /** Monta o som em `ctx`, começando em `start` (s). */
-function schedule(ctx: BaseAudioContext, kind: ModuleSound, start: number): void {
+function schedule(ctx: BaseAudioContext, kind: SoundKind, start: number): void {
   const spec = SOUNDS[kind]
   const master = ctx.createGain()
   master.gain.value = MASTER
@@ -115,7 +141,35 @@ function schedule(ctx: BaseAudioContext, kind: ModuleSound, start: number): void
  * escondida ou outro som acabou de tocar).
  */
 export function playModuleSound(kind: ModuleSound): boolean {
-  if (typeof window === 'undefined' || typeof AudioContext === 'undefined' || document.hidden) return false
+  if (typeof window === 'undefined' || document.hidden) return false
+  return play(kind)
+}
+
+/**
+ * Toca o aviso do Timer — também com o 4notes minimizado (é para isso que ele existe).
+ * false = não tocou (sem áudio ou outro som acabou de tocar).
+ */
+export function playTimerSound(kind: TimerSound): boolean {
+  if (typeof window === 'undefined') return false
+  return play(kind)
+}
+
+/**
+ * Prepara o áudio durante um clique (o "Iniciar" do Timer): o navegador só deixa tocar
+ * som depois que você interagiu com a página — assim o aviso toca mesmo minimizado.
+ */
+export function primeAudio(): void {
+  if (typeof window === 'undefined' || typeof AudioContext === 'undefined') return
+  try {
+    context ??= new AudioContext({ latencyHint: 'interactive' })
+    if (context.state === 'suspended') void context.resume().then(() => context?.suspend()).catch(() => undefined)
+  } catch {
+    // sem áudio: o aviso continua aparecendo na tela
+  }
+}
+
+function play(kind: SoundKind): boolean {
+  if (typeof AudioContext === 'undefined') return false
   const now = performance.now()
   if (now - lastPlayed < MIN_GAP) return false
   lastPlayed = now
@@ -134,7 +188,7 @@ export function playModuleSound(kind: ModuleSound): boolean {
 }
 
 /** O som renderizado fora do alto-falante (para os testes): as amostras, em mono. */
-export async function renderModuleSound(kind: ModuleSound, sampleRate = 44100): Promise<Float32Array> {
+export async function renderModuleSound(kind: SoundKind, sampleRate = 44100): Promise<Float32Array> {
   const ctx = new OfflineAudioContext(1, Math.ceil(soundLength(kind) * sampleRate), sampleRate)
   schedule(ctx, kind, 0)
   const rendered = await ctx.startRendering()

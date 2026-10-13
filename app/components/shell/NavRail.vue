@@ -27,6 +27,7 @@ import { modKeyLabel } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
 import { EFFECT_MS, useModulesStore, type ModuleEffect } from '~/stores/modules'
 import { useTasksStore } from '~/stores/tasks'
+import { useTimerStore } from '~/stores/timer'
 
 const route = useRoute()
 const app = useAppStore()
@@ -37,6 +38,9 @@ const mod = modKeyLabel()
 
 const dueCount = computed(() => tasks.progress.value.total - tasks.progress.value.done)
 const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : 0)
+const timer = useTimerStore()
+/** Timer com uma sessão em andamento: um ponto no ícone (pulsando enquanto conta). */
+const liveOf = (id: ModuleId) => (id === 'timer' && timer.state.active ? (timer.state.active.runningSince !== null ? 'running' : 'paused') : null)
 
 const labels = computed(() => modules.state.prefs.navStyle === 'icon-label')
 // A largura do menu é de todo o app (a logo da barra de título se alinha com ele)
@@ -281,7 +285,7 @@ function toggleTheme(event: MouseEvent) {
         :class="itemClasses(item)"
         :style="pingOf(item.id) ? { '--ping': `${pingOf(item.id)!.delay}ms` } : undefined"
         :data-module="item.id"
-        :data-tip="`${item.name}  ·  ${mod}+${item.key}`"
+        :data-tip="`${item.name}${liveOf(item.id) ? (liveOf(item.id) === 'running' ? ' (contando)' : ' (pausado)') : ''}  ·  ${mod}+${item.key}`"
         data-tip-pos="right"
         :aria-label="item.name"
         :tabindex="effectOf(item.id)?.kind === 'disconnect' ? -1 : undefined"
@@ -293,6 +297,9 @@ function toggleTheme(event: MouseEvent) {
           <span class="plug-ring" aria-hidden="true" />
           <Transition name="pop">
             <span v-if="badgeOf(item.id) > 0" class="rail-badge">{{ badgeOf(item.id) > 99 ? '99+' : badgeOf(item.id) }}</span>
+          </Transition>
+          <Transition name="pop">
+            <span v-if="liveOf(item.id)" class="rail-live" :class="liveOf(item.id)" data-live aria-hidden="true" />
           </Transition>
         </span>
         <span class="rail-label">{{ item.label }}</span>
@@ -450,6 +457,43 @@ function toggleTheme(event: MouseEvent) {
   line-height: 17px;
   text-align: center;
   box-shadow: 0 0 0 2px var(--chrome);
+}
+/* Timer com uma sessão em andamento: um ponto amarelo (pulsando enquanto conta) */
+.rail-live {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 2px var(--chrome);
+}
+.rail-live.paused {
+  background: var(--text-3);
+}
+.rail-live.running::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: live-pulse 1.8s var(--ease-out) infinite;
+}
+@keyframes live-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  to {
+    transform: scale(2.7);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-live.running::after {
+    animation: none;
+  }
 }
 .rail-bottom {
   display: flex;

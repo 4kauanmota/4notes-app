@@ -55,6 +55,11 @@ const props = defineProps<{
   mentions?: MentionHost
   /** A primeira linha de uma nota vazia já começa como título (Notas). */
   titleFirstLine?: boolean
+  /**
+   * A barra de formatação pode passar dos limites do editor (campos que crescem com o
+   * texto, num painel estreito: a descrição das tarefas).
+   */
+  toolbarOverflow?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -73,11 +78,15 @@ let applyingExternal = false
 /** Altura da barra com a fileira de cores aberta (ela cresce para longe do texto). */
 const TOOLBAR_HEIGHT = 76
 const TOOLBAR_HALF_WIDTH = 226
+/** Editor mais estreito que a barra: os botões quebram em duas fileiras (mais alta). */
+const TOOLBAR_HEIGHT_WRAPPED = 112
 const toolbar = reactive({
   visible: false,
   x: 0,
   y: 0,
   below: false,
+  /** Largura máxima (editor estreito: os botões quebram em duas fileiras); null = uma fileira. */
+  maxWidth: null as number | null,
   active: { formats: new Set<InlineFormat>(), color: null, link: null } as ActiveFormats,
   /** A seleção pode virar bloco de texto (fora de blocos de código/texto). */
   textBlock: false,
@@ -136,10 +145,15 @@ function placeToolbar(): void {
   const sameLine = Math.abs(start.top - end.top) < 4
   const centerX = sameLine ? (start.left + end.right) / 2 : start.left + 120
   const half = Math.min(TOOLBAR_HALF_WIDTH, box.width / 2 - 4)
+  const wrapped = box.width < TOOLBAR_HALF_WIDTH * 2 + 8
+  const height = wrapped ? TOOLBAR_HEIGHT_WRAPPED : TOOLBAR_HEIGHT
+  toolbar.maxWidth = wrapped ? Math.floor(box.width - 8) : null
   toolbar.x = Math.round(Math.min(Math.max(centerX - box.left, half + 4), box.width - half - 4))
   const above = start.top - box.top - 8
-  toolbar.below = above < TOOLBAR_HEIGHT + 4
-  toolbar.y = Math.round(toolbar.below ? Math.min(end.bottom - box.top + 8, box.height - TOOLBAR_HEIGHT - 4) : above)
+  toolbar.below = above < height + 4
+  // Presa dentro do editor — a não ser que ela possa sair dele (toolbarOverflow)
+  const lowest = props.toolbarOverflow ? Number.POSITIVE_INFINITY : box.height - height - 4
+  toolbar.y = Math.round(toolbar.below ? Math.min(end.bottom - box.top + 8, lowest) : above)
   toolbar.active = activeFormats(view.state)
   toolbar.textBlock = canWrapInTextBlock(view.state)
   toolbar.visible = true
@@ -448,7 +462,7 @@ defineExpose({
   <div
     ref="host"
     class="markdown-editor"
-    :class="{ docked }"
+    :class="{ docked, 'toolbar-overflow': toolbarOverflow }"
     @mousedown.capture="onMouseDown"
     @keydown="onKeydown"
     @contextmenu="onEditorContextMenu"
@@ -459,6 +473,7 @@ defineExpose({
       :x="toolbar.x"
       :y="toolbar.y"
       :below="toolbar.below"
+      :max-width="toolbar.maxWidth"
       :active="toolbar.active"
       :link-mode="toolbar.linkMode"
       :link-initial="toolbar.linkInitial"
@@ -490,6 +505,10 @@ defineExpose({
 .editor-parent,
 .markdown-editor :deep(.cm-editor) {
   height: 100%;
+}
+/* A barra de formatação pode sair do editor (ver toolbarOverflow) */
+.markdown-editor.toolbar-overflow {
+  overflow: visible;
 }
 /* Toque: a barra de formatação fica embaixo da nota (acima do teclado) */
 .markdown-editor.docked {

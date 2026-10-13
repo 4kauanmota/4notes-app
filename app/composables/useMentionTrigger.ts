@@ -1,11 +1,11 @@
 /**
- * "@" num campo de texto abre a lista de notas para mencionar.
+ * "@" num campo de texto abre a lista do que dá para mencionar (todos os módulos).
  *
  * O texto digitado depois do @ filtra a lista; ao escolher, o "@texto" vira o
- * título da nota (a frase continua legível) e a menção é guardada na tarefa.
+ * título do item (a frase continua legível) e a menção é guardada na tarefa.
  */
 import { nextTick, ref } from 'vue'
-import type { NoteRef } from '~/lib/tasks/mentions'
+import type { MentionRef } from '~/lib/mentions/refs'
 
 export interface MentionPickerControls {
   move(delta: number): void
@@ -16,7 +16,7 @@ interface Options {
   getText(): string
   setText(value: string): void
   element(): HTMLInputElement | HTMLTextAreaElement | undefined
-  onPick(ref: NoteRef, title: string): void
+  onPick(ref: MentionRef, title: string): void
 }
 
 const TRIGGER = /(?:^|\s)@([^\s@]{0,40})$/
@@ -41,7 +41,7 @@ export function useMentionTrigger(options: Options) {
     query.value = match[1]!
   }
 
-  function pick(ref: NoteRef, title: string): void {
+  function pick(ref: MentionRef, title: string): void {
     const el = options.element()
     const text = options.getText()
     if (start < 0) return

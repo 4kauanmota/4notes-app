@@ -43,7 +43,7 @@ export const ICONS: Record<string, string> = {
   done: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/>',
   alert: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17.2v.1"/>',
   undo: '<path d="M9 7 4.5 11.5 9 16"/><path d="M4.5 11.5H15a5 5 0 0 1 0 10h-2"/>',
-  /** Versão anterior de uma nota (relógio voltando). */
+  /** Histórico (relógio voltando): o Histórico do Timer. */
   history: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.5v3.8h3.8"/><path d="M12 8v4.2l2.8 1.8"/>',
   skip: '<path d="M5.5 6.5 13 12l-7.5 5.5z"/><path d="M17.5 6v12"/>',
   fit: '<path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/><circle cx="12" cy="12" r="2"/>',
@@ -124,6 +124,20 @@ export const ICONS: Record<string, string> = {
   puzzle: '<path d="M10.2 4.5a1.8 1.8 0 0 1 3.6 0V6h3.4a1.5 1.5 0 0 1 1.5 1.5v3.4h-1.4a1.8 1.8 0 0 0 0 3.6h1.4V18a1.5 1.5 0 0 1-1.5 1.5h-3.4v-1.3a1.8 1.8 0 0 0-3.6 0v1.3H6.8A1.5 1.5 0 0 1 5.3 18v-3.5h1.4a1.8 1.8 0 0 0 0-3.6H5.3V7.5A1.5 1.5 0 0 1 6.8 6h3.4z"/>',
   cloud: '<path d="M7.2 18.5a4.4 4.4 0 0 1-.4-8.8 6 6 0 0 1 11.6 1.9 3.5 3.5 0 0 1-.6 6.9z"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2"/>',
+  // ── Timer ──
+  /** Módulo Timer e o modo Cronômetro (relógio de mão, com o botão em cima). */
+  timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.6M10 2.8h4M12 2.8V6M17.6 7.3l1.6-1.6"/>',
+  /** Temporizador (contagem regressiva). */
+  hourglass: '<path d="M6.5 3.5h11M6.5 20.5h11"/><path d="M7.8 3.5c0 4.2 4.2 5.4 4.2 8.5s-4.2 4.3-4.2 8.5M16.2 3.5c0 4.2-4.2 5.4-4.2 8.5s4.2 4.3 4.2 8.5"/><path d="M9.6 18.4c.8-.9 1.6-1.4 2.4-1.4s1.6.5 2.4 1.4"/>',
+  /** Pomodoro (o tomate). */
+  pomodoro: '<path d="M12 7.2c-4.6 0-7.8 2.7-7.8 6.6 0 3.9 3.3 6.7 7.8 6.7s7.8-2.8 7.8-6.7c0-3.9-3.2-6.6-7.8-6.6z"/><path d="M12 7.2V4M12 7.2c-1-1.7-2.9-2.2-4.4-1.6M12 7.2c1-1.7 2.9-2.2 4.4-1.6"/>',
+  play: '<path d="M8 5.4v13.2a.6.6 0 0 0 .9.5l10.4-6.6a.6.6 0 0 0 0-1L8.9 4.9a.6.6 0 0 0-.9.5z"/>',
+  pause: '<path d="M8.5 5.5v13M15.5 5.5v13"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2.6"/>',
+  /** Estatísticas (gráfico de colunas). */
+  chart: '<path d="M4 20h16"/><path d="M7 16.5v-5M12 16.5V6.5M17 16.5v-8"/>',
+  'arrow-up': '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  'arrow-down': '<path d="M12 5v14M6 13l6 6 6-6"/>',
 }
 
 /** SVG completo de um ícone, para montar elementos fora do Vue. */

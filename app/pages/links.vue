@@ -17,6 +17,7 @@ import { droppedText, isExternalLinkDrag } from '~/lib/links/drag'
 import type { LinkSort, SavedLink } from '~/lib/links/model'
 import { canReveal, modKeyLabel } from '~/lib/platform'
 import { useLinksStore, type LinkSelection } from '~/stores/links'
+import { savedLinkSubject, showMentionsOf } from '~/stores/mentions'
 
 const links = useLinksStore()
 const mod = modKeyLabel()
@@ -195,6 +196,7 @@ async function linkMenu(link: SavedLink, event: MouseEvent) {
       { id: 'copy', label: 'Copiar endereço', hint: `${mod}+C` },
       { id: 'edit', label: 'Editar…', hint: 'F2' },
       { label: 'Mover para', submenu: moveTo },
+      { id: 'mentions', label: 'Ver menções' },
       { id: 'refresh', label: 'Atualizar título e ícone', enabled: !links.state.fetching.has(link.id) },
       separator,
       { id: 'delete', label: 'Excluir', danger: true, hint: 'Del' },
@@ -205,6 +207,7 @@ async function linkMenu(link: SavedLink, event: MouseEvent) {
   if (choice === 'open') links.openLink(link.id)
   else if (choice === 'copy') void links.copyLink(link.id)
   else if (choice === 'edit') openEdit(link.id)
+  else if (choice === 'mentions') showMentionsOf(savedLinkSubject(link))
   else if (choice === 'refresh') links.refreshLink(link.id)
   else if (choice === 'delete') links.deleteLink(link.id)
   else if (choice === 'move-new') openFolderDialog(null, link.id)

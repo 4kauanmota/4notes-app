@@ -20,7 +20,7 @@ import {
 } from '~/lib/notes/mention-links'
 import { titleFor } from '~/lib/editor/title-line'
 import { buildTitleTree, flattenTree, folderPathTo, type TitleTreeNode } from '~/lib/notes/title-tree'
-import { renamedRef } from '~/lib/tasks/mentions'
+import { renamedRef } from '~/lib/mentions/refs'
 
 /** Árvore em texto, para comparar: pastas com "/", nota da pasta com "*". */
 function outline(nodes: TitleTreeNode[], indent = ''): string[] {

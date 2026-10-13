@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { workspaceFileUrl, workspaceNameProblem } from '#shared/ipc'
 import { mentionMarkdown, mentionTarget, renameMentionLinks } from '~/lib/notes/mention-links'
-import { normalizeRefs, refKey, renamedRef, type NoteRef } from '~/lib/tasks/mentions'
+import { normalizeRefs, refKey, renamedRef, type MentionRef } from '~/lib/mentions/refs'
 
 describe('menções a notas', () => {
   it('lê de forma tolerante, completa o título e ignora repetidas', () => {
@@ -24,8 +24,8 @@ describe('menções a notas', () => {
   })
 
   it('acompanha notas e mapas renomeados no app', () => {
-    const note: NoteRef = { kind: 'note', path: 'notes/Ideias.md', title: 'Ideias' }
-    const mapNote: NoteRef = { kind: 'map', map: 'Principal', note: 'Godot.md', title: 'Godot' }
+    const note: MentionRef = { kind: 'note', path: 'notes/Ideias.md', title: 'Ideias' }
+    const mapNote: MentionRef = { kind: 'map', map: 'Principal', note: 'Godot.md', title: 'Godot' }
 
     expect(renamedRef(note, { type: 'note-renamed', from: 'notes/ideias.md', to: 'notes/Ideias 2D.md' })).toMatchObject({ path: 'notes/Ideias 2D.md' })
     expect(renamedRef(mapNote, { type: 'map-note-renamed', map: 'Principal', from: 'Godot.md', to: 'Godot 4.md' })).toEqual({
@@ -38,8 +38,8 @@ describe('menções a notas', () => {
   })
 
   it('menções de outras notas não mudam', () => {
-    const note: NoteRef = { kind: 'note', path: 'notes/Ideias.md', title: 'Ideias' }
-    const mapNote: NoteRef = { kind: 'map', map: 'Principal', note: 'Godot.md', title: 'Godot' }
+    const note: MentionRef = { kind: 'note', path: 'notes/Ideias.md', title: 'Ideias' }
+    const mapNote: MentionRef = { kind: 'map', map: 'Principal', note: 'Godot.md', title: 'Godot' }
     expect(renamedRef(note, { type: 'note-renamed', from: 'notes/Outra.md', to: 'notes/Nova.md' })).toBeNull()
     expect(renamedRef(note, { type: 'map-renamed', from: 'Principal', to: 'Jogos' })).toBeNull()
     expect(renamedRef(mapNote, { type: 'map-note-renamed', map: 'Estudos', from: 'Godot.md', to: 'Godot 4.md' })).toBeNull()

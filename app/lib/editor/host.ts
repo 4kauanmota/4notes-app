@@ -16,15 +16,16 @@ export interface CodeEditRequest {
   apply(code: string): void
 }
 
-/** Nota, tarefa ou link salvo que pode ser mencionado (ver mentions.ts). */
+/** Algo que pode ser mencionado: nota, mapa, tarefa, link salvo ou registro do Timer (ver mentions.ts). */
 export interface MentionTarget {
   /**
-   * Caminho no workspace: "notes/Ideias.md", "mindmap/Principal/Godot.md" ou,
-   * para tarefas, "tasks/tasks.json#<id>". Vazio nos links.
+   * Caminho de menção (lib/notes/mention-links.ts): "notes/Ideias.md",
+   * "mindmap/Principal/Godot.md", "mindmap/Principal/mapa.json", "tasks/tasks.json#<id>",
+   * "timer/timer.json#<id>" ou, nos links salvos, "links/links.json#<id>".
    */
   path: string
   title: string
-  /** De onde é: "Notas", "Notas · Trabalho", "Mapa · Principal", "Tarefa", "Link · nuxt.com"… */
+  /** De onde é: "Notas · Trabalho", "Mapa · Principal", "Tarefa · Estudos · 14/10", "Timer · Estudo · 12/10 · 1 h"… */
   where: string
   /** Link salvo (módulo Links): entra na nota como um link comum, [título](endereço). */
   url?: string
@@ -35,11 +36,13 @@ export interface MentionState {
   title: string
   /** Tarefa concluída. */
   done?: boolean
+  /** De onde é / detalhes para a dica do chip ("Estudo · 12/10 · 1 h 20 min"). */
+  detail?: string
 }
 
-/** Menções a notas, tarefas e links (só nos editores em que o app liga o recurso). */
+/** Menções (só nos editores em que o app liga o recurso). */
 export interface MentionHost {
-  /** Notas, tarefas e links salvos para mencionar, filtrados pelo texto digitado depois do "@". */
+  /** Itens de todos os módulos para mencionar, filtrados pelo texto digitado depois do "@". */
   search(query: string): Promise<MentionTarget[]>
   /** Título e estado atuais; null se não existe mais. */
   describe(path: string): MentionState | null
@@ -49,6 +52,12 @@ export interface MentionHost {
   revision(): string
   /** Ícone do site (endereço da imagem) quando o link é um link salvo no módulo Links; null = não é. */
   linkIcon?(url: string): string | null
+  /**
+   * Escolher na lista do "@" sem inserir um link: devolve o texto que fica no lugar do
+   * "@…" (a descrição das tarefas: o título da nota, e a nota vai para a lista "Notas
+   * mencionadas" da tarefa). Sem isso, entra o link da menção.
+   */
+  choose?(target: MentionTarget): string
 }
 
 export interface EditorHost {
@@ -68,7 +77,7 @@ export interface EditorHost {
   chooseLanguage?(current: string): Promise<string | null>
   /** Aviso rápido; `undo` mostra o botão "Desfazer". */
   notify(message: string, undo?: () => void): void
-  /** Menções a notas, tarefas e links (@). Sem isso, links para notas aparecem como links comuns. */
+  /** Menções a itens dos módulos (@). Sem isso, links para notas aparecem como links comuns. */
   mentions?: MentionHost
   /** A primeira linha de uma nota vazia já começa como título (# ). */
   titleFirstLine?: boolean

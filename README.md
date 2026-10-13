@@ -1,15 +1,18 @@
 # 4notes
 
-Aplicativo pessoal de organização, no **computador (Windows)** e no **celular (Android)**: **Notas** rápidas em abas, **Tarefas** com categorias e recorrência, **Mapas Mentais** de notas permanentes conectadas por setas e **Links** salvos em categorias — tudo salvo em arquivos comuns, em **workspaces** (pastas) que você cria e nomeia.
+Aplicativo pessoal de organização, no **computador (Windows)** e no **celular (Android)**: **Notas** rápidas em abas, **Tarefas** com categorias e recorrência, **Mapas Mentais** de notas permanentes conectadas por setas, **Links** salvos em categorias e um **Timer** (cronômetro, temporizador e Pomodoro, com histórico e estatísticas) — tudo salvo em arquivos comuns, em **workspaces** (pastas) que você cria e nomeia.
 
 - 100% local: sem login, sem servidor, sem banco de dados.
-- Arquivos legíveis: Markdown (`.md`) para notas e JSON para tarefas, conexões do mapa e links.
+- Arquivos legíveis: Markdown (`.md`) para notas e JSON para tarefas, conexões do mapa, links e o Timer.
 - Editor que esconde o Markdown: você vê só o texto formatado — títulos, listas e checklists de verdade, negrito, links, blocos de código coloridos, imagens coladas (prints) — e nunca os `**`, `#` ou as cercas dos blocos.
 - Formatação ao selecionar texto (negrito, itálico, sublinhado, cor, marca-texto, link, listas…).
 - Notas em **categorias** (pastas com cor e um ícone pronto ou uma foto) e agrupadas em pastas pelo título, com **+** para criar a nota direto na pasta. Exporte uma nota como **TXT** ou **PDF**.
 - **Links**: cole um endereço e pronto — o título e o ícone do site chegam sozinhos. Categorias com cor, ícone ou foto, busca, ordem pela URL e importação dos favoritos do navegador (inclusive Firefox e Zen).
 - **Biblioteca de imagens**: toda imagem enviada ao 4notes fica guardada para usar de novo — numa nota, numa categoria das Notas ou dos Links.
-- Notas mencionam notas, tarefas e links salvos (`@`); tarefas mencionam notas — um clique abre.
+- **Tarefas** com a mesma formatação das notas na descrição (negrito, listas, checklists, código…).
+- **Timer**: cronômetro, temporizador e Pomodoro com categorias e atividades; histórico filtrável e estatísticas com gráficos e comparação com o período anterior. A contagem segue pelo relógio — trocar de módulo, minimizar ou fechar o app não atrapalha.
+- **Menções** (`@`) entre todos os módulos: notas e tarefas mencionam notas, mapas, tarefas, links salvos e registros do Timer — um clique abre o item no módulo dele. No Timer e nos Links, **Ver menções** mostra onde cada item foi mencionado.
+- **Mapa Mental** com seleção de várias notas: `Ctrl + arrastar` seleciona uma área; arraste uma delas para mover todas, ou exclua/pinte o grupo de uma vez.
 - Tema claro e escuro, em roxo e amarelo.
 - **No celular também**: o app Android abre o mesmo workspace. Com a pasta sincronizada (Google Drive…), notas, tarefas, mapas, links e configurações são os mesmos no computador e no celular. A tela se adapta ao celular, ao dobrável fechado ou aberto e ao tablet, e o toque prolongado faz o papel do botão direito (veja [Celular (Android)](#celular-android)).
 
@@ -56,7 +59,7 @@ Outros comandos:
 | `npm run android:open`  | Abre o projeto `android/` no Android Studio                         |
 | `npm run build:ios`     | iOS: ainda não incluído — explica o que falta                       |
 | `npm run build:web`     | Só a interface (`.output/public`), usada pelo Windows e pelo Android |
-| `npm test`              | Testes da lógica (datas, recorrência, editor, código, menções, categorias, mapa, links, exportar, biblioteca, favoritos, configurações, celular)|
+| `npm test`              | Testes da lógica (datas, recorrência, editor, código, menções, categorias, mapa, links, exportar, biblioteca, favoritos, configurações, celular, Timer)|
 | `npm run typecheck`     | Verificação de tipos (TypeScript) da interface e do Electron        |
 
 ## Gerando o app Android
@@ -76,7 +79,7 @@ O app Android usa a **mesma interface** do Windows (a pasta `app/`); só muda a 
 O que o `build:android` faz (`scripts/android.mjs`): encontra o Java e o SDK do Android Studio (ou usa `JAVA_HOME`/`ANDROID_HOME`), gera a interface (`nuxt generate`), copia para o projeto `android/` (`npx cap sync android`) e compila o APK com o Gradle.
 
 - **Assinatura**: sem configurar nada, o APK é assinado com a chave de testes do Android Studio do seu computador — serve para instalar no seu celular. Gere as próximas versões **no mesmo computador**: um APK assinado com outra chave não atualiza o app instalado (o Android pede para desinstalar antes; o workspace não é apagado). Para ter uma chave própria, crie `android/keystore.properties` com `storeFile`, `storePassword`, `keyAlias` e `keyPassword` (fica fora do Git).
-- **Versão**: a mesma do `package.json` (`1.5.0` vira o código 10500). Aumente antes de gerar uma atualização — o Android não instala uma versão menor por cima.
+- **Versão**: a mesma do `package.json` (`1.6.1` vira o código 10601). Aumente antes de gerar uma atualização — o Android não instala uma versão menor por cima.
 - **iOS**: ainda não. O mesmo código serve (Capacitor), mas o build exige um Mac com o Xcode e o iOS não deixa um app usar uma pasta qualquer como workspace — `npm run build:ios` explica o que falta.
 
 ## Instalando em outro computador
@@ -113,7 +116,7 @@ Dicas:
 
 - Use um aparelho de cada vez e deixe a sincronização terminar antes de trocar. Se o mesmo arquivo mudar nos dois aparelhos antes de sincronizar, quem resolve o conflito é o app de sincronização.
 - Ao voltar para o 4notes (e a cada minuto com ele aberto), os arquivos são relidos: o que mudou no outro aparelho aparece sozinho.
-- **Igual nos dois aparelhos**: notas, tarefas, mapas (com as posições dos nós), links, imagens, o tema e todas as configurações. **De cada aparelho**: abas abertas, último módulo, mapa aberto e a lista lateral aberta ou fechada.
+- **Igual nos dois aparelhos**: notas, tarefas, mapas (com as posições dos nós), links, o histórico do Timer (e a sessão em andamento), imagens, o tema e todas as configurações. **De cada aparelho**: abas abertas, último módulo, mapa aberto e a lista lateral aberta ou fechada.
 - Os dois aparelhos precisam da 1.5.0 ou mais recente (as configurações mudaram de lugar na 1.5.0).
 
 ### Usando no celular
@@ -126,7 +129,7 @@ Dicas:
 
 ## Workspaces (onde ficam os dados)
 
-Um **workspace** é uma pasta com todos os dados: notas, tarefas, mapas, links e imagens. O nome dele é o nome da pasta e aparece no canto superior esquerdo — clique nele para trocar de workspace.
+Um **workspace** é uma pasta com todos os dados: notas, tarefas, mapas, links, o Timer e imagens. O nome dele é o nome da pasta e aparece no canto superior esquerdo — clique nele para trocar de workspace.
 
 - **Criar workspace**: você escolhe o local (não existe pasta sugerida) e digita o nome; o 4notes cria lá dentro uma pasta com esse nome e guarda tudo nela.
 - **Abrir workspace**: escolha qualquer pasta. Se ela já tiver dados do 4notes, eles aparecem; se estiver vazia, vira um workspace novo (dá para copiar os dados do workspace atual para ela).
@@ -147,6 +150,8 @@ Um **workspace** é uma pasta com todos os dados: notas, tarefas, mapas, links e
     ├── links/
     │   ├── links.json       Links salvos e categorias (cor, ícone e foto)
     │   └── icons/           Ícones dos sites (nuxt.com.png…), um por site
+    ├── timer/
+    │   └── timer.json       Timer: categorias, histórico das sessões e a sessão em andamento
     ├── attachments/         Biblioteca de imagens: coladas nas notas (imagem-AAAAMMDD-HHMMSS.png), enviadas, fotos das categorias
     └── .4notes/             settings.json (tema e configurações — as mesmas em todos os aparelhos), mindmap.json (posições dos nós), backups/ e, no celular, trash/ (o que foi excluído)
 ```
@@ -183,14 +188,30 @@ A formatação continua sendo Markdown: `# título`, `- lista`, `- [ ] tarefa`, 
 - **Abrir**: clique no link (abre no navegador padrão). Na lista, `↑`/`↓` escolhem, `Enter` abre, `F2` edita, `Delete` exclui (com **Desfazer**) e `Ctrl+C` copia o endereço. O botão direito tem **Mover para**, **Atualizar título e ícone** e as demais opções.
 - **Categorias**: crie no **+** de "Categorias" (nome, cor e um ícone pronto ou uma foto da biblioteca de imagens). Com uma categoria aberta, o link salvo já vai para ela; para mover, arraste o link até a categoria na lista lateral (ou use **Mover para**). Excluir uma categoria não apaga links: eles ficam em "Sem categoria" — que só aparece quando existe algum link sem categoria (ou enquanto você arrasta um link, para soltar ali). A busca procura no título e no endereço, em todas as categorias.
 - **Ordem**: Recentes, A–Z (pelo título) ou **URL** (pelo endereço: o domínio, sem o `www.`, e depois o caminho).
+- **Menções**: links salvos podem ser mencionados com `@` nas notas (entram como links comuns, com o ícone do site) e nas tarefas. **Ver menções** (botão direito no link ou em **Editar**) lista onde ele foi mencionado e leva até lá. Trocar o endereço de um link salvo atualiza os links das notas que apontavam para o endereço antigo.
 - **Importar do navegador**: o 4notes encontra os favoritos do Brave, Opera GX, Opera, Chrome, Edge, Vivaldi, **Firefox** e **Zen** instalados (cada perfil aparece separado). O Zen é feito a partir do Firefox e guarda os favoritos do mesmo jeito (o banco `places.sqlite` do perfil, lido de uma cópia — dá para importar com o navegador aberto; se não der para ler o banco, vale a cópia automática mais recente de `bookmarkbackups/`). Para outros navegadores, exporte os favoritos como arquivo HTML e escolha **Arquivo de favoritos**. Marque o que quer trazer e escolha onde os links ficam: uma categoria para cada pasta do navegador ou tudo numa categoria só. Links que já estão salvos não são repetidos e nada muda no navegador.
+
+## Tarefas: descrição formatada
+
+A descrição de uma tarefa usa **o mesmo editor das notas**: selecione o texto para a barra de formatação (negrito, itálico, sublinhado, cor, marca-texto, título, listas, checklists, código, bloco de texto, link) — num painel estreito, a barra quebra em duas fileiras —, use os mesmos atalhos (`Ctrl+B`, `- `, `1. `, `- [ ] `…) e cole prints e código. No `tasks.json`, a descrição fica em Markdown, como as notas; na lista, a primeira linha aparece sem a marcação. O **`@`** na descrição lista itens de todos os módulos e o escolhido vai para **Menções** (como no título da tarefa). Descrições antigas (texto simples) continuam iguais.
+
+## Timer
+
+- **Sessão**: escolha **Cronômetro**, **Temporizador** (com as durações prontas ou **Outro…** — `40`, `1:30`, `2h`) ou **Pomodoro** e clique em **Iniciar** (ou `Espaço`). Atividade (ex.: "Estudando Godot") e categoria (ex.: Estudo) são opcionais e podem ser preenchidas ou trocadas com a sessão contando; uma atividade já usada puxa a categoria da última vez, e **Recentes** recomeça uma atividade com um clique. **Pausar/Retomar**, **Finalizar** (`Ctrl+Enter`; salva no histórico, com **Desfazer**) e **Cancelar** (fica no histórico como cancelada, sem contar o tempo — com menos de 1 minuto, nem fica). Ao lado, o resumo de **Hoje**.
+- **Pomodoro**: **Ajustar ciclos** define foco, pausa curta, pausa longa, quantos focos até a pausa longa e se a próxima etapa começa sozinha. A sessão é uma só, com a atividade, os ciclos e o tempo de foco — as pausas não contam como tempo da atividade. Quando uma etapa termina, um som curto (desligável) avisa, e com o 4notes minimizado aparece também um aviso do Windows.
+- **A contagem vem do relógio**, não de um contador na tela: trocar de módulo, minimizar ou fechar o 4notes não atrapalha. Ao abrir de novo, a sessão em andamento continua; um temporizador que acabou com o app fechado é registrado no horário certo; uma etapa do Pomodoro que terminou com o app fechado espera você para começar a próxima. Um ponto amarelo no ícone do Timer (no menu) mostra que há uma sessão contando.
+- **Histórico**: as sessões por **data**, **categoria** ou **atividade**, com o período (dia, semana, mês, ano, intervalo ou tudo, com ‹ › e `←`/`→`), busca, categoria, situação (concluídas, interrompidas, canceladas) e ordem. Clique num registro para editar a atividade, a categoria, as observações e o **tempo válido** (o que conta nas estatísticas — dá para dar um tempo válido a uma sessão cancelada); o botão direito também exclui (com **Desfazer**).
+- **Estatísticas**: só com as suas sessões. Escolha o período e a categoria em cima: tempo total (e a variação), sessões, duração média, o dia com mais tempo; o tempo por dia (ou hora, ou mês) em colunas — com o período anterior lado a lado e uma **Tabela**; a distribuição por categoria e o tempo por atividade; a **comparação** com o período anterior equivalente (diferença, variação, categorias e atividades que aumentaram ou diminuíram — com o período atual ainda em andamento, compara com o mesmo trecho do anterior). **Detalhado** mostra quando você registra tempo (dias × horas, partes do dia, dias da semana) e a tabela por categoria.
+- **Categorias**: crie em **+ Nova**; o botão direito (toque prolongado no celular) edita, muda de lugar ou exclui. Excluir uma categoria **não apaga o histórico**: as sessões dela ficam sem categoria. As categorias do Timer são só dele (as das Tarefas continuam separadas).
+- **Interrompida**: o temporizador parado antes do fim ou o Pomodoro finalizado no meio de um foco — o tempo feito conta.
+- **Menções**: digite `@` numa nota ou tarefa e escreva a atividade (ou a categoria e a data: `@estudo 12/10`) para mencionar um registro. Clicar na menção abre o **Histórico** já no registro, destacado. **Ver menções** (botão direito no registro ou no diálogo de edição) lista as notas e tarefas que o mencionam. Um registro excluído aparece riscado na menção, sem quebrar nada.
 
 ## Biblioteca de imagens
 
 Toda imagem enviada ao 4notes — colada numa nota, enviada pela biblioteca ou escolhida como foto de uma categoria — fica em `attachments/` e aparece na **biblioteca de imagens**. Ela abre sempre que você escolhe uma imagem (**Escolher imagem/foto…** nas categorias das Notas e dos Links, **Inserir imagem…** no botão direito do editor) e também em **Configurações → Geral → Biblioteca de imagens…**.
 
 - **Enviar imagens…** traz imagens do computador (até 40 MB cada); enviar de novo uma imagem que já está lá não cria outra cópia.
-- Cada imagem mostra onde é usada ("2 notas", "Categoria “Dev” (Notas)"…). Tirar a imagem de uma nota ou de uma categoria não a apaga: ela continua na biblioteca.
+- Cada imagem mostra onde é usada ("2 notas", "1 tarefa", "Categoria “Dev” (Notas)"…). Tirar a imagem de uma nota, de uma tarefa ou de uma categoria não a apaga: ela continua na biblioteca.
 - **Excluir** (passe o mouse sobre a imagem) só aparece nas imagens que não estão em uso; o arquivo vai para a Lixeira (no celular, para `.4notes/trash/` do workspace).
 
 ## Configurações
@@ -200,12 +221,12 @@ Toda imagem enviada ao 4notes — colada numa nota, enviada pela biblioteca ou e
 As configurações — o tema, os módulos ativos e a ordem deles, o menu lateral, os ajustes de cada módulo e a ordem dos links — ficam **no workspace**, em `.4notes/settings.json`: com a pasta sincronizada, valem no computador e no celular, e uma mudança num aparelho aparece no outro quando você volta para o app. Abas abertas, último módulo, mapa aberto e a lista lateral aberta ou fechada são de cada aparelho.
 
 - **Geral**: tema; **Tutoriais e atalhos**; **Iniciar com o computador** (abre o 4notes quando você entra no Windows — no app instalado); workspace e a biblioteca de imagens.
-- **Módulos**: primeiro a seção **Geral** — **Módulos ativos** (ligue ou desligue Notas, Tarefas, Mapa Mental e Links; arraste para mudar a ordem) e **Menu lateral** (**Ícone e nome** ou **Só o ícone**, que deixa o menu mais estreito). Depois, os ajustes de cada módulo ativo. **Notas**: categoria automática pelo título e exibição das pastas pelo título. **Mapa Mental**: notas sem conexões, estilo dos nós (círculos ou cards) e quando mostrar os nomes. Tarefas e Links ainda não têm configurações. O que se usa toda hora continua na tela do próprio módulo: ordenar os links, as opções de criação das tarefas, **Reorganizar o mapa** (barra do mapa ou botão direito no fundo do mapa).
+- **Módulos**: primeiro a seção **Geral** — **Módulos ativos** (ligue ou desligue Notas, Tarefas, Mapa Mental, Links e Timer; arraste para mudar a ordem) e **Menu lateral** (**Ícone e nome** ou **Só o ícone**, que deixa o menu mais estreito). Depois, os ajustes de cada módulo ativo. **Notas**: categoria automática pelo título e exibição das pastas pelo título. **Mapa Mental**: notas sem conexões, estilo dos nós (círculos ou cards) e quando mostrar os nomes. **Timer**: som ao terminar, aviso do sistema (computador) e em que dia a semana começa (estatísticas). Tarefas e Links ainda não têm configurações. O que se usa toda hora continua na tela do próprio módulo: ordenar os links, as opções de criação das tarefas, **Reorganizar o mapa** (barra do mapa ou botão direito no fundo do mapa), a duração do temporizador e os ciclos do Pomodoro.
 
 ## Módulos e tutoriais
 
-- **Ativar e desativar módulos**: em **Configurações → Módulos** ou com o **botão direito no menu lateral**. Desativar **só tira o módulo do menu**: as notas, tarefas, mapas e links dele continuam no workspace, e ao ativar de novo ele volta com tudo como estava. Pelo menos um módulo fica ativo. Ao ligar, o módulo se "conecta" ao menu — um fio sai dele até os outros, o ícone encaixa e um sinal corre até cada módulo; ao desligar, o contrário. Um som curto e baixo acompanha o encaixe (ligar) e a saída (desligar); ele segue o volume e o mudo do sistema e nunca se repete nem se acumula. Com as Configurações abertas em **Módulos**, o menu lateral e a barra de cima ficam sem desfoque (só o conteúdo atrás do painel fica embaçado), para você ver as mudanças na hora.
-- **Reorganizar os módulos**: **arraste** um módulo no menu lateral (ou na lista de Configurações → Módulos) para mudar a ordem; o botão direito num módulo também tem **Mover para cima/baixo**. A ordem fica no workspace e vale depois de reiniciar; nada muda nos dados nem nas configurações dos módulos, e os atalhos `Ctrl+1…4` continuam presos a cada módulo.
+- **Ativar e desativar módulos**: em **Configurações → Módulos** ou com o **botão direito no menu lateral**. Desativar **só tira o módulo do menu**: as notas, tarefas, mapas, links e o histórico do Timer continuam no workspace, e ao ativar de novo ele volta com tudo como estava. Pelo menos um módulo fica ativo. Ao ligar, o módulo se "conecta" ao menu — um fio sai dele até os outros, o ícone encaixa e um sinal corre até cada módulo; ao desligar, o contrário. Um som curto e baixo acompanha o encaixe (ligar) e a saída (desligar); ele segue o volume e o mudo do sistema e nunca se repete nem se acumula. Com as Configurações abertas em **Módulos**, o menu lateral e a barra de cima ficam sem desfoque (só o conteúdo atrás do painel fica embaçado), para você ver as mudanças na hora.
+- **Reorganizar os módulos**: **arraste** um módulo no menu lateral (ou na lista de Configurações → Módulos) para mudar a ordem; o botão direito num módulo também tem **Mover para cima/baixo**. A ordem fica no workspace e vale depois de reiniciar; nada muda nos dados nem nas configurações dos módulos, e os atalhos `Ctrl+1…5` continuam presos a cada módulo.
 - Um atalho (`Ctrl+2`…) ou uma menção para um módulo desativado avisa e oferece **Ativar**.
 - **Tutoriais**: o **?** no fim do menu lateral, logo abaixo do botão de tema (ou **`F1`**), abre um painel ao lado do menu com o tutorial do módulo em que você está — para que serve, o que dá para fazer, o que tem no **botão direito**, dicas que passam despercebidas e os atalhos dele, tudo em frases curtas. As abas no topo mostram os outros módulos (na ordem do menu) e o **Geral**. Fecha com ×, `F1`, o **?**, `Esc` ou clicando fora dele (clicar dentro não fecha). Os atalhos de cada módulo ficam ali (a antiga aba **Atalhos** das Configurações saiu).
 
@@ -223,7 +244,7 @@ Fora do workspace ficam só as preferências do aparelho: no computador, qual wo
 
 | Atalho                        | Ação                                             |
 | ----------------------------- | ------------------------------------------------ |
-| `Ctrl+1` … `Ctrl+4`           | Notas / Tarefas / Mapa Mental / Links            |
+| `Ctrl+1` … `Ctrl+5`           | Notas / Tarefas / Mapa Mental / Links / Timer    |
 | `Ctrl+N`                      | Nova nota, tarefa, nó ou link (no módulo atual)  |
 | `Ctrl+W`                      | Fechar aba de nota (o X da aba de uma nota sem categoria pergunta se quer guardar ou apagar) |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Próxima / anterior aba                           |
@@ -237,10 +258,15 @@ Fora do workspace ficam só as preferências do aparelho: no computador, qual wo
 | `Ctrl+Shift+V`                | Colar como texto comum (código não vira bloco)   |
 | `Ctrl+clique`                 | Abrir um endereço web                            |
 | `Shift+arrastar` (mapa)       | Conectar notas (soltar no vazio cria uma nota)   |
-| `Delete` (mapa)               | Excluir a nota ou a conexão selecionada          |
+| `Ctrl+arrastar` (mapa)        | Selecionar as notas de uma área (soma à seleção) |
+| `Ctrl+clique` (mapa)          | Pôr ou tirar uma nota da seleção                 |
+| `Delete` (mapa)               | Excluir as notas ou a conexão selecionadas       |
 | `Ctrl+V` (Links)              | Salvar o endereço copiado                        |
 | `↑` `↓` `Enter` `F2` `Delete` (Links) | Escolher, abrir, editar e excluir links  |
-| `@` (numa nota)               | Mencionar uma nota, tarefa ou link salvo         |
+| `@` (numa nota ou tarefa)     | Mencionar uma nota, mapa, tarefa, link ou registro do Timer |
+| `Espaço` (Timer)              | Iniciar, pausar ou retomar a sessão              |
+| `Ctrl+Enter` (Timer)          | Finalizar a sessão                               |
+| `←` / `→` (Timer)             | Período anterior / próximo (histórico e estatísticas) |
 | `Ctrl+,`                      | Configurações                                    |
 | `F1`                          | Tutorial do módulo atual (com os atalhos dele)   |
 | `Ctrl++` / `Ctrl+-` / `Ctrl+0`| Zoom da interface                                |
@@ -251,9 +277,9 @@ Clicar num ícone (botões de ícone, módulos e botões do menu lateral, abas d
 
 Nas Tarefas, clicar fora do painel de edição (na lista, nas categorias…) fecha o painel; o clique continua fazendo o que faria (clicar em outra tarefa abre a outra). Um painel de **Nova tarefa** com algo já escrito não fecha assim, para não perder o rascunho.
 
-Na adição rápida de tarefas: `Estudar Godot amanhã #estudos` já define data e categoria (se a categoria Estudos existir). Digite **`@`** (na barra, no título ou nos detalhes da tarefa) ou use **Mencionar nota** no painel da tarefa para mencionar uma nota das Notas ou de qualquer mapa: a menção aparece na tarefa e um clique abre a nota. Ela continua funcionando depois de fechar o app e acompanha a nota se você a renomear no 4notes.
+Na adição rápida de tarefas: `Estudar Godot amanhã #estudos` já define data e categoria (se a categoria Estudos existir). Digite **`@`** (na barra, no título ou na descrição da tarefa) ou use **Mencionar** no painel da tarefa para mencionar uma nota, um mapa, outra tarefa, um link salvo ou um registro do Timer — cada item da lista diz de onde é (módulo, categoria, data). A menção aparece em **Menções** e um clique abre o item no módulo dele. Ela continua funcionando depois de fechar o app e acompanha o item se você o renomear no 4notes (tarefas, links e registros são achados pelo id).
 
-No Mapa Mental: clique numa nota para abri-la (clicar no vazio tira a seleção e fecha o painel); com o mouse sobre uma nota, as setas que saem dela ficam com a cor dela; **arraste** uma nota para movê-la; **Shift + arrastar** de uma nota até outra cria uma conexão — soltando no vazio, o 4notes pede um nome e cria ali uma nota nova já conectada. Selecione uma nota ou conexão e aperte **`Delete`** para excluí-la (com **Desfazer**); clique numa conexão e use o **×** para removê-la; o **botão direito** no fundo cria uma nota ali ou **reorganiza o mapa**. **Reorganizar** (também na barra do mapa) deixa as linhas curtas e só as alonga quando é preciso para as notas não se encostarem e as linhas não se cruzarem. As configurações do mapa ficam em Configurações → Módulos → Mapa Mental; a barra do mapa tem só o seletor de mapas, a busca (`Ctrl+K`), **Nova nota** e **Reorganizar**.
+No Mapa Mental: clique numa nota para abri-la (clicar no vazio tira a seleção e fecha o painel); com o mouse sobre uma nota, as setas que saem dela ficam com a cor dela; **arraste** uma nota para movê-la; **Shift + arrastar** de uma nota até outra cria uma conexão — soltando no vazio, o 4notes pede um nome e cria ali uma nota nova já conectada. Selecione uma nota ou conexão e aperte **`Delete`** para excluí-la (com **Desfazer**). **Várias notas**: `Ctrl + arrastar` desenha uma área que seleciona as notas que ela toca (de novo soma mais), `Ctrl + clique` põe ou tira uma; arraste uma das selecionadas para mover todas juntas (as conexões não mudam) e use a barra de baixo — **Cor** e **Excluir** — ou o botão direito numa delas para o grupo todo (excluir em lote tem um **Desfazer** para todas). No toque: segure o dedo no vazio › **Selecionar área**; clique numa conexão e use o **×** para removê-la; o **botão direito** no fundo cria uma nota ali ou **reorganiza o mapa**. **Reorganizar** (também na barra do mapa) deixa as linhas curtas e só as alonga quando é preciso para as notas não se encostarem e as linhas não se cruzarem. As configurações do mapa ficam em Configurações → Módulos → Mapa Mental; a barra do mapa tem só o seletor de mapas, a busca (`Ctrl+K`), **Nova nota** e **Reorganizar**.
 
 ## Estrutura do projeto
 
@@ -263,9 +289,9 @@ No Mapa Mental: clique numa nota para abri-la (clicar no vazio tira a seleção 
 ├── android/             Projeto Android (Capacitor): manifesto, permissões, ícones e o plugin nativo do 4notes
 ├── shared/              Contrato entre a interface e as plataformas (ipc.ts) e regras usadas pelos dois lados
 ├── app/                 Interface (Nuxt 4 + Vue 3)
-│   ├── pages/           Um arquivo por módulo: notes.vue, tasks.vue, mindmap.vue, links.vue
-│   ├── components/      Componentes visuais (shell/, notes/, tasks/, mindmap/, links/, editor/, ui/)
-│   ├── stores/          Estado de cada módulo (notes.ts, tasks.ts, mindmap.ts, links.ts, app.ts)
+│   ├── pages/           Um arquivo por módulo: notes.vue, tasks.vue, mindmap.vue, links.vue, timer.vue
+│   ├── components/      Componentes visuais (shell/, notes/, tasks/, mindmap/, links/, timer/, editor/, ui/)
+│   ├── stores/          Estado de cada módulo (notes.ts, tasks.ts, mindmap.ts, links.ts, timer.ts, app.ts)
 │   ├── lib/             Lógica pura e persistência (sem Vue — testável); lib/mobile/ é a camada do Android
 │   ├── composables/     Tema, atalhos, avisos, diálogos…
 │   └── assets/css/      Cores (tokens.css) e estilos base
@@ -281,7 +307,7 @@ No Mapa Mental: clique numa nota para abri-la (clicar no vazio tira a seleção 
 
 - **`npm install` falha com `EPERM`/`EBUSY` dentro do OneDrive** — o OneDrive pode travar arquivos da pasta `node_modules` enquanto sincroniza. Pause a sincronização durante a instalação (ícone do OneDrive → Pausar) ou mantenha o projeto fora do OneDrive (ex.: `C:\dev\4notes`). Isso vale para o código-fonte; a pasta de **dados** do 4notes pode ficar no OneDrive sem problema.
 - **Porta 3141 ocupada no `npm run dev`** — o Nuxt escolhe outra porta automaticamente e o script detecta.
-- **Tarefas ou links não carregam ("não foi possível ler o arquivo…")** — o `tasks.json` (ou o `links.json`) foi editado e ficou com JSON inválido. O app não sobrescreve nada: corrija o arquivo ou restaure um backup de `.4notes/backups/`.
+- **Tarefas, links ou o Timer não carregam ("não foi possível ler o arquivo…")** — o `tasks.json` (ou o `links.json`, ou o `timer/timer.json`) foi editado e ficou com JSON inválido. O app não sobrescreve nada: corrija o arquivo ou restaure um backup de `.4notes/backups/`.
 - **Um link ficou sem ícone** — o site estava fora do ar ou bloqueou o acesso. Use **Atualizar título e ícone** no botão direito do link; enquanto isso, ele aparece com a inicial do site.
 - **`npm run build:android` diz que não encontrou o Java ou o Android SDK** — abra o Android Studio uma vez e deixe o assistente terminar (ele instala o SDK em `%LOCALAPPDATA%\Android\Sdk`). Se o Android Studio estiver num lugar diferente do padrão, configure as variáveis `JAVA_HOME` (a pasta `jbr` do Android Studio) e `ANDROID_HOME` (a pasta do SDK).
 - **`Unsupported class file major version 69` (ou 70…) no `build:android`** — o Gradle do projeto Android roda com o Java 17 a 24, e foi usado um Java mais novo (69 = Java 25). O script escolhe sozinho um Java compatível (o do `JAVA_HOME`, o do Android Studio ou um JDK instalado em `Program Files`) e avisa qual usou; se só houver Java 25 ou mais novo, instale o JDK 21 (Temurin, em adoptium.net).

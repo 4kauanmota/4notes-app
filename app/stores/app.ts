@@ -1,7 +1,7 @@
 /**
  * Estado geral do aplicativo: inicialização, pasta de dados e coordenação dos módulos.
  *
- * Esta parte conhece os quatro módulos ao mesmo tempo só para tarefas de
+ * Esta parte conhece os cinco módulos ao mesmo tempo só para tarefas de
  * infraestrutura (carregar, salvar tudo antes de fechar, sincronizar ao voltar para
  * a janela). A única ligação entre os módulos são as menções (stores/mentions.ts).
  * Quais módulos estão ativos (e o último aberto) fica em stores/modules.ts: todos
@@ -21,6 +21,7 @@ import { useModulesStore } from './modules'
 import { useNotesStore } from './notes'
 import { flushSettings, loadSettings, refreshSettings, settingsSection } from './settings'
 import { useTasksStore } from './tasks'
+import { useTimerStore } from './timer'
 
 export type AppPhase = 'booting' | 'no-desktop' | 'setup' | 'ready' | 'error'
 /** Abas das Configurações (os atalhos ficam nos Tutoriais, F1). */
@@ -49,6 +50,7 @@ const notes = useNotesStore()
 const tasks = useTasksStore()
 const mindmap = useMindmapStore()
 const links = useLinksStore()
+const timer = useTimerStore()
 const modules = useModulesStore()
 
 async function loadModules(): Promise<void> {
@@ -57,7 +59,7 @@ async function loadModules(): Promise<void> {
   await loadSettings()
   applyWorkspaceTheme(settingsSection('theme'))
   // Todos os módulos carregam (ativos ou não): desativar só tira o módulo do menu
-  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), modules.load()])
+  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), timer.load(), modules.load()])
   const failure = results.find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined
   if (failure) throw failure.reason
 }
@@ -71,7 +73,7 @@ export function rememberModule(module: ModuleId): void {
 export async function flushEverything(): Promise<void> {
   // Primeiro as menções que ainda estavam para ser corrigidas (elas mexem nas notas)
   await flushMentionUpdates().catch((error) => console.warn('[4notes] Falha ao atualizar menções:', error))
-  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), flushSettings()])
+  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), timer.flush(), flushSettings()])
 }
 
 let focusTimer: ReturnType<typeof setTimeout> | null = null
@@ -87,6 +89,7 @@ function refreshWorkspace(): void {
     void tasks.refreshFromDisk()
     void mindmap.refreshFromDisk()
     void links.refreshFromDisk()
+    void timer.refreshFromDisk()
   }, 200)
 }
 
@@ -184,7 +187,7 @@ export async function applyDataFolder(path: string, initial: boolean): Promise<b
     if (!info.hasData) {
       const choice = await choiceDialog({
         title: 'Pasta ainda sem dados do 4notes',
-        message: `O workspace “${workspaceName(info.path)}” vai começar vazio. Se preferir, copie para ele as notas, tarefas, mapas e links do workspace atual (nada é apagado do atual).`,
+        message: `O workspace “${workspaceName(info.path)}” vai começar vazio. Se preferir, copie para ele as notas, tarefas, mapas, links e o histórico do Timer do workspace atual (nada é apagado do atual).`,
         icon: 'folder',
         buttons: [
           { id: 'cancel', label: 'Cancelar', variant: 'ghost' },

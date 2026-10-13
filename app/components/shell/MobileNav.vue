@@ -15,6 +15,7 @@ import type { ThemePreference } from '#shared/ipc'
 import { useAppStore } from '~/stores/app'
 import { useModulesStore } from '~/stores/modules'
 import { useTasksStore } from '~/stores/tasks'
+import { useTimerStore } from '~/stores/timer'
 
 /** Módulos na barra (os outros ficam em "Mais"). */
 const MAX_ITEMS = 4
@@ -30,6 +31,9 @@ const overflow = computed(() => modules.enabled.value.slice(MAX_ITEMS))
 const current = computed(() => moduleForPath(route.path))
 const dueCount = computed(() => tasks.progress.value.total - tasks.progress.value.done)
 const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : 0)
+const timer = useTimerStore()
+/** Timer com uma sessão em andamento: um ponto no ícone (pulsando enquanto conta). */
+const liveOf = (id: ModuleId) => (id === 'timer' && timer.state.active ? (timer.state.active.runningSince !== null ? 'running' : 'paused') : null)
 
 const moreOpen = ref(false)
 
@@ -77,6 +81,7 @@ function run(action: () => unknown) {
       <span class="nav-pill">
         <AppIcon :name="item.icon" :size="21" />
         <span v-if="badgeOf(item.id) > 0" class="nav-badge">{{ badgeOf(item.id) > 99 ? '99+' : badgeOf(item.id) }}</span>
+        <span v-if="liveOf(item.id)" class="nav-live" :class="liveOf(item.id)" data-live aria-hidden="true" />
       </span>
       <span class="nav-label">{{ item.label }}</span>
     </NuxtLink>
@@ -100,6 +105,7 @@ function run(action: () => unknown) {
         <NuxtLink v-for="item in overflow" :key="item.id" :to="item.route" class="more-row" :class="{ active: current?.id === item.id }" @click="moreOpen = false">
           <AppIcon :name="item.icon" :size="19" />
           <span>{{ item.name }}</span>
+          <span v-if="liveOf(item.id)" class="more-live">{{ liveOf(item.id) === 'running' ? 'contando' : 'pausado' }}</span>
         </NuxtLink>
       </div>
 
@@ -183,6 +189,49 @@ function run(action: () => unknown) {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Timer com uma sessão em andamento: um ponto amarelo (pulsando enquanto conta) */
+.nav-live {
+  position: absolute;
+  top: 2px;
+  right: 13px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 2px var(--chrome);
+}
+.nav-live.paused {
+  background: var(--text-3);
+}
+.nav-live.running::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: live-pulse 1.8s var(--ease-out) infinite;
+}
+@keyframes live-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  to {
+    transform: scale(2.7);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-live.running::after {
+    animation: none;
+  }
+}
+.more-live {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-text);
 }
 .nav-badge {
   position: absolute;

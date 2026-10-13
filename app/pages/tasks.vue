@@ -8,6 +8,7 @@ import TaskDrawer from '~/components/tasks/TaskDrawer.vue'
 import TaskQuickAdd from '~/components/tasks/TaskQuickAdd.vue'
 import { confirmDialog } from '~/composables/useDialog'
 import { useLayoutSize } from '~/composables/useLayoutSize'
+import { hasOpenModal } from '~/composables/useModalStack'
 import { registerShortcut, useShortcuts } from '~/composables/useShortcuts'
 import { formatLongDate, relativeDayLabel } from '~/lib/dates'
 import { canReveal } from '~/lib/platform'
@@ -108,13 +109,24 @@ function onPageClick(event: MouseEvent) {
   })
 }
 
+/**
+ * O Esc é de algo aberto por cima do painel ou dentro dele: um diálogo (nova categoria),
+ * a lista de notas para mencionar, a lista do "@" ou a tela cheia de um bloco da
+ * descrição, o campo do endereço do link na barra de formatação.
+ */
+function escapeBelongsElsewhere(): boolean {
+  if (hasOpenModal()) return true
+  if (document.querySelector('.mention-picker, .code-fullscreen, .drawer .cm-tooltip-autocomplete')) return true
+  return !!document.activeElement?.closest('.format-toolbar')
+}
+
 // Esc fecha o painel (também quando o foco está num campo)
 let disposeEscape: (() => void) | null = null
 const bindEscape = () => {
   disposeEscape ??= registerShortcut(
     'escape',
     () => {
-      if (!tasks.state.drawer) return false
+      if (!tasks.state.drawer || escapeBelongsElsewhere()) return false
       tasks.closeDrawer()
     },
     { allowInInputs: true },

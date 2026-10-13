@@ -9,6 +9,7 @@ import { useModulesStore } from '~/stores/modules'
 import { useNotesStore } from '~/stores/notes'
 import { useSettingsStore } from '~/stores/settings'
 import { useTasksStore } from '~/stores/tasks'
+import { useTimerStore } from '~/stores/timer'
 
 export default defineNuxtPlugin(() => {
   if (!hasDesktopApi() || !desktop().bootstrap.testMode) return
@@ -18,6 +19,7 @@ export default defineNuxtPlugin(() => {
     tasks: useTasksStore(),
     mindmap: useMindmapStore(),
     links: useLinksStore(),
+    timer: useTimerStore(),
     modules: useModulesStore(),
     settings: useSettingsStore(),
     /** O "voltar" do Android (devolve false se não havia nada para voltar). */

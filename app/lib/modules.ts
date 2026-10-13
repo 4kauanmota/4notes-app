@@ -1,17 +1,17 @@
 /**
  * Os módulos do 4notes num lugar só: nome, ícone, rota, atalho e o tutorial.
  *
- * O menu lateral, as Configurações (módulos ativos), os atalhos Ctrl+1…4 e os
+ * O menu lateral, as Configurações (módulos ativos), os atalhos Ctrl+1…5 e os
  * Tutoriais leem esta lista. Para criar um módulo novo, basta acrescentá-lo aqui
  * (o tutorial é obrigatório) — ele aparece em todos esses lugares.
  *
  * Também ficam aqui as regras puras das preferências dos módulos (quais estão
  * ativos, em que ordem e como aparecem no menu), guardadas em .4notes/app.json
  * (stores/modules.ts). A ordem de MODULES é a ordem padrão do menu; os atalhos
- * Ctrl+1…4 continuam presos a cada módulo, qualquer que seja a ordem.
+ * Ctrl+1…5 continuam presos a cada módulo, qualquer que seja a ordem.
  */
 
-export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links'
+export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links' | 'timer'
 
 /** Um atalho mostrado no tutorial. "Mod" vira Ctrl (Windows/Linux) ou ⌘ (macOS). */
 export interface TutorialShortcut {
@@ -66,7 +66,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Cole prints e código: viram imagem e bloco de código.',
         'Blocos de código e de texto: copiar, remover e tela cheia.',
         'Categorias com cor, ícone ou foto: arraste a nota até uma delas.',
-        'Mencione notas, tarefas e links com @ (clique na menção para abrir).',
+        '@ menciona notas, mapas, tarefas, links e registros do Timer; clique na menção para abrir.',
         'Arraste as abas para mudar a ordem.',
       ],
       contextMenu: [
@@ -81,6 +81,8 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Títulos que começam igual viram pastas na lista (“4notes 1.4.0”, “4notes 1.4.1”).',
         'Versão no título (“4notes 1.4.1”)? ‹ e › no fim das abas abrem a anterior e a próxima.',
         'Tudo salva sozinho; fechar a aba não apaga a nota.',
+        'A lista do @ diz de onde é cada item e também busca por categoria e data: “@estudo 12/10”.',
+        'Menção riscada: o item foi excluído (a nota continua funcionando).',
         'Excluir manda o arquivo para a Lixeira (no celular, para .4notes/trash).',
       ],
       shortcuts: [
@@ -122,11 +124,14 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Clique numa tarefa para editar ao lado; clicar fora fecha.',
         'Recorrentes voltam sozinhas na próxima data.',
         'Categorias na lateral: filtre e arraste para mudar a ordem.',
-        'Mencione notas com @ no título ou nos detalhes.',
+        'A descrição tem a formatação das notas: selecione o texto (negrito, listas…).',
+        '@ no título ou na descrição menciona notas, mapas, tarefas, links e registros do Timer.',
       ],
       contextMenu: ['Tarefa: editar, concluir, pular, mover de categoria, excluir.', 'Categoria: editar, mover para cima/baixo ou excluir.'],
       tips: [
         '“Revisar amanhã #estudos” já define a data e a categoria.',
+        'Na descrição valem os atalhos das notas: Ctrl+B, listas com “- ”, “[ ]”…',
+        'As menções ficam em “Menções”: clique para abrir, × para tirar. “Mencionar” busca sem digitar @.',
         'Concluídas e agendadas ficam nos links discretos no fim da lista.',
         '“Pular” avança uma recorrente sem marcar como feita.',
         'O que venceu com o app fechado aparece ao abrir.',
@@ -160,25 +165,31 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Soltar a conexão no vazio cria uma nota já ligada.',
         'Vários mapas: crie, renomeie e troque pelo seletor no canto.',
         '“Reorganizar” arruma o mapa sem cruzamentos.',
-        'Mencione notas e tarefas com @ dentro das notas.',
+        'Ctrl + arrastar seleciona várias notas: arraste uma delas para mover todas juntas.',
+        'Mencione notas, mapas, tarefas, links e registros do Timer com @ dentro das notas.',
       ],
       contextMenu: [
         'Nota: abrir, renomear, nova nota conectada, cor, Explorador, excluir.',
-        'Vazio: nova nota ali ou reorganizar o mapa.',
+        'Nota selecionada com outras: cor ou excluir para o grupo todo.',
+        'Vazio: nova nota ali, selecionar área ou reorganizar o mapa.',
         'Conexão: remover.',
       ],
       tips: [
         'Duplo clique no vazio cria uma nota ali.',
         'Clique numa conexão e use o × para removê-la.',
         'Clicar no vazio tira a seleção e fecha a nota.',
+        'A área soma à seleção: Ctrl + arrastar de novo junta mais notas.',
+        'Excluir várias de uma vez tem Desfazer para todas.',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Nova nota' },
         { keys: ['Mod', 'K'], label: 'Buscar no mapa' },
         { keys: ['Shift', 'Arrastar'], label: 'Conectar notas' },
+        { keys: ['Mod', 'Arrastar'], label: 'Selecionar notas por área' },
+        { keys: ['Mod', 'Clique'], label: 'Pôr ou tirar uma nota da seleção' },
         { keys: ['Arrastar o fundo'], label: 'Mover o mapa' },
         { keys: ['Roda do mouse'], label: 'Zoom' },
-        { keys: ['Delete'], label: 'Excluir a nota ou a conexão selecionada' },
+        { keys: ['Delete'], label: 'Excluir as notas ou a conexão selecionadas' },
         { keys: ['Esc'], label: 'Fechar a nota / tirar a seleção' },
       ],
       touch: [
@@ -186,6 +197,8 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Toque numa nota para abrir — na tela pequena, o 1º toque seleciona (e “Abrir”).',
         'Arraste a seta → da nota selecionada até outra para conectar (ou ao vazio: nota nova).',
         'Dois toques no vazio criam uma nota; segurar o dedo abre o menu.',
+        'Segure no vazio › “Selecionar área” e arraste o dedo sobre as notas.',
+        'Com notas selecionadas, tocar numa nota põe ou tira ela da seleção.',
       ],
     },
   },
@@ -207,14 +220,15 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Busque por título ou endereço; ordene por recentes, A–Z ou URL.',
       ],
       contextMenu: [
-        'Link: abrir, copiar endereço, editar, mover, atualizar título e ícone, excluir.',
+        'Link: abrir, copiar endereço, editar, mover, ver menções, atualizar título e ícone, excluir.',
         'Categoria: editar, mover para cima/baixo ou excluir.',
       ],
       tips: [
         'Arrastar um link do navegador para a lista também salva.',
         'Arraste as categorias para mudar a ordem.',
         'O ⋯ do link abre o mesmo menu do botão direito.',
-        'Links salvos podem ser mencionados nas notas com @.',
+        'Links salvos podem ser mencionados nas notas e nas tarefas com @.',
+        '“Ver menções” (no menu do link ou em Editar) lista onde ele foi mencionado e leva até lá.',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Novo link' },
@@ -230,6 +244,50 @@ export const MODULES: readonly ModuleDefinition[] = [
         'No celular, o botão de lista ao lado do título abre as categorias e a busca.',
         'Toque num link para abrir; toque prolongado: editar, mover, copiar, excluir.',
         'Importar no celular: o arquivo de favoritos (HTML) exportado pelo navegador.',
+      ],
+    },
+  },
+  {
+    id: 'timer',
+    label: 'Timer',
+    name: 'Timer',
+    icon: 'timer',
+    route: '/timer',
+    key: '5',
+    description: 'Cronômetro, temporizador e Pomodoro, com histórico e estatísticas.',
+    tutorial: {
+      purpose: 'Acompanhe o tempo dedicado às suas atividades e veja para onde ele vai.',
+      features: [
+        'Sessão: cronômetro, temporizador ou Pomodoro — Iniciar e pronto.',
+        'Atividade e categoria são opcionais e podem mudar durante a sessão.',
+        'Pomodoro: ajuste foco, pausas e ciclos no botão ao lado dos tempos.',
+        'Histórico: sessões por data, categoria ou atividade, com filtros.',
+        'Estatísticas: dia, semana, mês, ano ou intervalo — e a comparação.',
+        'Clique num registro para editar a atividade, a categoria ou o tempo válido.',
+        'Registros podem ser mencionados com @ nas notas e nas tarefas; “Ver menções” mostra onde.',
+      ],
+      contextMenu: [
+        'Registro do histórico: editar, ver menções ou excluir.',
+        'Categoria: editar, mover para a esquerda/direita ou excluir.',
+      ],
+      tips: [
+        'A contagem segue pelo relógio: troque de módulo ou feche o app à vontade.',
+        'Finalizar salva a sessão; Cancelar não conta o tempo (fica como cancelada).',
+        'Excluir uma categoria não apaga o histórico: as sessões ficam sem categoria.',
+        'Na comparação, o período atual vale até agora contra o mesmo trecho do anterior.',
+        'O ponto no ícone do Timer avisa que há uma sessão contando.',
+        'Abrir a menção a um registro traz o Histórico até ele, destacado.',
+      ],
+      shortcuts: [
+        { keys: ['Espaço'], label: 'Iniciar, pausar ou retomar' },
+        { keys: ['Mod', 'Enter'], label: 'Finalizar a sessão' },
+        { keys: ['Mod', 'N'], label: 'Nova sessão (vai para a atividade)' },
+        { keys: ['← / →'], label: 'Período anterior / próximo (estatísticas e histórico)' },
+      ],
+      touch: [
+        'As abas Sessão, Histórico e Estatísticas ficam no topo.',
+        'Toque num registro para editar; toque prolongado numa categoria: editar, excluir.',
+        'No celular, com o app em segundo plano, o aviso de fim aparece ao voltar.',
       ],
     },
   },

@@ -14,6 +14,8 @@ const props = defineProps<{
   settings: GraphViewSettings
   selectedId: string | null
   selectedEdgeId: string | null
+  /** Seleção múltipla (ids dos nós). */
+  multiSelected: string[]
   matches: Set<string> | null
   insetRight: number
   focus: { nodeId: string | null; seq: number }
@@ -35,6 +37,8 @@ const emit = defineEmits<{
   backgroundDblclick: [world: { x: number; y: number }]
   backgroundContextMenu: [world: { x: number; y: number }, event: MouseEvent]
   settled: [positions: Record<string, [number, number]>]
+  selectionChange: [ids: string[]]
+  areaEnd: []
   viewChange: []
 }>()
 
@@ -87,6 +91,8 @@ onMounted(() => {
       backgroundDoubleClick: (world) => emit('backgroundDblclick', world),
       backgroundContextMenu: (world, event) => emit('backgroundContextMenu', world, event),
       layoutSettled: (positions) => emit('settled', positions),
+      selectionChange: (ids) => emit('selectionChange', ids),
+      areaSelectionEnd: () => emit('areaEnd'),
       viewChange: () => emit('viewChange'),
     },
     (id) => props.layout[id] ?? null,
@@ -96,6 +102,7 @@ onMounted(() => {
   view.setData(props.data)
   view.setSelected(props.selectedId)
   view.setSelectedEdge(props.selectedEdgeId)
+  view.setMultiSelection(props.multiSelected)
   view.setMatches(props.matches)
   const testHooks = window.__fourNotesTest
   if (testHooks) testHooks.graph = view
@@ -125,6 +132,10 @@ watch(
 watch(
   () => props.selectedId,
   (id) => view?.setSelected(id),
+)
+watch(
+  () => props.multiSelected,
+  (ids) => view?.setMultiSelection(ids),
 )
 watch(
   () => props.layoutSeq,
@@ -162,6 +173,8 @@ defineExpose({
   relayout: () => view?.relayout(),
   positions: () => view?.positions() ?? {},
   screenPosition: (id: string) => view?.screenPosition(id) ?? null,
+  startAreaSelection: () => view?.startAreaSelection(),
+  cancelAreaSelection: () => view?.cancelAreaSelection(),
 })
 </script>
 

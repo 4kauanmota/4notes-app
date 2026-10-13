@@ -1,12 +1,34 @@
 <script setup lang="ts">
-/** Criar ou editar uma categoria de tarefas (nome + cor). */
-import { nextTick, ref, watch } from 'vue'
-import { CATEGORY_COLORS, type Category, type CategoryColor } from '~/lib/tasks/model'
+/**
+ * Criar ou editar uma categoria (nome + cor). Por padrão, as das Tarefas; com
+ * `source`, as de outro módulo (o Timer usa o mesmo diálogo para as dele).
+ */
+import { computed, nextTick, ref, watch } from 'vue'
+import type { CategorySource, ColorCategory } from '~/lib/category-source'
+import { CATEGORY_COLORS, type CategoryColor } from '~/lib/tasks/model'
 import { useTasksStore } from '~/stores/tasks'
 
-const props = defineProps<{ open: boolean; category?: Category | null }>()
-const emit = defineEmits<{ close: []; saved: [category: Category] }>()
+const props = defineProps<{
+  open: boolean
+  category?: ColorCategory | null
+  /** De onde são as categorias (padrão: as das Tarefas). */
+  source?: CategorySource
+  /** Exemplo no campo do nome. */
+  placeholder?: string
+}>()
+const emit = defineEmits<{ close: []; saved: [category: ColorCategory] }>()
 const tasks = useTasksStore()
+
+/** As categorias das Tarefas, no formato do diálogo. */
+const taskSource: CategorySource = {
+  get categories() {
+    return tasks.state.categories
+  },
+  add: (name, color) => tasks.addCategory(name, color),
+  update: (id, patch) => tasks.updateCategory(id, patch),
+  requestDelete: (id) => tasks.requestDeleteCategory(id),
+}
+const categories = computed(() => props.source ?? taskSource)
 
 const name = ref('')
 const color = ref<CategoryColor>('purple')
@@ -14,7 +36,7 @@ const error = ref<string | null>(null)
 const input = ref<HTMLInputElement>()
 
 function suggestColor(): CategoryColor {
-  const used = new Set(tasks.state.categories.map((c) => c.color))
+  const used = new Set(categories.value.categories.map((c) => c.color))
   return CATEGORY_COLORS.find((c) => !used.has(c)) ?? 'purple'
 }
 
@@ -37,16 +59,16 @@ function save() {
     error.value = 'Dê um nome à categoria.'
     return
   }
-  const duplicate = tasks.state.categories.find((c) => c.id !== props.category?.id && c.name.toLocaleLowerCase('pt-BR') === trimmed.toLocaleLowerCase('pt-BR'))
+  const duplicate = categories.value.categories.find((c) => c.id !== props.category?.id && c.name.toLocaleLowerCase('pt-BR') === trimmed.toLocaleLowerCase('pt-BR'))
   if (duplicate) {
     error.value = 'Já existe uma categoria com esse nome.'
     return
   }
   if (props.category) {
-    tasks.updateCategory(props.category.id, { name: trimmed, color: color.value })
+    categories.value.update(props.category.id, { name: trimmed, color: color.value })
     emit('saved', props.category)
   } else {
-    emit('saved', tasks.addCategory(trimmed, color.value))
+    emit('saved', categories.value.add(trimmed, color.value))
   }
   emit('close')
 }
@@ -55,7 +77,7 @@ function save() {
 function remove() {
   const id = props.category?.id
   emit('close')
-  if (id) void tasks.requestDeleteCategory(id)
+  if (id) void categories.value.requestDelete(id)
 }
 </script>
 
@@ -65,7 +87,7 @@ function remove() {
       <h2>{{ category ? 'Editar categoria' : 'Nova categoria' }}</h2>
 
       <label class="field-label" for="cat-name">Nome</label>
-      <input id="cat-name" ref="input" v-model="name" class="input" placeholder="Ex.: Faculdade" maxlength="40" @input="error = null" />
+      <input id="cat-name" ref="input" v-model="name" class="input" :placeholder="placeholder ?? 'Ex.: Faculdade'" maxlength="40" @input="error = null" />
       <Transition name="fade"><p v-if="error" class="error">{{ error }}</p></Transition>
 
       <span class="field-label colors-label">Cor</span>

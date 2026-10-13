@@ -5,6 +5,10 @@
  * No celular (layout compact) o painel ocupa a tela: tocar numa nota primeiro a
  * seleciona (com a alça de conexão e uma barrinha com "Abrir"); tocar de novo — ou em
  * "Abrir" — abre a nota.
+ *
+ * Seleção múltipla: Ctrl + arrastar desenha uma área (Ctrl + clique põe ou tira uma
+ * nota); a barra embaixo mostra quantas estão selecionadas, com Cor e Excluir. No toque,
+ * "Selecionar área" fica no menu do vazio (segurar o dedo).
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import GraphCanvas from '~/components/mindmap/GraphCanvas.vue'
@@ -29,6 +33,11 @@ const page = ref<HTMLElement>()
 const hover = ref<{ node: GraphNodeInfo; x: number; y: number } | null>(null)
 /** Conexão selecionada (clique na linha): mostra o "×" para remover. */
 const selectedEdge = ref<string | null>(null)
+/** Seleção múltipla: ids dos nós ("note:Godot.md"). */
+const multi = ref<string[]>([])
+const multiNoteIds = computed(() => multi.value.map(noteIdOfNode))
+/** "Selecionar área" escolhido no menu: o próximo arraste desenha a área. */
+const areaSelecting = ref(false)
 
 const { isCompact, isMedium, layout } = useLayoutSize()
 /** Celular: nota selecionada no mapa, ainda sem abrir (o painel cobriria o mapa). */
@@ -68,6 +77,8 @@ watch(
     selectedEdge.value = null
     hover.value = null
     picked.value = null
+    multi.value = []
+    areaSelecting.value = false
   },
 )
 // Abriu uma nota (busca, menção, nota nova…) ou saiu do celular: a seleção do celular sai
@@ -117,9 +128,90 @@ async function newNote(options: { linkFrom?: string; position?: [number, number]
   }
 }
 
+// ── Seleção múltipla ──────────────────────────────────────────────────────────
+
+function onSelectionChange(ids: string[]) {
+  multi.value = ids
+  if (!ids.length) return
+  // A seleção em grupo substitui a nota aberta, a conexão e a seleção do celular
+  hover.value = null
+  selectedEdge.value = null
+  picked.value = null
+  if (mindmap.state.panelOpen) mindmap.closePanel()
+}
+
+function clearSelection() {
+  multi.value = []
+  if (areaSelecting.value) graph.value?.cancelAreaSelection()
+  areaSelecting.value = false
+}
+
+function startAreaSelection() {
+  hover.value = null
+  selectedEdge.value = null
+  picked.value = null
+  areaSelecting.value = true
+  graph.value?.startAreaSelection()
+}
+
+function deleteMulti() {
+  const ids = multiNoteIds.value
+  multi.value = []
+  if (ids.length) void mindmap.deleteNotes(ids)
+}
+
+function colorItems(ids: string[]): MenuItemSpec[] {
+  const colors = ids.map((id) => mindmap.noteColor(id))
+  const same = colors.every((color) => color === colors[0]) ? colors[0] : undefined
+  return [
+    { id: 'color:', label: 'Padrão', type: 'radio', checked: same === null },
+    ...PALETTE.map((color) => ({
+      id: `color:${color}`,
+      label: PALETTE_LABELS[color],
+      type: 'radio' as const,
+      checked: same === color,
+      swatch: paletteVar(color),
+    })),
+  ]
+}
+
+function applyColorChoice(ids: string[], choice: string | null) {
+  if (!choice?.startsWith('color:')) return false
+  const color = choice.slice('color:'.length)
+  mindmap.setColors(ids, isPaletteColor(color) ? color : null)
+  return true
+}
+
+async function chooseMultiColor(event: MouseEvent) {
+  const ids = multiNoteIds.value
+  applyColorChoice(ids, await showContextMenu(colorItems(ids), event.currentTarget as Element))
+}
+
+/** Menu de uma nota que faz parte da seleção: ações para o grupo todo. */
+async function onGroupContextMenu() {
+  const ids = multiNoteIds.value
+  const choice = await showContextMenu([
+    { label: 'Cor', submenu: colorItems(ids) },
+    separator,
+    { id: 'delete', label: `Excluir ${ids.length} notas…`, danger: true },
+  ])
+  if (applyColorChoice(ids, choice) || choice !== 'delete') return
+  const ok = await confirmDialog({
+    title: `Excluir ${ids.length} notas?`,
+    message: `Os arquivos vão para ${trashPlace()} e as conexões delas são removidas.`,
+    confirmLabel: 'Excluir notas',
+    danger: true,
+  })
+  if (ok) {
+    multi.value = []
+    void mindmap.deleteNotes(ids)
+  }
+}
+
 function onNodeClick(node: GraphNodeInfo) {
   hover.value = null
   selectedEdge.value = null
+  multi.value = []
   const id = noteIdOfNode(node.id)
   // Celular: o primeiro toque seleciona (alça de conexão, "Abrir"); o segundo abre
   if (isCompact.value && picked.value !== id) {
@@ -151,18 +243,10 @@ async function onEdgeContextMenu(edgeId: string) {
 
 async function onNodeContextMenu(node: GraphNodeInfo) {
   hover.value = null
+  if (multi.value.length > 1 && multi.value.includes(node.id)) return onGroupContextMenu()
+  multi.value = []
   const id = noteIdOfNode(node.id)
-  const current = mindmap.noteColor(id)
-  const colors: MenuItemSpec[] = [
-    { id: 'color:', label: 'Padrão', type: 'radio', checked: !current },
-    ...PALETTE.map((color) => ({
-      id: `color:${color}`,
-      label: PALETTE_LABELS[color],
-      type: 'radio' as const,
-      checked: current === color,
-      swatch: paletteVar(color),
-    })),
-  ]
+  const colors = colorItems([id])
   const choice = await showContextMenu([
     { id: 'open', label: 'Abrir' },
     { id: 'rename', label: 'Renomear…' },
@@ -176,10 +260,7 @@ async function onNodeContextMenu(node: GraphNodeInfo) {
   if (choice === 'open') mindmap.openNote(id, { focus: false })
   if (choice === 'linked') void newNote({ linkFrom: id })
   if (choice === 'reveal') mindmap.revealNote(id)
-  if (choice.startsWith('color:')) {
-    const color = choice.slice('color:'.length)
-    mindmap.setColor(id, isPaletteColor(color) ? color : null)
-  }
+  applyColorChoice([id], choice)
   if (choice === 'rename') {
     const note = mindmap.findNote(id)
     const title = await promptDialog({
@@ -209,10 +290,12 @@ async function onBackgroundContextMenu(world: { x: number; y: number }) {
   hover.value = null
   const choice = await showContextMenu([
     { id: 'new', label: 'Nova nota' },
+    { id: 'select-area', label: 'Selecionar área', hint: layout.touch ? undefined : 'Ctrl + arrastar', enabled: hasNotes.value },
     separator,
     { id: 'relayout', label: 'Reorganizar o mapa', enabled: hasNotes.value },
   ])
   if (choice === 'new') void newNote({ position: [Math.round(world.x), Math.round(world.y)] })
+  if (choice === 'select-area') startAreaSelection()
   if (choice === 'relayout') graph.value?.relayout()
 }
 
@@ -220,6 +303,7 @@ async function onBackgroundContextMenu(world: { x: number; y: number }) {
 function onBackgroundClick() {
   selectedEdge.value = null
   picked.value = null
+  multi.value = []
   if (mindmap.state.panelOpen) mindmap.closePanel()
 }
 
@@ -235,6 +319,10 @@ function onConnectToNew(source: string, world: { x: number; y: number }) {
 
 /** Delete: remove a conexão selecionada ou, se não houver, a nota selecionada (vai para a Lixeira, com Desfazer). */
 function deleteSelection(): boolean | void {
+  if (multi.value.length) {
+    deleteMulti()
+    return
+  }
   if (selectedEdge.value) {
     removeEdge(selectedEdge.value)
     return
@@ -262,6 +350,10 @@ useShortcuts({
 useShortcuts(
   {
     escape: () => {
+      if (multi.value.length || areaSelecting.value) {
+        clearSelection()
+        return
+      }
       if (selectedEdge.value) {
         selectedEdge.value = null
         return
@@ -293,6 +385,7 @@ useShortcuts(
       :settings="graphSettings"
       :selected-id="selectedNodeId"
       :selected-edge-id="selectedEdge"
+      :multi-selected="multi"
       :matches="mindmap.searchMatchNodeIds.value"
       :inset-right="panelWidth"
       :focus="mindmap.state.focus"
@@ -310,6 +403,8 @@ useShortcuts(
       @background-dblclick="onBackgroundDblclick"
       @background-context-menu="onBackgroundContextMenu"
       @settled="mindmap.updateLayout"
+      @selection-change="onSelectionChange"
+      @area-end="areaSelecting = false"
       @view-change="hover = null"
     />
     <MindmapEmpty v-else :map="mindmap.state.currentMap" @create="newNote()" @context-menu="onBackgroundContextMenu({ x: 0, y: 0 })" />
@@ -345,6 +440,34 @@ useShortcuts(
           <AppIcon name="more" :size="18" />
         </button>
         <button class="btn btn-sm btn-primary" data-action="pick-open" @click="openPicked">Abrir</button>
+      </div>
+    </Transition>
+
+    <!-- Seleção múltipla: quantas, Cor, Excluir (Delete) e limpar (Esc) -->
+    <Transition name="pick">
+      <div
+        v-if="hasNotes && (multi.length || areaSelecting)"
+        class="select-bar"
+        role="toolbar"
+        aria-label="Notas selecionadas"
+        data-selection-bar
+        :style="isCompact ? undefined : { left: `calc((100% - ${panelWidth}px) / 2)` }"
+      >
+        <template v-if="multi.length">
+          <span class="select-count" data-selection-count
+            ><b>{{ multi.length }}</b> {{ multi.length === 1 ? 'nota selecionada' : 'notas selecionadas' }}</span
+          >
+          <button class="icon-btn" aria-label="Cor das notas selecionadas" data-tip="Cor" data-tip-pos="top" data-action="selection-color" @click="chooseMultiColor">
+            <AppIcon name="palette" :size="17" />
+          </button>
+          <button class="btn btn-sm btn-danger-ghost" data-action="selection-delete" :data-tip="layout.touch ? undefined : 'Excluir (Delete)'" data-tip-pos="top" @click="deleteMulti">
+            <AppIcon name="trash" :size="15" /> Excluir
+          </button>
+        </template>
+        <span v-else class="select-count">{{ layout.touch ? 'Arraste o dedo sobre as notas' : 'Arraste sobre as notas' }}</span>
+        <button class="icon-btn" aria-label="Limpar a seleção" data-tip="Limpar (Esc)" data-tip-pos="top" data-action="selection-clear" @click="clearSelection">
+          <AppIcon name="x" :size="16" />
+        </button>
       </div>
     </Transition>
 
@@ -469,6 +592,49 @@ html[data-layout='compact'] .map-footer {
 .pick-hint {
   color: var(--text-3);
   font-size: 12px;
+}
+.select-bar {
+  position: absolute;
+  bottom: 62px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 5px 5px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--graph-selected) 45%, var(--border));
+  background: color-mix(in srgb, var(--elevated) 94%, transparent);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.select-count {
+  margin-right: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.select-count b {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+html[data-layout='compact'] .select-bar {
+  left: 10px;
+  right: 10px;
+  bottom: 66px;
+  transform: none;
+}
+html[data-layout='compact'] .select-count {
+  flex: 1;
+}
+.select-bar.pick-enter-from,
+.select-bar.pick-leave-to {
+  transform: translate(-50%, 12px);
+}
+html[data-layout='compact'] .select-bar.pick-enter-from,
+html[data-layout='compact'] .select-bar.pick-leave-to {
+  transform: translateY(12px);
 }
 .pick-enter-active,
 .pick-leave-active {

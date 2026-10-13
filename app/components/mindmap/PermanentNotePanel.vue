@@ -23,9 +23,9 @@ const note = computed(() => mindmap.selectedNote.value!)
 const noteDir = computed(() => `${DATA_PATHS.mindmapDir}/${mindmap.state.currentMap}`)
 const notePath = computed(() => `${noteDir.value}/${note.value.id}`)
 
-/** Menções (@) a notas (das Notas e dos mapas), tarefas e links salvos — stores/mentions.ts. */
+/** Menções (@) a itens de todos os módulos — stores/mentions.ts. */
 const mentions: MentionHost = {
-  search: (query) => searchMentions(query, notePath.value),
+  search: (query) => searchMentions(query, { exceptPath: notePath.value }),
   describe: describeMention,
   open: openMentionPath,
   revision: () => mentionRevision.value,

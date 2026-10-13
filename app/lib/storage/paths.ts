@@ -14,6 +14,8 @@ export const DATA_PATHS = {
   linksFile: 'links/links.json',
   /** Ícones dos sites (um por site), mostrados ao lado de cada link. */
   linkIconsDir: 'links/icons',
+  /** Timer: categorias das atividades, histórico de sessões e a sessão em andamento. */
+  timerFile: 'timer/timer.json',
 
   metaDir: '.4notes',
   /**
@@ -30,6 +32,6 @@ export const DATA_PATHS = {
   notesUiState: '.4notes/notes.json',
   appUiState: '.4notes/app.json',
   linksUiState: '.4notes/links.json',
-  /** Cópias automáticas (tasks.json e links.json de cada dia da semana, conversões do mapa mental). */
+  /** Cópias automáticas (tasks.json, links.json e timer.json de cada dia da semana, conversões do mapa mental). */
   backupsDir: '.4notes/backups',
 } as const

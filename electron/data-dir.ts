@@ -6,6 +6,7 @@
  *   ├── tasks/      tasks.json com tarefas e categorias (+ backups diários)
  *   ├── mindmap/    mapas mentais — uma pasta por mapa (notas .md + mapa.json)
  *   ├── links/      links.json com os links salvos e as pastas (+ icons/, os ícones dos sites)
+ *   ├── timer/      timer.json com as categorias, o histórico e a sessão em andamento (+ backups diários)
  *   ├── attachments/ imagens coladas nas notas
  *   └── .4notes/    estado da interface (abas abertas, posições do mapa). Pode ser apagada.
  *

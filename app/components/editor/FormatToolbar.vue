@@ -29,6 +29,8 @@ const props = defineProps<{
   textBlock: boolean
   /** Fixa embaixo da nota (toque). */
   docked?: boolean
+  /** Largura máxima: num editor estreito, os botões quebram em duas fileiras. */
+  maxWidth?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -111,8 +113,8 @@ function pickColor(color: PaletteColor | null) {
 <template>
   <div
     class="format-toolbar"
-    :class="{ below: below && !docked, docked }"
-    :style="docked ? undefined : { left: `${x}px`, top: `${y}px` }"
+    :class="{ below: below && !docked, docked, wrap: !docked && !!maxWidth }"
+    :style="docked ? undefined : { left: `${x}px`, top: `${y}px`, maxWidth: maxWidth ? `${maxWidth}px` : undefined }"
     role="toolbar"
     aria-label="Formatação do texto"
     @mousedown="onMouseDown"
@@ -377,6 +379,21 @@ function pickColor(color: PaletteColor | null) {
   font-size: 12px;
   font-weight: 700;
   color: var(--text);
+}
+/* Editor estreito (ex.: descrição das tarefas): duas fileiras em vez de cortar a barra.
+   max-content + max-width: a largura é a do editor, não a que sobra à direita do ponto */
+.format-toolbar.wrap {
+  width: max-content;
+}
+.format-toolbar.wrap .row:not(.link-row),
+.format-toolbar.wrap .palette {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.format-toolbar.wrap .link-input {
+  flex: 1;
+  width: auto;
+  min-width: 120px;
 }
 @keyframes toolbar-in {
   from {

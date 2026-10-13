@@ -7,8 +7,9 @@
  * - As fotos das categorias das Notas ficam também na pasta da categoria
  *   (notes/<Categoria>/<Categoria>.png); as de antes da biblioteca aparecem nela do
  *   mesmo jeito. Imagens iguais (mesmo conteúdo) aparecem uma vez só.
- * - "Em uso" = citada numa nota (.md em notes/ ou mindmap/) ou foto de uma
- *   categoria (Notas ou Links). Só imagens sem uso podem ser excluídas.
+ * - "Em uso" = citada numa nota (.md em notes/ ou mindmap/), na descrição de uma
+ *   tarefa (tasks/tasks.json) ou foto de uma categoria (Notas ou Links). Só imagens
+ *   sem uso podem ser excluídas.
  */
 import { ATTACHMENTS_DIR, IMAGE_FILE, libraryName, MAX_IMAGE_BYTES } from './files'
 import type { FileEntry, LibraryImage, ListOptions, RemoveImageResult } from './ipc'
@@ -40,6 +41,8 @@ export class LibraryError extends Error {
 
 const NOTES_CATEGORIES_FILE = 'notes/categorias.json'
 const LINKS_FILE = 'links/links.json'
+/** As descrições das tarefas (Markdown, como as notas) também podem ter imagens. */
+const TASKS_FILE = 'tasks/tasks.json'
 /** Pastas com notas (.md) que podem citar imagens. */
 const NOTE_DIRS = [
   { dir: 'notes', one: 'nota', many: 'notas' },
@@ -152,17 +155,27 @@ export function referencedFiles(notePath: string, content: string): string[] {
   return found
 }
 
-/** Quantas notas de cada pasta citam cada arquivo: caminho → contagem por pasta. */
+/** Quem cita imagens: as notas de cada pasta e, por último, as descrições das tarefas. */
+const USERS = [...NOTE_DIRS, { one: 'tarefa', many: 'tarefas' }] as const
+const TASKS_INDEX = USERS.length - 1
+
+/** Quantas notas de cada pasta (e quantas tarefas) citam cada arquivo: caminho → contagem. */
 async function noteReferences(io: LibraryIo): Promise<Map<string, number[]>> {
   const counts = new Map<string, number[]>()
-  for (const [index, { dir }] of NOTE_DIRS.entries()) {
-    for (const file of await io.list(dir, { recursive: true, extensions: ['.md'], withContent: true })) {
-      for (const target of new Set(referencedFiles(file.path, file.content ?? '').map(key))) {
-        const list = counts.get(target) ?? NOTE_DIRS.map(() => 0)
-        list[index]!++
-        counts.set(target, list)
-      }
+  const count = (targets: string[], index: number) => {
+    for (const target of new Set(targets.map(key))) {
+      const list = counts.get(target) ?? USERS.map(() => 0)
+      list[index]!++
+      counts.set(target, list)
     }
+  }
+  for (const [index, { dir }] of NOTE_DIRS.entries()) {
+    for (const file of await io.list(dir, { recursive: true, extensions: ['.md'], withContent: true })) count(referencedFiles(file.path, file.content ?? ''), index)
+  }
+  // Descrições das tarefas: os caminhos são relativos à pasta tasks/ (como os de uma nota ali)
+  const tasks = await io.readJson(TASKS_FILE)
+  for (const task of isObject(tasks) && Array.isArray(tasks.tasks) ? tasks.tasks : []) {
+    if (isObject(task) && typeof task.notes === 'string' && task.notes) count(referencedFiles(TASKS_FILE, task.notes), TASKS_INDEX)
   }
   return counts
 }
@@ -207,10 +220,10 @@ async function collect(io: LibraryIo): Promise<Group[]> {
   for (const group of groups) {
     // Aparece pela cópia da biblioteca (attachments/), a mais antiga
     group.files.sort((a, b) => Number(inLibrary(b.path)) - Number(inLibrary(a.path)) || a.mtimeMs - b.mtimeMs)
-    const totals = NOTE_DIRS.map(() => 0)
+    const totals = USERS.map(() => 0)
     const files = new Set(group.files.map((file) => key(file.path)))
     for (const file of files) references.get(file)?.forEach((count, index) => (totals[index]! += count))
-    const notes = totals.flatMap((count, index) => (count ? [`${count} ${count === 1 ? NOTE_DIRS[index]!.one : NOTE_DIRS[index]!.many}`] : []))
+    const notes = totals.flatMap((count, index) => (count ? [`${count} ${count === 1 ? USERS[index]!.one : USERS[index]!.many}`] : []))
     // Categorias na ordem dos módulos (Notas, depois Links)
     const labels = [...new Set(categories.filter((image) => files.has(key(image.path))).map((image) => image.label))]
     group.usage = [...notes, ...labels]

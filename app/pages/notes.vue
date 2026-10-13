@@ -47,9 +47,9 @@ onBackButton(() => {
   return true
 })
 
-/** Menções (@) a notas (das Notas e do Mapa Mental), tarefas e links salvos — stores/mentions.ts. */
+/** Menções (@) a itens de todos os módulos — stores/mentions.ts. */
 const mentions: MentionHost = {
-  search: (query) => searchMentions(query, notes.activeNote.value?.path ?? null),
+  search: (query) => searchMentions(query, { exceptPath: notes.activeNote.value?.path ?? null }),
   describe: describeMention,
   open: openMentionPath,
   revision: () => mentionRevision.value,

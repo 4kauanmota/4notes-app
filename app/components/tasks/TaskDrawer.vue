@@ -2,25 +2,32 @@
 /**
  * Painel lateral para criar/editar uma tarefa.
  * No modo edição, cada alteração é salva na hora (sem botão "Salvar").
- * Digitar "@" no título ou nos detalhes (ou usar "Mencionar nota") menciona uma nota.
+ * A descrição usa o mesmo editor das notas (MarkdownEditor): negrito, listas,
+ * checklists, código, imagens… — salva como Markdown no tasks.json ("notes").
+ * Digitar "@" no título ou na descrição (ou usar "Mencionar") menciona um item de
+ * qualquer módulo — nota, mapa, tarefa, link ou registro do Timer: ele vai para a lista
+ * "Menções" da tarefa.
  * Clicar fora do painel o fecha (pages/tasks.vue).
  */
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useMentionTrigger, type MentionPickerControls } from '~/composables/useMentionTrigger'
 import { showToast } from '~/composables/useToasts'
 import { addDays, formatDateBR, formatLongDate, formatShortDate, relativeDayLabel, toISODate, type ISODate } from '~/lib/dates'
-import { refKey, type NoteRef } from '~/lib/tasks/mentions'
+import type { MentionHost } from '~/lib/editor/host'
+import { DESCRIPTION_DIR } from '~/lib/tasks/description'
+import { refKey, type MentionRef } from '~/lib/mentions/refs'
+import { taskMentionPath } from '~/lib/notes/mention-links'
 import { describeRecurrence, type Recurrence, type RecurrenceDraft } from '~/lib/tasks/recurrence'
+import { describeMention, mentionRevision, openMentionPath, refFromTarget, savedLinkIcon, searchMentions } from '~/stores/mentions'
 import { useTasksStore, withMention } from '~/stores/tasks'
 
 const tasks = useTasksStore()
 const today = tasks.today
 const panel = ref<HTMLElement>()
 const titleInput = ref<HTMLTextAreaElement>()
-const notesInput = ref<HTMLTextAreaElement>()
 const mentionButton = ref<HTMLButtonElement>()
 const picker = ref<MentionPickerControls>()
-/** Lista de notas aberta pelo botão "Mencionar nota". */
+/** Lista aberta pelo botão "Mencionar". */
 const pickerFromButton = ref(false)
 const categoryDialogOpen = ref(false)
 const shake = ref(false)
@@ -34,7 +41,7 @@ const open = computed(() => mode.value === 'create' || !!task.value)
 
 const draft = reactive({
   notes: '',
-  mentions: [] as NoteRef[],
+  mentions: [] as MentionRef[],
   categoryId: null as string | null,
   date: null as ISODate | null,
   recurring: false,
@@ -44,6 +51,9 @@ const titleText = ref('')
 const lastRule = ref<RecurrenceDraft>({ ...DEFAULT_RULE })
 /** Seção "Configurações avançadas" (data e recorrência). Fica como você deixou durante o uso. */
 const advancedOpen = ref(false)
+/** Cada "Nova tarefa" é um documento novo no editor da descrição (desfazer separado). */
+let creations = 0
+const creation = ref(0)
 
 function autosize() {
   const el = titleInput.value
@@ -57,6 +67,7 @@ watch(
   () => tasks.state.drawer,
   async (drawer, previous) => {
     if (drawer?.mode === 'create') {
+      creation.value = ++creations
       const selection = tasks.state.selection
       const { prefill } = drawer
       Object.assign(draft, {
@@ -92,7 +103,7 @@ const notes = computed({
 })
 const mentions = computed({
   get: () => (task.value ? task.value.mentions : draft.mentions),
-  set: (value: NoteRef[]) => (task.value ? tasks.updateTask(task.value.id, { mentions: value }) : (draft.mentions = value)),
+  set: (value: MentionRef[]) => (task.value ? tasks.updateTask(task.value.id, { mentions: value }) : (draft.mentions = value)),
 })
 const categoryId = computed({
   get: () => (task.value ? task.value.categoryId : draft.categoryId),
@@ -113,11 +124,14 @@ function onTitleInput() {
 
 // ── Menções ─────────────────────────────────────────────────────────────────
 
-function addMention(mention: NoteRef) {
+/** Caminho de menção da própria tarefa (ela não aparece na lista para mencionar). */
+const ownPath = computed(() => (task.value ? taskMentionPath(task.value.id) : null))
+
+function addMention(mention: MentionRef) {
   mentions.value = withMention(mentions.value, mention)
 }
 
-function removeMention(mention: NoteRef) {
+function removeMention(mention: MentionRef) {
   mentions.value = mentions.value.filter((item) => refKey(item) !== refKey(mention))
 }
 
@@ -132,13 +146,26 @@ const titleMention = useMentionTrigger({
 })
 const titleQuery = titleMention.query
 
-const notesMention = useMentionTrigger({
-  getText: () => notes.value,
-  setText: (value) => (notes.value = value),
-  element: () => notesInput.value,
-  onPick: addMention,
-})
-const notesQuery = notesMention.query
+/**
+ * Descrição: o "@" do editor lista itens de todos os módulos. O escolhido vira o título
+ * no texto e vai para "Menções" — como no título da tarefa.
+ */
+const descriptionMentions: MentionHost = {
+  search: (query) => searchMentions(query, { exclude: mentions.value, exceptPath: ownPath.value }),
+  choose: (target) => {
+    const ref = refFromTarget(target)
+    if (ref) addMention(ref)
+    return target.title
+  },
+  describe: describeMention,
+  open: openMentionPath,
+  revision: () => mentionRevision.value,
+  linkIcon: savedLinkIcon,
+}
+/** Documento do editor da descrição: um por tarefa (o desfazer de cada uma fica guardado). */
+const descriptionKey = computed(() => (task.value ? `task:${task.value.id}` : `task-new:${creation.value}`))
+/** Pasta "da descrição" no workspace: base dos caminhos das imagens coladas nela. */
+const descriptionBase = DESCRIPTION_DIR
 
 function onTitleKeydown(event: KeyboardEvent) {
   if (titleMention.onKeydown(event, picker.value)) return
@@ -258,23 +285,23 @@ defineExpose({
           @blur="onTitleBlur"
           @keydown="onTitleKeydown"
         />
-        <textarea
-          ref="notesInput"
-          v-model="notes"
-          class="notes-input"
-          rows="3"
-          placeholder="Detalhes, links, observações… (opcional — @ menciona uma nota)"
-          spellcheck="true"
-          @input="notesMention.onInput()"
-          @keydown="notesMention.onKeydown($event, picker)"
-        />
+        <div class="notes-input" data-field="task-description">
+          <MarkdownEditor
+            v-model="notes"
+            :doc-key="descriptionKey"
+            :asset-base="descriptionBase"
+            :mentions="descriptionMentions"
+            placeholder="Detalhes, links, observações… (opcional — @ menciona notas, tarefas, links, registros…)"
+            toolbar-overflow
+          />
+        </div>
 
         <div class="field mentions-field">
-          <span v-if="mentions.length" class="field-label">Notas mencionadas</span>
+          <span v-if="mentions.length" class="field-label">Menções</span>
           <div class="mention-chips">
             <MentionChip v-for="item in mentions" :key="refKey(item)" :mention="item" removable @remove="removeMention(item)" />
             <button ref="mentionButton" type="button" class="cat-chip add" @click="pickerFromButton = !pickerFromButton">
-              <AppIcon name="at" :size="12" /> Mencionar nota
+              <AppIcon name="at" :size="12" /> Mencionar
             </button>
           </div>
         </div>
@@ -363,29 +390,22 @@ defineExpose({
     </aside>
   </Transition>
   <CategoryDialog :open="categoryDialogOpen" @close="categoryDialogOpen = false" @saved="(category) => (categoryId = category.id)" />
-  <NotePicker
+  <MentionPicker
     v-if="open && titleQuery !== null && titleInput"
     ref="picker"
     :anchor="titleInput"
     :query="titleQuery"
     :exclude="mentions"
+    :except-path="ownPath"
     @pick="titleMention.pick"
     @close="titleMention.close()"
   />
-  <NotePicker
-    v-else-if="open && notesQuery !== null && notesInput"
-    ref="picker"
-    :anchor="notesInput"
-    :query="notesQuery"
-    :exclude="mentions"
-    @pick="notesMention.pick"
-    @close="notesMention.close()"
-  />
-  <NotePicker
+  <MentionPicker
     v-else-if="open && pickerFromButton && mentionButton"
     :anchor="mentionButton"
     with-search
     :exclude="mentions"
+    :except-path="ownPath"
     @pick="(item) => ((pickerFromButton = false), addMention(item))"
     @close="pickerFromButton = false"
   />
@@ -465,21 +485,32 @@ defineExpose({
 .notes-input {
   width: 100%;
   margin-top: -8px;
-  padding: 10px 12px;
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
-  font: inherit;
-  font-size: 13.5px;
-  line-height: 1.55;
-  resize: vertical;
-  outline: none;
   transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  /* O editor das notas, em tamanho de campo: cresce com o texto (o painel rola) */
+  --editor-padding-x: 12px;
+  --editor-padding-top: 9px;
+  --editor-padding-bottom: 10px;
+  --editor-font-size: 13.5px;
 }
-.notes-input:focus {
+.notes-input:focus-within {
   border-color: var(--primary);
   box-shadow: var(--focus-ring);
+}
+.notes-input :deep(.markdown-editor),
+.notes-input :deep(.editor-parent),
+.notes-input :deep(.cm-editor) {
+  height: auto;
+}
+.notes-input :deep(.cm-editor) {
+  min-height: 96px;
+}
+.notes-input :deep(.cm-scroller) {
+  min-height: 96px;
+  overflow-y: visible;
 }
 .cat-chips {
   display: flex;

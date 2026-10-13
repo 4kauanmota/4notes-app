@@ -4,9 +4,10 @@ import { computed, ref } from 'vue'
 import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
 import { paletteVar } from '~/lib/colors'
 import { formatDateBR, relativeDayLabel } from '~/lib/dates'
-import { refKey } from '~/lib/tasks/mentions'
+import { refKey } from '~/lib/mentions/refs'
 import type { Task } from '~/lib/tasks/model'
 import { describeRecurrence } from '~/lib/tasks/recurrence'
+import { descriptionPreview } from '~/lib/tasks/description'
 import { useTasksStore } from '~/stores/tasks'
 
 const props = defineProps<{ task: Task; showCategory?: boolean; mode?: 'pending' | 'scheduled' }>()
@@ -26,7 +27,8 @@ const dateInfo = computed(() => {
 })
 
 const recurrenceLabel = computed(() => (props.task.recurrence ? describeRecurrence(props.task.recurrence) : null))
-const notesPreview = computed(() => props.task.notes.split('\n').find((line) => line.trim())?.trim() ?? '')
+/** Primeira linha da descrição, como aparece no editor (sem **, listas como •, menções pelo título). */
+const notesPreview = computed(() => (props.task.notes.trim() ? descriptionPreview(props.task.notes) : ''))
 
 function complete() {
   if (completing.value) return

@@ -2,13 +2,13 @@
 /**
  * Campo rápido para adicionar tarefas. Entende alguns atalhos no texto:
  *   "Estudar Godot amanhã #estudos"  → data = amanhã, categoria = Estudos
- *   "Revisar @ideias"                → menciona a nota "Ideias" (escolhida na lista)
+ *   "Revisar @ideias"                → menciona "Ideias" (nota, tarefa, link… escolhido na lista)
  * "Mais opções" abre o painel completo já preenchido com o que foi digitado.
  */
 import { computed, ref } from 'vue'
 import { useMentionTrigger, type MentionPickerControls } from '~/composables/useMentionTrigger'
 import { addDays, relativeDayLabel, type ISODate } from '~/lib/dates'
-import { refKey, type NoteRef } from '~/lib/tasks/mentions'
+import { refKey, type MentionRef } from '~/lib/mentions/refs'
 import { useTasksStore, withMention } from '~/stores/tasks'
 
 const props = defineProps<{ categoryId: string | null }>()
@@ -30,7 +30,7 @@ const mention = useMentionTrigger({
 })
 const mentionQuery = mention.query
 
-function removeMention(item: NoteRef) {
+function removeMention(item: MentionRef) {
   tasks.state.quickAddMentions = tasks.state.quickAddMentions.filter((other) => refKey(other) !== refKey(item))
 }
 
@@ -109,7 +109,7 @@ defineExpose({ focus: () => input.value?.focus() })
     <button type="button" class="icon-btn qa-more" data-tip="Mais opções (data, recorrência…)" aria-label="Mais opções" @click="moreOptions">
       <AppIcon name="sliders" :size="16" />
     </button>
-    <NotePicker
+    <MentionPicker
       v-if="mentionQuery !== null && input"
       ref="picker"
       :anchor="input"

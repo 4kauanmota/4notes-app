@@ -2,7 +2,7 @@
 /**
  * Casca do aplicativo: barra de título, navegação e a página do módulo atual.
  * A inicialização (carregar a pasta de dados) fica em stores/app.ts; os módulos
- * (rotas, atalhos Ctrl+1…4, quais estão ativos) vêm de lib/modules.ts e stores/modules.ts.
+ * (rotas, atalhos Ctrl+1…5, quais estão ativos) vêm de lib/modules.ts e stores/modules.ts.
  */
 import { computed, nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -50,7 +50,7 @@ watch(
   },
 )
 
-/** Ctrl+1…4: abre o módulo (desativado: avisa e oferece "Ativar"). */
+/** Ctrl+1…5: abre o módulo (desativado: avisa e oferece "Ativar"). */
 function openModule(id: ModuleId) {
   if (app.state.phase !== 'ready') return
   const go = () => void router.push(moduleById(id).route)
@@ -87,7 +87,7 @@ function reload() {
       <main class="app-main" :class="{ full: app.state.phase !== 'ready' }">
         <!-- As páginas ficam sempre montadas (ocultas até a pasta de dados carregar) -->
         <div v-show="app.state.phase === 'ready'" class="page-host">
-          <NuxtPage :keepalive="{ max: 4 }" />
+          <NuxtPage :keepalive="{ max: MODULES.length }" />
         </div>
 
         <WelcomeScreen v-if="app.state.phase === 'setup'" />
@@ -114,6 +114,7 @@ function reload() {
     <SettingsDialog v-if="app.state.phase === 'ready'" />
     <ImageLibraryDialog v-if="app.state.phase === 'ready'" />
     <TutorialPanel v-if="app.state.phase === 'ready'" />
+    <MentionsDialog v-if="app.state.phase === 'ready'" />
     <FolderPickerDialog />
     <DialogHost />
     <ToastHost />

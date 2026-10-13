@@ -3,8 +3,8 @@
  *
  * Os dados ficam em tasks/tasks.json. As regras (concluir, recorrência,
  * agrupamento) estão em lib/tasks/*.ts — aqui só conectamos essas regras à
- * interface e ao disco. As tarefas podem mencionar notas (lib/tasks/mentions.ts);
- * quem abre as notas e acompanha renomeações é o stores/mentions.ts.
+ * interface e ao disco. As tarefas podem mencionar itens de todos os módulos
+ * (lib/mentions/refs.ts); quem lista, abre e acompanha renomeações é o stores/mentions.ts.
  */
 import { computed, reactive } from 'vue'
 import { errorMessage } from '#shared/ipc'
@@ -30,7 +30,7 @@ import {
   type NewTaskInput,
   type Task,
 } from '~/lib/tasks/model'
-import { refKey, renamedRef, type NoteRef } from '~/lib/tasks/mentions'
+import { refKey, renamedRef, type MentionRef } from '~/lib/mentions/refs'
 import type { NoteChange } from '~/lib/note-events'
 import { clampInterval, type Recurrence } from '~/lib/tasks/recurrence'
 import { tasksRepository as repo } from '~/lib/tasks/repository'
@@ -43,7 +43,7 @@ export interface TaskPrefill {
   title?: string
   date?: ISODate | null
   categoryId?: string | null
-  mentions?: NoteRef[]
+  mentions?: MentionRef[]
 }
 
 export type DrawerState = null | { mode: 'edit'; id: string } | { mode: 'create'; prefill: TaskPrefill; fromQuickAdd: boolean }
@@ -61,7 +61,7 @@ const state = reactive({
   /** Texto da barra de criação rápida (fica aqui para o painel "Mais opções" poder usá-lo). */
   quickAddText: '',
   /** Notas mencionadas com @ na barra de criação rápida. */
-  quickAddMentions: [] as NoteRef[],
+  quickAddMentions: [] as MentionRef[],
 })
 
 let lastRaw: string | null = null
@@ -193,25 +193,38 @@ function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'notes' | 'c
   touch(task)
 }
 
-/** Acrescenta uma menção (sem repetir a mesma nota). */
-export function withMention(list: NoteRef[], ref: NoteRef): NoteRef[] {
+/** Acrescenta uma menção (sem repetir o mesmo item). */
+export function withMention(list: MentionRef[], ref: MentionRef): MentionRef[] {
   return list.some((item) => refKey(item) === refKey(ref)) ? list : [...list, ref]
 }
 
-/** Uma nota ou um mapa mudou de nome: as menções passam a apontar para o nome novo. */
-function applyNoteChange(change: NoteChange, titleOf?: (ref: NoteRef) => string | null): void {
-  const update = (ref: NoteRef) => {
-    const next = renamedRef(ref, change)
-    if (!next) return ref
-    const title = titleOf?.(next)
-    return title ? { ...next, title } : next
-  }
+/**
+ * Troca menções das tarefas (renomeações, endereço novo de um link salvo): `transform`
+ * devolve a menção nova, ou null quando ela fica como está.
+ */
+function updateMentions(transform: (ref: MentionRef) => MentionRef | null): void {
   for (const task of state.tasks) {
-    if (!task.mentions.some((ref) => renamedRef(ref, change))) continue
-    task.mentions = task.mentions.map(update)
+    let changed = false
+    const next = task.mentions.map((ref) => {
+      const updated = transform(ref)
+      if (updated) changed = true
+      return updated ?? ref
+    })
+    if (!changed) continue
+    task.mentions = next
     scheduleSave()
   }
-  state.quickAddMentions = state.quickAddMentions.map(update)
+  state.quickAddMentions = state.quickAddMentions.map((ref) => transform(ref) ?? ref)
+}
+
+/** Uma nota, categoria ou mapa mudou de nome: as menções passam a apontar para o nome novo. */
+function applyNoteChange(change: NoteChange, titleOf?: (ref: MentionRef) => string | null): void {
+  updateMentions((ref) => {
+    const next = renamedRef(ref, change)
+    if (!next) return null
+    const title = titleOf?.(next)
+    return title ? { ...next, title } : next
+  })
 }
 
 /** Muda a data. Em tarefas recorrentes, a data é a "próxima ocorrência" e vira a nova âncora da série. */
@@ -408,6 +421,7 @@ export function useTasksStore() {
     addTask,
     updateTask,
     applyNoteChange,
+    updateMentions,
     setTaskDate,
     setRecurrence,
     complete,

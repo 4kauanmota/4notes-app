@@ -26,7 +26,8 @@ export const editorTheme = EditorView.theme({
   '.cm-content': {
     maxWidth: 'var(--editor-max-width, none)',
     width: '100%',
-    padding: 'var(--editor-padding-top, 28px) 0 45vh',
+    // Espaço depois do texto: na nota, meia tela (dá para rolar o fim do texto até o meio)
+    padding: 'var(--editor-padding-top, 28px) 0 var(--editor-padding-bottom, 45vh)',
     caretColor: 'var(--primary)',
     cursor: 'text',
   },
@@ -285,7 +286,7 @@ export const editorTheme = EditorView.theme({
   '.cm-selectionMatch': { backgroundColor: 'transparent', borderRadius: '3px', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--accent-strong) 70%, transparent)' },
   '.cm-selectionMatch-main': { boxShadow: 'none' },
 
-  // Menções a notas (ver mentions.ts): chip com o título da nota
+  // Menções (ver mentions.ts): chip com o título atual do item
   '.cm-mention': {
     display: 'inline-flex',
     alignItems: 'center',
@@ -307,9 +308,11 @@ export const editorTheme = EditorView.theme({
   '.cm-mention svg': { flex: 'none', opacity: '0.85' },
   '.cm-mention-title': { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   '.cm-mention.missing': { backgroundColor: 'var(--surface-3)', color: 'var(--text-3)', textDecoration: 'line-through' },
-  // Tarefas mencionadas: amarelo (a cor das Tarefas); concluída = riscada
-  '.cm-mention.task:not(.missing)': { backgroundColor: 'var(--accent-soft)', color: 'var(--accent-text)' },
-  '.cm-mention.task:not(.missing):hover': { backgroundColor: 'color-mix(in srgb, var(--accent) 34%, transparent)' },
+  // Tarefas e registros do Timer mencionados: amarelo; tarefa concluída = riscada
+  '.cm-mention.task:not(.missing), .cm-mention.timer:not(.missing)': { backgroundColor: 'var(--accent-soft)', color: 'var(--accent-text)' },
+  '.cm-mention.task:not(.missing):hover, .cm-mention.timer:not(.missing):hover': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 34%, transparent)',
+  },
   '.cm-mention.task.done .cm-mention-title': { textDecoration: 'line-through', opacity: '0.75' },
 
   // Lista de notas aberta pelo "@"

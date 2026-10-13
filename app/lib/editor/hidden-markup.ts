@@ -18,6 +18,7 @@
  *    negrito, como no Word (links e código não continuam);
  *  - copiar parte de um trecho leva as marcações completas.
  */
+import { completionStatus } from '@codemirror/autocomplete'
 import { cursorCharLeft, cursorCharRight, cursorLineBoundaryForward, selectCharLeft, selectCharRight } from '@codemirror/commands'
 import { ensureSyntaxTree } from '@codemirror/language'
 import {
@@ -554,6 +555,8 @@ function deleteAcrossMarkup(forward: boolean): Command {
  * da quebra. O Enter normal (que também continua listas) roda em seguida.
  */
 export function breakOutOfMarkup(view: EditorView): boolean {
+  // Lista do "@" aberta: o Enter escolhe a menção (mesmo dentro de um trecho formatado)
+  if (completionStatus(view.state) === 'active') return false
   if (view.state.selection.ranges.length !== 1) return false
   const selected = view.state.selection.main
   if (!contentElements(view.state, selected.from, selected.to).length) return false

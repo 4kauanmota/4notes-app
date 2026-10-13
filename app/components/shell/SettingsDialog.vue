@@ -103,7 +103,7 @@ async function runWorkspace(action: () => Promise<boolean>) {
 // ── Módulos ─────────────────────────────────────────────────────────────────
 
 /** Módulos que têm configurações aqui (os outros mostram o aviso). */
-const WITH_SETTINGS = new Set<ModuleId>(['notes', 'mindmap'])
+const WITH_SETTINGS = new Set<ModuleId>(['notes', 'mindmap', 'timer'])
 
 /** Configurações de cada módulo: só dos ativos (as dos desativados continuam guardadas). */
 const moduleSections = computed(() => modules.enabled.value)
@@ -243,8 +243,9 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
               <li><code>tasks/tasks.json</code> tarefas e categorias</li>
               <li><code>mindmap/</code> mapas mentais — uma pasta por mapa, com as notas (.md) e o mapa.json (conexões e cores)</li>
               <li><code>links/links.json</code> links salvos e categorias (ícones dos sites em <code>links/icons/</code>)</li>
+              <li><code>timer/timer.json</code> categorias e histórico do Timer (e a sessão em andamento)</li>
               <li><code>attachments/</code> biblioteca de imagens (coladas nas notas, enviadas, fotos das categorias)</li>
-              <li><code>.4notes/</code> configurações (settings.json — as mesmas no computador e no celular), posições do mapa e backups diários das tarefas e dos links</li>
+              <li><code>.4notes/</code> configurações (settings.json — as mesmas no computador e no celular), posições do mapa e backups diários das tarefas, dos links e do Timer</li>
             </ul>
             <p class="hint">
               Para fazer backup, copie a pasta inteira. Os arquivos podem ser abertos e editados em qualquer editor de texto. Sincronizando a pasta (Google Drive…),
@@ -273,7 +274,7 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
             <h3 class="module-title"><AppIcon name="layers" :size="16" /> Geral</h3>
             <SettingRow
               label="Módulos ativos"
-              help="Desativar só tira o módulo do menu lateral: as notas, tarefas, mapas e links dele continuam guardados. Arraste para mudar a ordem do menu."
+              help="Desativar só tira o módulo do menu lateral: as notas, tarefas, mapas, links e o histórico do Timer continuam guardados. Arraste para mudar a ordem do menu."
             >
               <span class="enabled-count">{{ modules.enabled.value.length }} de {{ MODULES.length }}</span>
             </SettingRow>
@@ -316,6 +317,7 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
               <div v-if="WITH_SETTINGS.has(section.id)" class="module-rows">
                 <NotesSettings v-if="section.id === 'notes'" />
                 <GraphSettings v-else-if="section.id === 'mindmap'" />
+                <TimerSettings v-else-if="section.id === 'timer'" />
               </div>
               <p v-else class="no-settings">Sem nenhuma configuração disponível no momento.</p>
             </section>

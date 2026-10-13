@@ -2,10 +2,12 @@
 /**
  * Editar um link: título, endereço e categoria. "Buscar no site" pega de novo o título e
  * o ícone da página (o título novo aparece no campo, se você não o tinha mudado).
+ * "Ver menções" mostra onde o link foi mencionado (notas e tarefas).
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { displayHost } from '~/lib/links/model'
 import { useLinksStore } from '~/stores/links'
+import { savedLinkSubject, showMentionsOf } from '~/stores/mentions'
 
 const props = defineProps<{ open: boolean; linkId: string | null }>()
 const emit = defineEmits<{ close: [] }>()
@@ -66,6 +68,12 @@ function save() {
   emit('close')
 }
 
+function showMentions() {
+  const current = link.value
+  emit('close')
+  if (current) showMentionsOf(savedLinkSubject(current))
+}
+
 function remove() {
   if (link.value) links.deleteLink(link.value.id)
   emit('close')
@@ -107,6 +115,9 @@ function remove() {
 
       <div class="actions">
         <button type="button" class="btn btn-danger-ghost delete-btn" @click="remove"><AppIcon name="trash" :size="15" /> Excluir</button>
+        <button type="button" class="btn btn-ghost mentions-btn" data-action="link-mentions" @click="showMentions">
+          <AppIcon name="backlink" :size="15" /> Ver menções
+        </button>
         <button type="button" class="btn btn-ghost" @click="emit('close')">Cancelar</button>
         <button type="submit" class="btn btn-primary">Salvar</button>
       </div>
@@ -155,11 +166,15 @@ h2 {
 }
 .actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 22px;
 }
 .delete-btn {
+  padding-left: 10px;
+}
+.mentions-btn {
   margin-right: auto;
   padding-left: 10px;
 }

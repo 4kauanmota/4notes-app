@@ -528,11 +528,16 @@ function disconnectNotes(aId: string, bId: string): void {
 }
 
 function setColor(id: string, color: PaletteColor | null): void {
-  const note = findNote(id)
-  if (!note) return
-  const key = nameKey(note.title)
-  const colors = Object.fromEntries(Object.entries(state.mapData.colors).filter(([title]) => nameKey(title) !== key))
-  if (color) colors[note.title] = color
+  setColors([id], color)
+}
+
+/** Mesma cor para várias notas (seleção múltipla); null = cor padrão. */
+function setColors(ids: readonly string[], color: PaletteColor | null): void {
+  const notes = ids.map((id) => findNote(id)).filter((note): note is PermanentNote => !!note)
+  if (!notes.length) return
+  const keys = new Set(notes.map((note) => nameKey(note.title)))
+  const colors = Object.fromEntries(Object.entries(state.mapData.colors).filter(([title]) => !keys.has(nameKey(title))))
+  if (color) for (const note of notes) colors[note.title] = color
   state.mapData.colors = colors
   scheduleMapSave()
 }
@@ -616,50 +621,71 @@ async function renameNote(id: string, rawTitle: string): Promise<boolean> {
 }
 
 async function deleteNote(id: string): Promise<void> {
-  const note = findNote(id)
-  if (!note) return
-  timers.get(note.key)?.cancel()
-  await queue.run(note.key, async () => undefined)
+  await deleteNotes([id])
+}
+
+/**
+ * Exclui uma ou várias notas (seleção múltipla): os arquivos vão para a Lixeira e as
+ * conexões delas saem do mapa. Um só "Desfazer" traz todas de volta, com as conexões,
+ * as cores e as posições.
+ */
+async function deleteNotes(ids: readonly string[]): Promise<void> {
+  const list = [...new Set(ids)].map((id) => findNote(id)).filter((note): note is PermanentNote => !!note)
+  if (!list.length) return
   const map = state.currentMap
-  try {
-    await repo.trash(map, note.id)
-  } catch (error) {
-    notifyError(`Não foi possível excluir: ${errorMessage(error)}`, error)
-    return
-  }
   captureLayout()
-  const removed = removeFromMap(state.mapData, note.title)
-  const snapshot = { id: note.id, title: note.title, content: note.content, position: state.layout[noteNodeId(note.id)] }
-  state.mapData = removed.data
+  const snapshots: { id: string; title: string; content: string; position: [number, number] | undefined }[] = []
+  const connections: Connection[] = []
+  const colors: Record<string, PaletteColor> = {}
+  for (const note of list) {
+    timers.get(note.key)?.cancel()
+    await queue.run(note.key, async () => undefined)
+    try {
+      await repo.trash(map, note.id)
+    } catch (error) {
+      notifyError(`Não foi possível excluir “${note.title}”: ${errorMessage(error)}`, error)
+      continue
+    }
+    const removed = removeFromMap(state.mapData, note.title)
+    state.mapData = removed.data
+    connections.push(...removed.connections)
+    if (removed.color) colors[note.title] = removed.color
+    snapshots.push({ id: note.id, title: note.title, content: note.content, position: state.layout[noteNodeId(note.id)] })
+    state.notes = state.notes.filter((other) => other.key !== note.key)
+    timers.delete(note.key)
+    if (state.selectedId === note.id) closePanel()
+  }
+  if (!snapshots.length) return
   scheduleMapSave()
-  state.notes = state.notes.filter((other) => other.key !== note.key)
-  timers.delete(note.key)
   syncMapCount()
-  if (state.selectedId === id) closePanel()
   showToast({
-    message: `“${note.title}” foi para ${trashPlace()}`,
+    message: snapshots.length === 1 ? `“${snapshots[0]!.title}” foi para ${trashPlace()}` : `${snapshots.length} notas foram para ${trashPlace()}`,
     icon: 'trash',
     action: {
       label: 'Desfazer',
       run: async () => {
-        if (state.currentMap !== map || findNote(snapshot.id)) return
-        const entry = await repo.write(map, snapshot.id, snapshot.content)
-        if (snapshot.position) state.layout = { ...state.layout, [noteNodeId(snapshot.id)]: snapshot.position }
-        state.notes.push({
-          key: createId('m'),
-          id: snapshot.id,
-          title: snapshot.title,
-          content: snapshot.content,
-          savedContent: snapshot.content,
-          mtimeMs: entry.mtimeMs,
-          status: 'saved',
-        })
-        for (const connection of removed.connections) {
+        if (state.currentMap !== map) return
+        for (const snapshot of snapshots) {
+          if (findNote(snapshot.id)) continue
+          const entry = await repo.write(map, snapshot.id, snapshot.content)
+          if (snapshot.position) state.layout = { ...state.layout, [noteNodeId(snapshot.id)]: snapshot.position }
+          state.notes.push({
+            key: createId('m'),
+            id: snapshot.id,
+            title: snapshot.title,
+            content: snapshot.content,
+            savedContent: snapshot.content,
+            mtimeMs: entry.mtimeMs,
+            status: 'saved',
+          })
+        }
+        for (const connection of connections) {
           if (!findConnection(state.mapData.connections, connection.from, connection.to)) state.mapData.connections.push(connection)
         }
-        if (removed.color) state.mapData.colors = { ...state.mapData.colors, [snapshot.title]: removed.color }
+        if (Object.keys(colors).length) state.mapData.colors = { ...state.mapData.colors, ...colors }
         scheduleMapSave()
         syncMapCount()
+        persistUi()
       },
     },
   })
@@ -770,10 +796,12 @@ export function useMindmapStore() {
     createNote,
     renameNote,
     deleteNote,
+    deleteNotes,
     revealNote,
     connectNotes,
     disconnectNotes,
     setColor,
+    setColors,
     refreshFromDisk,
     updateSettings,
     updateLayout,

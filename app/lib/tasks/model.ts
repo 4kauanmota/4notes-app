@@ -13,7 +13,7 @@
 import { PALETTE, PALETTE_LABELS, type PaletteColor } from '../colors'
 import { isISODate, toISODate, type ISODate } from '../dates'
 import { createId } from '../utils/async'
-import { normalizeRefs, type NoteRef } from './mentions'
+import { normalizeRefs, type MentionRef } from '../mentions/refs'
 import { clampInterval, nextDueAfterCompletion, type Recurrence } from './recurrence'
 
 /** As categorias usam a paleta comum do app (lib/colors.ts). */
@@ -48,8 +48,8 @@ export interface Task {
   done: boolean
   completedAt: string | null
   history: Completion[]
-  /** Notas mencionadas (Notas ou Mapa Mental) — ver mentions.ts. */
-  mentions: NoteRef[]
+  /** Menções: notas, mapas, tarefas, links e registros do Timer — ver lib/mentions/refs.ts. */
+  mentions: MentionRef[]
   createdAt: string
   updatedAt: string
 }
@@ -235,7 +235,15 @@ export interface NewTaskInput {
   categoryId?: string | null
   date?: ISODate | null
   recurrence?: Omit<Recurrence, 'anchor'> | null
-  mentions?: NoteRef[]
+  mentions?: MentionRef[]
+}
+
+/**
+ * Descrição (Markdown, como as notas): tira as linhas vazias do começo e os espaços do
+ * fim — a indentação da primeira linha fica (pode ser um subitem de lista).
+ */
+export function trimDescription(text: string): string {
+  return text.replace(/^(?:[ \t]*\n)+/, '').trimEnd()
 }
 
 export function createTask(input: NewTaskInput, today: ISODate, now = new Date()): Task {
@@ -244,7 +252,7 @@ export function createTask(input: NewTaskInput, today: ISODate, now = new Date()
   return {
     id: createId('t'),
     title: input.title.trim(),
-    notes: input.notes?.trim() ?? '',
+    notes: trimDescription(input.notes ?? ''),
     categoryId: input.categoryId ?? null,
     date,
     recurrence: input.recurrence && date ? { ...input.recurrence, interval: clampInterval(input.recurrence.interval), anchor: date } : null,

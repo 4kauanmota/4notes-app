@@ -1,23 +1,43 @@
 <script setup lang="ts">
-/** Nota mencionada numa tarefa: o clique abre a nota; o × tira a menção. */
+/**
+ * Item mencionado numa tarefa (nota, mapa, tarefa, link ou registro do Timer): o clique
+ * abre o item no módulo dele; o × tira a menção. Riscado quando o item não existe mais.
+ */
 import { computed } from 'vue'
-import type { NoteRef } from '~/lib/tasks/mentions'
-import { mentionTitle, mentionWhere, openMention } from '~/stores/mentions'
+import { MENTION_KINDS } from '~/lib/mentions/catalog'
+import type { MentionRef } from '~/lib/mentions/refs'
+import { describeRef, openRef } from '~/stores/mentions'
 
-const props = defineProps<{ mention: NoteRef; removable?: boolean }>()
+const props = defineProps<{ mention: MentionRef; removable?: boolean }>()
 const emit = defineEmits<{ remove: [] }>()
 
-const title = computed(() => mentionTitle(props.mention))
-const where = computed(() => mentionWhere(props.mention))
+const current = computed(() => describeRef(props.mention))
+const info = computed(() => MENTION_KINDS[props.mention.kind])
+const title = computed(() => current.value?.title || props.mention.title || info.value.noun)
+const tip = computed(() => {
+  if (!current.value) return info.value.missing
+  return current.value.detail ? `${info.value.open} · ${current.value.detail}` : info.value.open
+})
 </script>
 
 <template>
-  <span class="mention-chip">
-    <button type="button" class="mc-open" :data-tip="`Abrir nota · ${where}`" data-tip-pos="top" @click.stop="openMention(mention)">
-      <AppIcon :name="mention.kind === 'map' ? 'graph' : 'notes'" :size="12" />
+  <span
+    class="mention-chip"
+    :class="[`mc-${mention.kind}`, { 'mc-missing': !current, 'mc-done': current?.done }]"
+    :data-mention-kind="mention.kind"
+  >
+    <button type="button" class="mc-open" :data-tip="tip" data-tip-pos="top" @click.stop="openRef(mention)">
+      <AppIcon :name="mention.kind === 'task' && current?.done ? 'tasks' : info.icon" :size="12" />
       <span class="mc-title">{{ title }}</span>
     </button>
-    <button v-if="removable" type="button" class="mc-remove" aria-label="Tirar a menção" data-tip="Tirar a menção" @click.stop="emit('remove')">
+    <button
+      v-if="removable"
+      type="button"
+      class="mc-remove"
+      aria-label="Tirar a menção"
+      data-tip="Tirar a menção"
+      @click.stop="emit('remove')"
+    >
       <AppIcon name="x" :size="11" />
     </button>
   </span>
@@ -34,6 +54,19 @@ const where = computed(() => mentionWhere(props.mention))
   color: var(--primary-text);
   font-size: 12px;
   font-weight: 600;
+}
+.mention-chip.mc-task,
+.mention-chip.mc-timer {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.mention-chip.mc-missing {
+  background: var(--surface-3);
+  color: var(--text-3);
+}
+.mention-chip.mc-missing .mc-title,
+.mention-chip.mc-done .mc-title {
+  text-decoration: line-through;
 }
 .mc-open {
   display: inline-flex;

@@ -1,13 +1,15 @@
 /**
- * Menções a notas, tarefas e links no editor — só onde o app liga o recurso
- * (EditorHost.mentions: nas Notas e nas notas do Mapa Mental).
+ * Menções no editor — só onde o app liga o recurso (EditorHost.mentions: nas Notas,
+ * nas notas do Mapa Mental e na descrição das tarefas — ali a escolhida vai para a
+ * lista "Menções" da tarefa, MentionHost.choose).
  *
- * - Digitar "@" abre a lista (notas das Notas e dos mapas, tarefas e links salvos);
- *   Enter ou clique insere.
+ * - Digitar "@" abre a lista com itens de todos os módulos (notas, notas dos mapas,
+ *   mapas, tarefas, links salvos e registros do Timer); Enter ou clique insere.
  * - No arquivo, a menção é um link Markdown comum (lib/notes/mention-links.ts).
- * - Notas e tarefas aparecem como um chip com o título atual (e, nas tarefas, se
- *   está concluída). O chip é um bloco só (o cursor passa por cima e Backspace apaga
- *   a menção inteira); clicar abre a nota ou a tarefa.
+ * - Notas, mapas, tarefas e registros aparecem como um chip com o título atual (e, nas
+ *   tarefas, se está concluída; riscado quando o item não existe mais). O chip é um
+ *   bloco só (o cursor passa por cima e Backspace apaga a menção inteira); clicar abre
+ *   o item no módulo dele.
  * - Um link salvo entra como um link comum ([título](endereço), texto editável) e
  *   aparece com o ícone do site na frente (formatting.ts).
  */
@@ -17,6 +19,7 @@ import { StateEffect, StateField, type EditorState, type Extension } from '@code
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { basename, stripExtension } from '../files/filename'
 import { iconSvg } from '../icons'
+import { MENTION_KINDS } from '../mentions/catalog'
 import { mentionKind, mentionMarkdown, mentionTarget, unescapeLinkText, type MentionKind } from '../notes/mention-links'
 import { linkDestination, linkLabel } from './elements'
 import { editorHost, type MentionTarget } from './host'
@@ -24,7 +27,7 @@ import { editorHost, type MentionTarget } from './host'
 interface MentionLink {
   from: number
   to: number
-  /** Caminho da nota mencionada no workspace (ou "tasks/tasks.json#id"). */
+  /** Caminho de menção ("notes/X.md", "tasks/tasks.json#id", "timer/timer.json#id"…). */
   path: string
   text: string
 }
@@ -62,28 +65,30 @@ function findMentions(state: EditorState): MentionLink[] {
 
 // ── Chip ─────────────────────────────────────────────────────────────────────
 
-const ICON: Record<MentionKind | 'link', string> = { note: 'notes', map: 'graph', task: 'task-open', link: 'link' }
-const TIP: Record<MentionKind, string> = { note: 'Abrir a nota', map: 'Abrir a nota no Mapa Mental', task: 'Abrir a tarefa' }
-
 class MentionWidget extends WidgetType {
   constructor(
     readonly path: string,
     readonly title: string,
     readonly missing: boolean,
     readonly done: boolean,
+    readonly detail: string,
   ) {
     super()
   }
   override eq(other: MentionWidget): boolean {
-    return other.path === this.path && other.title === this.title && other.missing === this.missing && other.done === this.done
+    return (
+      other.path === this.path && other.title === this.title && other.missing === this.missing && other.done === this.done && other.detail === this.detail
+    )
   }
   toDOM(): HTMLElement {
     const kind = mentionKind(this.path)
+    const info = MENTION_KINDS[kind]
     const chip = document.createElement('span')
     chip.className = `cm-mention ${kind}${this.missing ? ' missing' : ''}${this.done ? ' done' : ''}`
     chip.dataset.path = this.path
-    chip.dataset.tip = this.missing ? (kind === 'task' ? 'Tarefa não encontrada' : 'Nota não encontrada') : this.done ? 'Tarefa concluída — abrir' : TIP[kind]
-    chip.innerHTML = iconSvg(kind === 'task' && this.done ? 'tasks' : ICON[kind], 13)
+    const tip = this.missing ? info.missing : this.done ? 'Tarefa concluída — abrir' : info.open
+    chip.dataset.tip = this.detail && !this.missing ? `${tip} · ${this.detail}` : tip
+    chip.innerHTML = iconSvg(kind === 'task' && this.done ? 'tasks' : info.icon, 13)
     const label = document.createElement('span')
     label.className = 'cm-mention-title'
     label.textContent = this.title
@@ -101,7 +106,9 @@ function buildChips(state: EditorState): DecorationSet {
   const ranges = findMentions(state).map((link) => {
     const current = mentions.describe(link.path)
     const label = current?.title ?? (link.text || stripExtension(basename(link.path)))
-    return Decoration.replace({ widget: new MentionWidget(link.path, label, current === null, current?.done === true) }).range(link.from, link.to)
+    return Decoration.replace({
+      widget: new MentionWidget(link.path, label, current === null, current?.done === true, current?.detail ?? ''),
+    }).range(link.from, link.to)
   })
   return Decoration.set(ranges, true)
 }
@@ -137,7 +144,11 @@ function insideCode(state: EditorState, pos: number): boolean {
 function insertMention(view: EditorView, target: MentionTarget, from: number, to: number): void {
   const host = view.state.facet(editorHost)
   if (!host) return
-  const text = target.url ? `[${linkLabel(target.title)}](${linkDestination(target.url)})` : mentionMarkdown(host.assetBase(), target.path, target.title)
+  const text = host.mentions?.choose
+    ? host.mentions.choose(target)
+    : target.url
+      ? `[${linkLabel(target.title)}](${linkDestination(target.url)})`
+      : mentionMarkdown(host.assetBase(), target.path, target.title)
   const next = view.state.sliceDoc(to, to + 1)
   const insert = next && /\s/.test(next) ? text : `${text} `
   view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length }, userEvent: 'input.complete', scrollIntoView: true })
@@ -181,13 +192,13 @@ const mentionPicker = autocompletion({
       render: (completion) => {
         const icon = document.createElement('span')
         icon.className = 'cm-mention-option-icon'
-        const kind = (completion.type?.replace('mention-', '') ?? 'note') as MentionKind | 'link'
-        icon.innerHTML = iconSvg(ICON[kind] ?? 'notes', 14)
+        const kind = (completion.type?.replace('mention-', '') ?? 'note') as MentionKind
+        icon.innerHTML = iconSvg(MENTION_KINDS[kind]?.icon ?? 'notes', 14)
         return icon
       },
     },
   ],
 })
 
-/** Menções (@) e chips das notas e tarefas mencionadas. */
+/** Menções (@) e chips dos itens mencionados. */
 export const noteMentions: Extension = [chipField, chipClicks, mentionPicker]

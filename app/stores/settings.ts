@@ -11,7 +11,8 @@
  *     "modules": { "disabled": [], "order": ["notes", …], "navStyle": "icon-label" },
  *     "notes": { "autoCategory": false, "folderCase": "typed" },
  *     "mindmap": { "settingsVersion": 2, "showOrphans": true, "nodeStyle": "card", "labels": "selected" },
- *     "links": { "sort": "recent" }
+ *     "links": { "sort": "recent" },
+ *     "timer": { "sound": true, "notify": true, "weekStart": 1, "countdown": 25, "pomodoro": { … } }
  *   }
  *
  * O que é de cada aparelho (abas abertas, último módulo, mapa aberto…) fica no
@@ -31,8 +32,8 @@ import { DATA_PATHS } from '~/lib/storage/paths'
 import { migrateLegacySettings } from '~/lib/storage/settings-migration'
 import { debounce, SerialQueue } from '~/lib/utils/async'
 
-export type SettingsSection = 'theme' | 'modules' | 'notes' | 'mindmap' | 'links'
-export const SETTINGS_SECTIONS: readonly SettingsSection[] = ['theme', 'modules', 'notes', 'mindmap', 'links']
+export type SettingsSection = 'theme' | 'modules' | 'notes' | 'mindmap' | 'links' | 'timer'
+export const SETTINGS_SECTIONS: readonly SettingsSection[] = ['theme', 'modules', 'notes', 'mindmap', 'links', 'timer']
 export const SETTINGS_VERSION = 1
 
 type Json = Record<string, unknown>

@@ -17,3 +17,6 @@ export function closeModal(id: symbol): void {
 }
 
 export const isTopModal = (id: symbol) => stack.at(-1) === id
+
+/** Algum modal aberto (o Esc é dele, não da tela de baixo). */
+export const hasOpenModal = () => stack.length > 0
