@@ -13,6 +13,7 @@ import { MODULES, moduleById, moduleForPath, type ModuleId } from '~/lib/modules
 import { desktop, hasDesktopApi } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
 import { useModulesStore } from '~/stores/modules'
+import { checkOnStartup as checkUpdatesOnStartup } from '~/stores/updates'
 
 const app = useAppStore()
 const modules = useModulesStore()
@@ -27,6 +28,8 @@ onMounted(async () => {
   await app.startApp()
   // Abre o último módulo usado (ou o primeiro ativo) — a rota "/" não tem tela própria
   if (app.state.phase === 'ready' && route.path === '/') await router.replace(moduleById(modules.startModule.value).route)
+  // Versão nova no GitHub? Procura em segundo plano e pergunta (stores/updates.ts)
+  if (app.state.phase === 'ready') checkUpdatesOnStartup()
   await nextTick()
   // Dois quadros depois do primeiro desenho, pede ao Electron para mostrar a janela
   // (assim ela já aparece pronta, sem "piscar").
@@ -38,6 +41,14 @@ watch(
   (path) => {
     const module = moduleForPath(path)
     if (module && modules.isEnabled(module.id)) app.rememberModule(module.id)
+  },
+)
+
+// Primeira abertura (o workspace foi criado agora): procura atualização quando ele abrir
+watch(
+  () => app.state.phase,
+  (phase) => {
+    if (phase === 'ready') checkUpdatesOnStartup()
   },
 )
 

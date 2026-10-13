@@ -124,6 +124,7 @@ const variantClass = (button: DialogButton) =>
 }
 .dialog-message {
   margin-top: 10px;
+  white-space: pre-line;
   color: var(--text-2);
   font-size: 13.5px;
   line-height: 1.55;

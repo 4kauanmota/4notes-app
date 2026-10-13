@@ -28,6 +28,7 @@ import { useAppStore } from '~/stores/app'
 import { EFFECT_MS, useModulesStore, type ModuleEffect } from '~/stores/modules'
 import { useTasksStore } from '~/stores/tasks'
 import { useTimerStore } from '~/stores/timer'
+import { useUpdatesStore } from '~/stores/updates'
 
 const route = useRoute()
 const app = useAppStore()
@@ -40,6 +41,9 @@ const dueCount = computed(() => tasks.progress.value.total - tasks.progress.valu
 const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : 0)
 const timer = useTimerStore()
 /** Timer com uma sessão em andamento: um ponto no ícone (pulsando enquanto conta). */
+/** Versão nova esperando (depois de um "Agora não"): um ponto discreto na engrenagem. */
+const updates = useUpdatesStore()
+const updateReady = computed(() => updates.state.status === 'available' || updates.state.status === 'permission')
 const liveOf = (id: ModuleId) => (id === 'timer' && timer.state.active ? (timer.state.active.runningSince !== null ? 'running' : 'paused') : null)
 
 const labels = computed(() => modules.state.prefs.navStyle === 'icon-label')
@@ -331,8 +335,15 @@ function toggleTheme(event: MouseEvent) {
       >
         <AppIcon name="help" :size="19" />
       </button>
-      <button class="rail-button" :data-tip="`Configurações  ·  ${mod}+,`" data-tip-pos="right" aria-label="Configurações" @click="app.openSettings()">
+      <button
+        class="rail-button rail-settings"
+        :data-tip="updateReady ? 'Configurações  ·  versão nova disponível' : `Configurações  ·  ${mod}+,`"
+        data-tip-pos="right"
+        aria-label="Configurações"
+        @click="app.openSettings()"
+      >
         <AppIcon name="settings" :size="19" />
+        <span v-if="updateReady" class="rail-update" data-update-dot aria-hidden="true" />
       </button>
     </div>
   </nav>
@@ -500,6 +511,19 @@ function toggleTheme(event: MouseEvent) {
   flex-direction: column;
   gap: 4px;
   margin-top: auto;
+}
+.rail-settings {
+  position: relative;
+}
+.rail-update {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 2px var(--chrome);
 }
 .rail-button {
   display: grid;

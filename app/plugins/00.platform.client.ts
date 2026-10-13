@@ -6,6 +6,6 @@ export default defineNuxtPlugin({
   name: 'platform',
   enforce: 'pre',
   async setup() {
-    await installMobilePlatform()
+    await installMobilePlatform(String(useRuntimeConfig().public.updatesRepository ?? ''))
   },
 })

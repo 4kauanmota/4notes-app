@@ -312,6 +312,7 @@ export const GENERAL_TUTORIAL: ModuleTutorial = {
     'Desativar um módulo só o esconde: os dados continuam guardados.',
     'Backup: basta copiar a pasta do workspace.',
     'Mudou algo em outro programa ou aparelho? O 4notes relê ao voltar e a cada minuto.',
+    'Versão nova? O 4notes pergunta ao abrir; “Agora não” deixa ela em Configurações › Geral.',
     'O tema e as configurações ficam no workspace: valem no computador e no celular.',
   ],
   shortcuts: [
@@ -326,6 +327,7 @@ export const GENERAL_TUTORIAL: ModuleTutorial = {
     'Toque prolongado = clique direito: abre o menu do que estiver embaixo do dedo.',
     'O “voltar” do Android fecha menus e painéis e volta para a tela anterior.',
     'Com a pasta sincronizada (Google Drive…), o workspace é o mesmo nos dois aparelhos.',
+    'Atualizar no celular: na 1ª vez, permita o 4notes instalar apps e confirme no Android.',
   ],
 }
 

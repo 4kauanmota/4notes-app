@@ -16,6 +16,7 @@ import { useAppStore } from '~/stores/app'
 import { useModulesStore } from '~/stores/modules'
 import { useTasksStore } from '~/stores/tasks'
 import { useTimerStore } from '~/stores/timer'
+import { useUpdatesStore } from '~/stores/updates'
 
 /** Módulos na barra (os outros ficam em "Mais"). */
 const MAX_ITEMS = 4
@@ -29,6 +30,9 @@ const { theme, setTheme } = useTheme()
 const shown = computed(() => modules.enabled.value.slice(0, MAX_ITEMS))
 const overflow = computed(() => modules.enabled.value.slice(MAX_ITEMS))
 const current = computed(() => moduleForPath(route.path))
+/** Versão nova esperando: ponto discreto em "Mais" e em Configurações. */
+const updates = useUpdatesStore()
+const updateReady = computed(() => updates.state.status === 'available' || updates.state.status === 'permission')
 const dueCount = computed(() => tasks.progress.value.total - tasks.progress.value.done)
 const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : 0)
 const timer = useTimerStore()
@@ -86,7 +90,7 @@ function run(action: () => unknown) {
       <span class="nav-label">{{ item.label }}</span>
     </NuxtLink>
     <button type="button" class="nav-item" :class="{ active: moreOpen }" data-action="more" aria-label="Mais opções" @click="moreOpen = true">
-      <span class="nav-pill"><AppIcon name="more" :size="21" /></span>
+      <span class="nav-pill"><AppIcon name="more" :size="21" /><span v-if="updateReady" class="nav-update" aria-hidden="true" /></span>
       <span class="nav-label">Mais</span>
     </button>
   </nav>
@@ -135,6 +139,7 @@ function run(action: () => unknown) {
         <button type="button" class="more-row" data-action="settings" @click="run(() => app.openSettings())">
           <AppIcon name="settings" :size="19" />
           <span>Configurações</span>
+          <span v-if="updateReady" class="more-update">Versão nova</span>
         </button>
       </div>
     </div>
@@ -175,6 +180,25 @@ function run(action: () => unknown) {
   height: 30px;
   border-radius: 15px;
   transition: background var(--t-med) var(--ease-out), color var(--t-med);
+}
+.nav-update {
+  position: absolute;
+  top: 3px;
+  right: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 2px var(--chrome);
+}
+.more-update {
+  margin-left: auto;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  font-size: 12px;
+  font-weight: 650;
 }
 .nav-item.active {
   color: var(--primary-text);

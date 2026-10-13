@@ -13,6 +13,7 @@ Aplicativo pessoal de organização, no **computador (Windows)** e no **celular 
 - **Timer**: cronômetro, temporizador e Pomodoro com categorias e atividades; histórico filtrável e estatísticas com gráficos e comparação com o período anterior. A contagem segue pelo relógio — trocar de módulo, minimizar ou fechar o app não atrapalha.
 - **Menções** (`@`) entre todos os módulos: notas e tarefas mencionam notas, mapas, tarefas, links salvos e registros do Timer — um clique abre o item no módulo dele. No Timer e nos Links, **Ver menções** mostra onde cada item foi mencionado.
 - **Mapa Mental** com seleção de várias notas: `Ctrl + arrastar` seleciona uma área; arraste uma delas para mover todas, ou exclua/pinte o grupo de uma vez.
+- **Atualiza sozinho**: ao abrir, o 4notes (Windows e Android) avisa quando há uma versão nova no GitHub Releases e instala com um clique.
 - Tema claro e escuro, em roxo e amarelo.
 - **No celular também**: o app Android abre o mesmo workspace. Com a pasta sincronizada (Google Drive…), notas, tarefas, mapas, links e configurações são os mesmos no computador e no celular. A tela se adapta ao celular, ao dobrável fechado ou aberto e ao tablet, e o toque prolongado faz o papel do botão direito (veja [Celular (Android)](#celular-android)).
 
@@ -57,6 +58,7 @@ Outros comandos:
 | `npm run android:run`   | Gera e instala no celular ligado no cabo (com a depuração USB ativa) |
 | `npm run android:sync`  | Só atualiza o projeto `android/` com a interface                    |
 | `npm run android:open`  | Abre o projeto `android/` no Android Studio                         |
+| `npm run release`       | Publica a versão no GitHub Releases — Windows e Android se atualizam (veja [Atualizações automáticas](#atualizações-automáticas)) |
 | `npm run build:ios`     | iOS: ainda não incluído — explica o que falta                       |
 | `npm run build:web`     | Só a interface (`.output/public`), usada pelo Windows e pelo Android |
 | `npm test`              | Testes da lógica (datas, recorrência, editor, código, menções, categorias, mapa, links, exportar, biblioteca, favoritos, configurações, celular, Timer)|
@@ -78,9 +80,66 @@ O app Android usa a **mesma interface** do Windows (a pasta `app/`); só muda a 
 
 O que o `build:android` faz (`scripts/android.mjs`): encontra o Java e o SDK do Android Studio (ou usa `JAVA_HOME`/`ANDROID_HOME`), gera a interface (`nuxt generate`), copia para o projeto `android/` (`npx cap sync android`) e compila o APK com o Gradle.
 
-- **Assinatura**: sem configurar nada, o APK é assinado com a chave de testes do Android Studio do seu computador — serve para instalar no seu celular. Gere as próximas versões **no mesmo computador**: um APK assinado com outra chave não atualiza o app instalado (o Android pede para desinstalar antes; o workspace não é apagado). Para ter uma chave própria, crie `android/keystore.properties` com `storeFile`, `storePassword`, `keyAlias` e `keyPassword` (fica fora do Git).
-- **Versão**: a mesma do `package.json` (`1.6.1` vira o código 10601). Aumente antes de gerar uma atualização — o Android não instala uma versão menor por cima.
+- **Assinatura**: sem configurar nada, o APK é assinado com a chave de testes do Android Studio do seu computador — serve para instalar no seu celular. Gere as próximas versões **no mesmo computador**: um APK assinado com outra chave não atualiza o app instalado (o Android pede para desinstalar antes; o workspace não é apagado). Para fixar a chave (necessário para as [atualizações automáticas](#atualizações-automáticas)), crie `android/keystore.properties` com `storeFile`, `storePassword`, `keyAlias` e `keyPassword` (fica fora do Git).
+- **Versão**: a mesma do `package.json` (`1.6.2` vira o código 10602). Aumente antes de gerar uma atualização — o Android não instala uma versão menor por cima.
 - **iOS**: ainda não. O mesmo código serve (Capacitor), mas o build exige um Mac com o Xcode e o iOS não deixa um app usar uma pasta qualquer como workspace — `npm run build:ios` explica o que falta.
+
+## Atualizações automáticas
+
+O 4notes procura uma versão nova no **GitHub Releases** sempre que abre. Achou: _"Existe uma nova versão do 4notes (1.6.3). Deseja instalar?"_. **Instalar** baixa e instala — no Windows o app fecha, atualiza e abre de novo; no Android abre o instalador do sistema (é só confirmar). **Agora não** não pergunta de novo para aquela versão: ela fica em **Configurações › Geral › Atualizações** (com um ponto na engrenagem) para instalar quando quiser. Atualizar nunca mexe nas notas nem nas configurações (elas ficam no workspace).
+
+### Preparar (uma vez só)
+
+1. **Repositório público para as versões.** No GitHub, crie um repositório **público** só para os instaladores — por exemplo `4notes-releases` — marcando _"Add a README file"_ (ele precisa ter um commit). O código do 4notes pode continuar privado: o app só lê os instaladores. Um repositório privado não funciona (o app precisaria de uma senha embutida).
+2. **Dizer ao 4notes onde ele fica**, no `package.json`:
+
+   ```json
+   "updates": {
+     "github": "seu-usuario/4notes-releases"
+   },
+   ```
+
+3. **Token para publicar.** GitHub → _Settings_ → _Developer settings_ → _Personal access tokens_ → _Fine-grained tokens_ → _Generate new token_: em _Repository access_ escolha **Only select repositories** → `4notes-releases`; em _Permissions › Repository permissions_, **Contents: Read and write**. Copie o token e crie o arquivo **`.env`** na raiz do projeto (ele não vai para o Git):
+
+   ```
+   GH_TOKEN=github_pat_...
+   ```
+
+4. **Chave do Android (fixa).** O Android só atualiza o app com um APK assinado pela **mesma chave** do instalado. O APK que está no seu celular hoje foi assinado com a chave de testes deste computador — o jeito mais simples é continuar com ela:
+   - copie `C:\Users\<você>\.android\debug.keystore` para `android\4notes.keystore`;
+   - crie `android/keystore.properties` (fica fora do Git):
+
+     ```
+     storeFile=4notes.keystore
+     storePassword=android
+     keyAlias=androiddebugkey
+     keyPassword=android
+     ```
+
+   - guarde uma cópia do `4notes.keystore` num lugar seguro (sem ela, o próximo APK não atualiza o instalado).
+
+   Prefere uma chave nova só sua? Crie com `keytool -genkeypair -v -keystore android/4notes.keystore -alias 4notes -keyalg RSA -keysize 2048 -validity 36500` (o `keytool` está em `C:\Program Files\Android\Android Studio\jbr\bin\`) e use os dados dela no `keystore.properties` — aí, uma única vez, desinstale o app do celular antes de instalar o APK novo (o workspace não é apagado; só a permissão de arquivos e as abas abertas voltam ao começo).
+
+5. `npm install` (entrou o `electron-updater`).
+
+### Publicar uma versão
+
+1. Aumente o `"version"` do `package.json` (ex.: `1.6.2` → `1.6.3`).
+2. (Opcional) escreva o que mudou em `release-notes.md` na raiz — aparece na pergunta e nas Configurações.
+3. Rode:
+
+   ```bash
+   npm run release                 # Windows + Android
+   npm run release -- --windows    # só o Windows (o APK pode ser acrescentado depois com --android)
+   npm run release -- --notes "Correções no Timer"
+   npm run release -- --draft      # deixa como rascunho no GitHub (os apps não veem até você publicar)
+   ```
+
+O `npm run release` (`scripts/release.mjs`) confere o repositório, o token e a chave; gera o instalador do Windows e o APK; cria o Release `v<versão>` como rascunho, envia `4notes-Setup-<versão>.exe`, `latest.yml` (o que o Windows lê) e `4notes-<versão>.apk`, e só então publica — os apps nunca veem uma versão pela metade. Ele não deixa publicar a mesma versão duas vezes.
+
+**A primeira vez**: as versões até a 1.6.1 não sabem procurar atualizações. Publique a 1.6.2 com `npm run release` e instale-a do jeito de sempre (o `.exe` em `release/1.6.2/` e o `.apk` em `release/android/`). Da próxima versão em diante, os dois aparelhos perguntam sozinhos.
+
+Rodando com `npm run dev` a procura fica desligada (só no app instalado). No Android, a primeira atualização pede para permitir que o 4notes instale apps: permita e volte — o instalador abre sozinho.
 
 ## Instalando em outro computador
 

@@ -37,6 +37,7 @@ import { readLocalValue, writeLocalValue } from '~/lib/storage/device-state'
 import { createWorkspace, copyDataDir, dataDirStatus, inspectFolder, prepareDataDir } from './data-dir'
 import { cleanPath, dirnameFs, FsError, isInside, joinFs, type FsDriver } from './fs'
 import type { FourNotesNative } from './native'
+import { createMobileUpdates, type UpdaterNative } from './updates'
 import { pickFiles } from './pick-files'
 import { WorkspaceFiles } from './workspace'
 
@@ -46,6 +47,9 @@ export interface MobileOptions {
   version: string
   /** Testes automatizados (no navegador, com o disco na memória). */
   test?: boolean
+  /** Atualizações pelo GitHub Releases: o plugin que baixa e instala o APK e o repositório. */
+  updater?: UpdaterNative
+  updatesRepository?: string
   fakeToday?: string | null
 }
 
@@ -234,6 +238,9 @@ export async function createMobileApi(options: MobileOptions): Promise<FourNotes
 
   return {
     bootstrap,
+    updates: options.updater
+      ? createMobileUpdates({ repository: options.updatesRepository ?? '', version: options.version, native: options.updater, test: options.test })
+      : undefined,
     app: {
       ready: () => undefined,
       onBeforeClose(handler) {

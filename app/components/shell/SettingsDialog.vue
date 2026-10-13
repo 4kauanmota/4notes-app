@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * Configurações, em duas abas:
- *  - Geral: tema, iniciar com o computador, workspace (pasta de dados), a
- *    biblioteca de imagens e os tutoriais;
+ *  - Geral: tema, tutoriais, atualizações (UpdateSettings.vue), iniciar com o
+ *    computador, workspace (pasta de dados) e a biblioteca de imagens;
  *  - Módulos: primeiro as configurações gerais dos módulos (quais estão ativos e
  *    como aparecem no menu lateral); depois as de cada módulo ativo que fazem
  *    sentido como ajuste permanente. Tudo guardado no workspace. O que se usa toda
@@ -23,6 +23,7 @@ import { MODULES, moduleForPath, type ModuleId, type NavStyle } from '~/lib/modu
 import { canReveal, capabilities, desktop, isAndroid } from '~/lib/platform'
 import { useAppStore, type SettingsTab } from '~/stores/app'
 import { useModulesStore } from '~/stores/modules'
+import { updatesSupported } from '~/stores/updates'
 
 const app = useAppStore()
 const modules = useModulesStore()
@@ -32,6 +33,8 @@ const { isCompact } = useLayoutSize()
 const changing = ref(false)
 const reveal = canReveal()
 const launchAvailable = capabilities().launchAtLogin
+/** O app se atualiza sozinho (Windows e Android) — stores/updates.ts. */
+const updatesAvailable = updatesSupported()
 const android = isAndroid()
 const body = ref<HTMLElement>()
 
@@ -206,6 +209,8 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
               <button class="btn btn-sm" data-action="tutorials" data-tutorial-toggle @click="showTutorials"><AppIcon name="help" :size="14" /> Abrir <kbd class="kbd kbd-hint">F1</kbd></button>
             </SettingRow>
           </section>
+
+          <UpdateSettings v-if="updatesAvailable" />
 
           <section v-if="launchAvailable">
             <h3 class="section-label">Sistema</h3>
