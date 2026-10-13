@@ -235,6 +235,11 @@ async function main() {
       draft: true,
       prerelease: false,
     })
+    if (created.status === 403)
+      fail(
+        `O token não tem permissão para criar Releases em ${repoLabel} (403).`,
+        'No GitHub: Settings › Developer settings › Fine-grained tokens › seu token › Edit:\n  "Repository access" precisa incluir esse repositório e "Permissions › Contents" precisa estar em "Read and write".\nDepois rode de novo com --skip-build (os arquivos já gerados são reaproveitados).',
+      )
     if (!created.ok) fail(`Não consegui criar o Release (${created.status}).`, JSON.stringify(created.data).slice(0, 300))
     release = created.data
   } else if (release.draft || options.notes || options.notesFile) {
