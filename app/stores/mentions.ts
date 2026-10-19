@@ -106,7 +106,8 @@ const notesProvider: MentionProvider = {
   items: () =>
     notes.visibleNotes.value
       .filter((note) => note.path)
-      .map((note) => ({ path: note.path!, title: noteTitle(note), where: notesWhere(note.path!) })),
+      // As mais recentes primeiro, como na lista lateral das Notas (1.6.3)
+      .map((note) => ({ path: note.path!, title: noteTitle(note), where: notesWhere(note.path!), order: -note.mtimeMs })),
   describe: (path) => {
     const note = notes.findByPath(path)
     return note ? { title: noteTitle(note), detail: notesWhere(path) } : null

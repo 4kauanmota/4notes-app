@@ -2,7 +2,7 @@
 /**
  * Barra de formatação que aparece sobre o texto selecionado (como no Notion).
  * Só mostra botões e avisa o que foi clicado — quem aplica é o MarkdownEditor
- * (inclusive o "Bloco de texto", que transforma a seleção num bloco).
+ * (inclusive o "Bloco de texto" e o "Bloco de código", que transformam a seleção num bloco).
  * O mousedown é cancelado para o editor não perder o foco nem a seleção (menos no
  * campo do endereço do link, que precisa do foco para receber o texto).
  *
@@ -25,7 +25,7 @@ const props = defineProps<{
   linkMode: boolean
   /** Endereço inicial do campo (o do link atual ou um copiado). */
   linkInitial: string
-  /** A seleção pode virar um bloco de texto (fora de blocos de código/texto). */
+  /** A seleção pode virar um bloco de texto ou de código (fora de blocos de código/texto). */
   textBlock: boolean
   /** Fixa embaixo da nota (toque). */
   docked?: boolean
@@ -43,6 +43,7 @@ const emit = defineEmits<{
   'close-link': []
   clear: []
   'text-block': []
+  'code-block': []
   image: []
   'open-url': [url: string]
 }>()
@@ -218,6 +219,17 @@ function pickColor(color: PaletteColor | null) {
         @click="emit('text-block')"
       >
         <AppIcon name="text-block" :size="16" :stroke="1.9" />
+      </button>
+      <button
+        v-if="textBlock"
+        class="fmt-btn"
+        data-format="code-block"
+        data-tip="Bloco de código"
+        data-tip-pos="top"
+        aria-label="Bloco de código"
+        @click="emit('code-block')"
+      >
+        <AppIcon name="code-block" :size="16" :stroke="1.9" />
       </button>
       <button
         class="fmt-btn"

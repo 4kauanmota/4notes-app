@@ -15,12 +15,17 @@
  *   própria pasta: clicar nela abre a nota.
  * - Uma nota sozinha (ou de uma palavra só) aparece com o título inteiro.
  * - Maiúsculas/minúsculas não importam para agrupar.
+ * - Ordem (1.6.3): as mais recentes no topo — pela data da última alteração da nota;
+ *   uma pasta vale pela nota mais recente dela. Pastas e notas se misturam nessa
+ *   ordem (até a 1.6.2: pastas primeiro, em ordem alfabética).
  */
 
 export interface TitleItem {
   id: string
   /** Título da nota ("" = sem título). */
   title: string
+  /** Quando a nota foi alterada pela última vez (ms) — as mais recentes ficam no topo. */
+  time?: number
 }
 
 export interface TitleNote {
@@ -28,6 +33,8 @@ export interface TitleNote {
   key: string
   id: string
   label: string
+  /** Data da última alteração da nota (ms). */
+  latest: number
 }
 
 export interface TitleFolder {
@@ -42,6 +49,10 @@ export interface TitleFolder {
   children: TitleTreeNode[]
   /** Quantidade de notas dentro da pasta (sem contar a nota da própria pasta). */
   count: number
+  /** A nota mais recente da pasta, contando as subpastas e a nota da própria pasta. */
+  latestId: string
+  /** Data da última alteração dessa nota (ms): a ordem da pasta na lista. */
+  latest: number
 }
 
 export type TitleTreeNode = TitleNote | TitleFolder
@@ -58,21 +69,32 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
 const fold = (word: string) => word.normalize('NFC').toLocaleLowerCase('pt-BR')
 export const titleWords = (title: string) => title.trim().split(/\s+/).filter(Boolean)
 
+const timeOf = (item: TitleItem) => item.time ?? 0
+
 function leaf(entry: Entry, depth: number, untitled: string): TitleNote {
   const label = entry.words.slice(depth).join(' ') || entry.words.join(' ') || untitled
-  return { kind: 'note', key: `n:${entry.item.id}`, id: entry.item.id, label }
+  return { kind: 'note', key: `n:${entry.item.id}`, id: entry.item.id, label, latest: timeOf(entry.item) }
 }
 
 function countNotes(nodes: TitleTreeNode[]): number {
   return nodes.reduce((sum, node) => sum + (node.kind === 'note' ? 1 : node.count + (node.noteId ? 1 : 0)), 0)
 }
 
-/** Pastas primeiro, depois as notas; em ordem alfabética ("1.10" depois de "1.9"). */
+/**
+ * As mais recentes primeiro (uma pasta vale pela nota mais recente dela); empate
+ * (mesma data): pastas antes, depois em ordem alfabética ("1.10" depois de "1.9").
+ */
 function sortNodes(nodes: TitleTreeNode[]): TitleTreeNode[] {
   return nodes.sort((a, b) => {
+    if (a.latest !== b.latest) return b.latest - a.latest
     if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1
     return collator.compare(a.label, b.label) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
   })
+}
+
+/** A nota mais recente entre as `entries` (empate: a primeira na ordem dada). */
+function newest(entries: Entry[]): Entry {
+  return entries.reduce((best, entry) => (timeOf(entry.item) > timeOf(best.item) ? entry : best))
 }
 
 /** Nome da pasta: o da nota da pasta, se houver; senão, a grafia mais usada nas notas dela. */
@@ -115,6 +137,7 @@ function group(entries: Entry[], depth: number, parentKey: string, untitled: str
     // Títulos repetidos iguais ao da pasta ficam como notas dentro dela
     for (const extra of own.slice(1)) children.push(leaf(extra, depth, untitled))
     sortNodes(children)
+    const latest = newest(bucket)
     nodes.push({
       kind: 'folder',
       key: `f:${key}`,
@@ -123,6 +146,8 @@ function group(entries: Entry[], depth: number, parentKey: string, untitled: str
       noteId: own[0]?.item.id ?? null,
       children,
       count: countNotes(children),
+      latestId: latest.item.id,
+      latest: timeOf(latest.item),
     })
   }
   return sortNodes(nodes)
@@ -166,6 +191,8 @@ export interface TreeRow<N> {
   titlePath: string | null
   open: boolean
   count: number
+  /** Pasta: a nota mais recente dela (botão "Abrir a mais recente"); nota: null. */
+  latest: N | null
 }
 
 /** Transforma as pastas em linhas, entrando só nas pastas abertas. */
@@ -174,12 +201,13 @@ export function flattenTree<N>(nodes: TitleTreeNode[], notes: ReadonlyMap<string
   const walk = (level: TitleTreeNode[], depth: number) => {
     for (const node of level) {
       if (node.kind === 'note') {
-        rows.push({ key: node.key, kind: 'note', depth, label: node.label, note: notes.get(node.id) ?? null, folderKey: null, titlePath: null, open: false, count: 0 })
+        rows.push({ key: node.key, kind: 'note', depth, label: node.label, note: notes.get(node.id) ?? null, folderKey: null, titlePath: null, open: false, count: 0, latest: null })
         continue
       }
       const open = isOpen(node.key)
       const note = node.noteId ? (notes.get(node.noteId) ?? null) : null
-      rows.push({ key: node.key, kind: 'folder', depth, label: node.label, note, folderKey: node.key, titlePath: node.titlePath, open, count: node.count })
+      const latest = notes.get(node.latestId) ?? null
+      rows.push({ key: node.key, kind: 'folder', depth, label: node.label, note, folderKey: node.key, titlePath: node.titlePath, open, count: node.count, latest })
       if (open) walk(node.children, depth + 1)
     }
   }

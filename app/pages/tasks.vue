@@ -161,7 +161,7 @@ onUnmounted(unbindEscape)
 
       <template v-else>
         <div class="tasks-scroll">
-          <div class="tasks-content">
+          <div class="tasks-content module-content">
             <button v-if="selection === 'scheduled' || selection === 'done'" class="back-link" @click="tasks.select('pending')">
               <AppIcon name="arrow-left" :size="14" /> Pendentes
             </button>
@@ -278,15 +278,11 @@ onUnmounted(unbindEscape)
   overflow-y: auto;
   transition: padding-right 320ms var(--ease-out);
 }
-/* Em janelas largas, a lista "abre espaço" para o painel em vez de ficar por baixo dele */
+/* Em janelas largas, a lista "abre espaço" para o painel (420 px, TaskDrawer.vue) em vez de ficar por baixo dele */
 @media (min-width: 1240px) {
   .tasks-main.drawer-open .tasks-scroll {
-    padding-right: 400px;
+    padding-right: 420px;
   }
-}
-.tasks-content {
-  width: min(820px, 100%);
-  padding: 24px 28px 80px;
 }
 .back-link {
   display: inline-flex;
@@ -477,9 +473,6 @@ onUnmounted(unbindEscape)
 }
 
 @media (max-width: 980px) {
-  .tasks-content {
-    padding: 20px 18px 80px;
-  }
   .progress-block {
     display: none;
   }
@@ -489,9 +482,6 @@ onUnmounted(unbindEscape)
 .lists-toggle {
   flex: none;
   margin: 0 -2px 0 -8px;
-}
-html[data-layout='compact'] .tasks-content {
-  padding: 14px 14px 72px;
 }
 html[data-layout='compact'] .tasks-header {
   align-items: center;

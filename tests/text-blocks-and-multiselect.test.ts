@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { codeBlockPreview, codeBlocks, isTextBlock } from '~/lib/editor/code-blocks'
 import { fenceFromVsCodeMode, findLanguage, isTextBlockInfo, languageLabel } from '~/lib/editor/languages'
 import { multipleSelections, plainMultipleSelections, selectNextOccurrence } from '~/lib/editor/multi-select'
-import { canWrapInTextBlock, textBlockChange } from '~/lib/editor/text-blocks'
+import { canWrapInTextBlock, codeBlockChange, textBlockChange } from '~/lib/editor/text-blocks'
 import { noteToPlainText } from '~/lib/notes/export'
 
 function stateOf(doc: string, selection: EditorSelection | { anchor: number; head?: number }, extensions: Extension[] = []) {
@@ -156,6 +156,41 @@ function editor(doc: string, selection: EditorSelection | { anchor: number; head
     },
   }
 }
+
+/** O mesmo que `wrap`, com o botão "Bloco de código" (1.6.3). */
+function wrapCode(doc: string, from: number, to: number) {
+  const state = stateOf(doc, { anchor: from, head: to })
+  const spec = codeBlockChange(state, 'notes')
+  return spec ? state.update(spec).state.doc.toString() : null
+}
+
+describe('bloco de código pela barra (1.6.3)', () => {
+  it('a linguagem vem do conteúdo (JavaScript, Python, GDScript)', () => {
+    const js = 'Antes\nconst total = itens.length;\nfunction somar(a, b) { return a + b }\nDepois'
+    const [from] = range(js, 'const')
+    const [, to] = range(js, 'a + b }')
+    expect(wrapCode(js, from, to)).toBe('Antes\n```javascript\nconst total = itens.length;\nfunction somar(a, b) { return a + b }\n```\nDepois')
+    const py = 'def somar(a, b):\n    return a + b\nprint(somar(1, 2))'
+    expect(wrapCode(py, 0, py.length)).toBe(`\`\`\`python\n${py}\n\`\`\`\n`)
+    const gd = 'extends Node2D\nfunc _ready() -> void:\n\tprint("oi")'
+    expect(wrapCode(gd, 0, gd.length)!.startsWith('```gdscript\n')).toBe(true)
+  })
+
+  it('sem linguagem reconhecida: bloco de código sem linguagem ("Código")', () => {
+    const doc = 'linha um\nlinha dois'
+    expect(wrapCode(doc, 0, doc.length)).toBe('```\nlinha um\nlinha dois\n```\n')
+    expect(languageLabel('')).toBe('Código')
+    expect(isTextBlock(codeBlocks(stateOf('```\nx\n```', { anchor: 0 }))[0]!)).toBe(false)
+  })
+
+  it('as mesmas regras do bloco de texto: linhas próprias, texto visível, nada dentro de outro bloco', () => {
+    const doc = 'Use **x = 1** aqui'
+    expect(wrapCode(doc, ...range(doc, 'x = 1'))).toBe('Use\n```\nx = 1\n```\naqui')
+    const inside = 'a\n```js\nconst x = 1\n```\nb'
+    expect(wrapCode(inside, ...range(inside, 'const'))).toBeNull()
+    expect(wrapCode('abc', 1, 1)).toBeNull()
+  })
+})
 
 describe('Ctrl+D: próxima ocorrência', () => {
   it('acrescenta as próximas ocorrências e para quando acabam', () => {

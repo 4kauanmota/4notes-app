@@ -345,7 +345,7 @@ useShortcuts({
       </div>
 
       <div v-else ref="scroller" class="links-scroll">
-        <div class="links-content">
+        <div class="links-content module-content">
           <header class="links-header">
             <button v-if="isCompact" class="icon-btn folders-toggle" aria-label="Categorias" data-action="link-folders" @click="foldersOpen = true">
               <AppIcon name="sidebar" :size="19" />
@@ -463,10 +463,6 @@ useShortcuts({
 .links-scroll {
   flex: 1;
   overflow-y: auto;
-}
-.links-content {
-  width: min(860px, 100%);
-  padding: 24px 28px 80px;
 }
 .links-header {
   display: flex;
@@ -602,19 +598,10 @@ useShortcuts({
   transition: transform 260ms var(--ease-out);
 }
 
-@media (max-width: 980px) {
-  .links-content {
-    padding: 20px 18px 80px;
-  }
-}
-
 /* ── Celular ── */
 .folders-toggle {
   flex: none;
   margin: 0 -2px 0 -8px;
-}
-html[data-layout='compact'] .links-content {
-  padding: 14px 14px 72px;
 }
 html[data-layout='compact'] .links-header {
   flex-wrap: wrap;

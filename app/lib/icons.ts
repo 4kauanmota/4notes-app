@@ -84,6 +84,8 @@ export const ICONS: Record<string, string> = {
   code: '<path d="m8.5 7.5-4.5 4.5 4.5 4.5M15.5 7.5l4.5 4.5-4.5 4.5"/>',
   /** Bloco de texto (barra de formatação). */
   'text-block': '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M7.5 9.5h9M7.5 12.5h9M7.5 15.5h5"/>',
+  /** Bloco de código (barra de formatação). */
+  'code-block': '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="m10 9.5-2.5 2.5 2.5 2.5M14 9.5l2.5 2.5-2.5 2.5"/>',
   at: '<circle cx="12" cy="12" r="3.6"/><path d="M15.6 8.4v4.8a2.6 2.6 0 0 0 5.2 0V12a8.8 8.8 0 1 0-3.4 6.9"/>',
   workspace: '<rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9h17M8 4v5"/>',
   image: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17.5 4.6-4.6a1.5 1.5 0 0 1 2.1 0l2.8 2.8 1.6-1.6a1.5 1.5 0 0 1 2.1 0l3.3 3.3"/>',

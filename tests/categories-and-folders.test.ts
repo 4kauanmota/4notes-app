@@ -18,7 +18,9 @@ import {
   taskIdOf,
   taskMentionPath,
 } from '~/lib/notes/mention-links'
-import { titleFor } from '~/lib/editor/title-line'
+import { EditorState } from '@codemirror/state'
+import { editorHost, type EditorHost } from '~/lib/editor/host'
+import { titleFirstLine, titleFor } from '~/lib/editor/title-line'
 import { buildTitleTree, flattenTree, folderPathTo, type TitleTreeNode } from '~/lib/notes/title-tree'
 import { renamedRef } from '~/lib/mentions/refs'
 
@@ -98,6 +100,50 @@ describe('pastas pelo título', () => {
   })
 })
 
+describe('as mais recentes no topo (1.6.3)', () => {
+  const items = [
+    { id: 'a', title: '4notes 1.6.0', time: 100 },
+    { id: 'b', title: '4notes 1.6.1', time: 200 },
+    { id: 'c', title: '4notes 1.6.2', time: 300 },
+    { id: 'd', title: 'Lista de compras', time: 250 },
+    { id: 'e', title: 'Godot sinais', time: 50 },
+    { id: 'f', title: 'Godot shaders', time: 400 },
+    { id: 'g', title: 'Recados', time: 10 },
+  ]
+  const labels = (nodes: TitleTreeNode[]): unknown[] => nodes.map((node) => (node.kind === 'folder' ? [node.label, labels(node.children)] : node.label))
+
+  it('pela data da última alteração; a pasta vale pela nota mais recente dela; pastas e notas se misturam', () => {
+    expect(labels(buildTitleTree(items))).toEqual([
+      ['Godot', ['shaders', 'sinais']],
+      ['4notes', ['1.6.2', '1.6.1', '1.6.0']],
+      'Lista de compras',
+      'Recados',
+    ])
+  })
+
+  it('cada pasta sabe a nota mais recente dela (contando subpastas e a nota da própria pasta)', () => {
+    const nodes = buildTitleTree([
+      { id: 'own', title: '4notes', time: 900 },
+      { id: 'x', title: '4notes 1.6.0', time: 100 },
+      { id: 'y', title: '4notes 1.6.0 bugs', time: 500 },
+      { id: 'z', title: '4notes 1.6.0 ideias', time: 300 },
+      { id: 'w', title: 'Outra', time: 1 },
+    ])
+    const folder = nodes[0]!
+    expect(folder).toMatchObject({ kind: 'folder', label: '4notes', latestId: 'own', latest: 900 })
+    const sub = folder.kind === 'folder' ? folder.children.find((node) => node.kind === 'folder') : undefined
+    expect(sub).toMatchObject({ label: '1.6.0', latestId: 'y', latest: 500 })
+    const notes = new Map(['own', 'x', 'y', 'z', 'w'].map((id) => [id, { id }]))
+    const rows = flattenTree(nodes, notes, () => true)
+    expect(rows.filter((row) => row.kind === 'folder').map((row) => row.latest?.id)).toEqual(['own', 'y'])
+    expect(rows.filter((row) => row.kind === 'note').every((row) => row.latest === null)).toBe(true)
+  })
+
+  it('sem datas (ou empate): como antes — pastas primeiro, em ordem alfabética', () => {
+    expect(labels(tree('Lista', '4notes 1.10', '4notes 1.9'))).toEqual([['4notes', ['1.9', '1.10']], 'Lista'])
+  })
+})
+
 describe('linhas da lista lateral', () => {
   it('entra só nas pastas abertas e guarda a nota da pasta', () => {
     const nodes = tree('4notes 1.2.0', '4notes 1.2.0 bugs', '4notes 1.1.1', 'Outra')
@@ -123,6 +169,17 @@ describe('primeira linha como título', () => {
     expect(titleFor('R')).toBe('# R')
     expect(titleFor('4notes 1.2.0')).toBe('# 4notes 1.2.0')
     for (const text of ['#', '- ', '* x', '> c', '`', '[', '!', '@', ' ', 'duas\nlinhas', '']) expect(titleFor(text), JSON.stringify(text)).toBeNull()
+  })
+
+  it('segue a configuração "Título na primeira linha" (1.6.3), lida a cada nota vazia', () => {
+    const host = { titleFirstLine: true } as EditorHost & { titleFirstLine: boolean }
+    const state = EditorState.create({ doc: '', extensions: [editorHost.of(host), titleFirstLine] })
+    const type = (text: string) => state.update({ changes: { from: 0, insert: text }, userEvent: 'input.type' }).state.doc.toString()
+    expect(type('Olá')).toBe('# Olá')
+    host.titleFirstLine = false
+    expect(type('Olá')).toBe('Olá')
+    host.titleFirstLine = true
+    expect(type('Olá')).toBe('# Olá')
   })
 })
 

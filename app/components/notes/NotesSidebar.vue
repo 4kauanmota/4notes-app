@@ -59,7 +59,10 @@ const notesBySection = computed(() => {
 /** Pastas pelo título de cada grupo. */
 const trees = computed(() => {
   const map = new Map<string, TitleTreeNode[]>()
-  for (const [key, group] of notesBySection.value) map.set(key, buildTitleTree(group.map((note) => ({ id: note.id, title: deriveTitle(note.content) }))))
+  for (const [key, group] of notesBySection.value) {
+    // As mais recentes no topo (pela data da última alteração), também dentro das pastas
+    map.set(key, buildTitleTree(group.map((note) => ({ id: note.id, title: deriveTitle(note.content), time: note.mtimeMs }))))
+  }
   return map
 })
 
@@ -128,6 +131,12 @@ function newNoteIn(category: NoteCategory | null) {
   emit('new', category?.name ?? null)
 }
 
+/** A nota mais recente da pasta (pela data da última alteração), sem precisar abrir a pasta e procurar. */
+function openLatestInFolder(row: Row) {
+  // As pastas até ela abrem sozinhas (activePlace), e a lista rola até a nota
+  if (row.latest) notes.openNote(row.latest.id)
+}
+
 /** + de uma pasta pelo título: a nota nova começa com o título da pasta ("4notes …") e fica junto das outras. */
 function newNoteInFolder(row: Row, category: NoteCategory | null) {
   if (!row.titlePath) return
@@ -179,11 +188,13 @@ async function categoryMenu(category: NoteCategory) {
 
 async function folderMenu(row: Row, category: NoteCategory | null) {
   const choice = await showContextMenu([
+    ...(row.latest ? [{ id: 'open-latest', label: `Abrir a mais recente (“${noteTitle(row.latest)}”)` }] : []),
     { id: 'new-in-folder', label: 'Nova nota nesta pasta' },
     { id: 'toggle', label: row.open ? 'Recolher pasta' : 'Expandir pasta', enabled: !searching.value },
     ...(row.note ? [separator, { id: 'note', label: `Nota “${noteTitle(row.note)}”`, submenu: noteMenuItems(row.note) }] : []),
   ])
-  if (choice === 'new-in-folder') newNoteInFolder(row, category)
+  if (choice === 'open-latest') openLatestInFolder(row)
+  else if (choice === 'new-in-folder') newNoteInFolder(row, category)
   else if (choice === 'toggle') toggleFolder(row, category)
   else if (row.note) runNoteChoice(choice, row.note)
 }
@@ -301,6 +312,7 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
               @toggle="toggleFolder(row, section.category)"
               @menu="rowMenu(row, section.category)"
               @new="newNoteInFolder(row, section.category)"
+              @latest="openLatestInFolder(row)"
             />
             <div v-if="!section.rows.length" class="category-empty">Sem notas — arraste uma aba para cá</div>
           </div>
@@ -326,6 +338,7 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
             @toggle="toggleFolder(row, null)"
             @menu="rowMenu(row, null)"
             @new="newNoteInFolder(row, null)"
+            @latest="openLatestInFolder(row)"
           />
           <div v-if="dropZone === 'root' && !rootRows.length" class="category-empty">Solte aqui para tirar da categoria</div>
           <div v-if="nothingFound" class="sidebar-empty">Nada encontrado para “{{ notes.state.search }}”.</div>

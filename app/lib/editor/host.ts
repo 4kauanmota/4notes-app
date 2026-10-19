@@ -79,8 +79,8 @@ export interface EditorHost {
   notify(message: string, undo?: () => void): void
   /** Menções a itens dos módulos (@). Sem isso, links para notas aparecem como links comuns. */
   mentions?: MentionHost
-  /** A primeira linha de uma nota vazia já começa como título (# ). */
-  titleFirstLine?: boolean
+  /** A primeira linha de uma nota vazia já começa como título (# ). Lido a cada nota vazia (pode mudar). */
+  readonly titleFirstLine?: boolean
 }
 
 export const editorHost = Facet.define<EditorHost, EditorHost | null>({

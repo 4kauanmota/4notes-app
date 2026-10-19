@@ -210,7 +210,8 @@ export function buildExtensions(callbacks: EditorCallbacks, options: EditorOptio
     pasteHandling,
     options.host ? editorHost.of(options.host) : [],
     options.host?.mentions ? noteMentions : [],
-    options.host?.titleFirstLine ? titleFirstLine : [],
+    // Liga/desliga pela configuração das Notas: a extensão pergunta ao app (host.titleFirstLine)
+    options.host ? titleFirstLine : [],
     highlightSelectionMatches({ minSelectionLength: 2 }),
     search({ top: true }),
     // Ctrl+D: seleciona a próxima ocorrência (várias seleções, editadas juntas)

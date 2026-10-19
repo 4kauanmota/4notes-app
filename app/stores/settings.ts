@@ -9,7 +9,7 @@
  *     "version": 1,
  *     "theme": "system",
  *     "modules": { "disabled": [], "order": ["notes", …], "navStyle": "icon-label" },
- *     "notes": { "autoCategory": false, "folderCase": "typed" },
+ *     "notes": { "autoCategory": false, "folderCase": "typed", "titleFirstLine": true },
  *     "mindmap": { "settingsVersion": 2, "showOrphans": true, "nodeStyle": "card", "labels": "selected" },
  *     "links": { "sort": "recent" },
  *     "timer": { "sound": true, "notify": true, "weekStart": 1, "countdown": 25, "pomodoro": { … } }
@@ -67,7 +67,7 @@ function persist(): Promise<void> {
 
 const scheduleSave = debounce(() => void persist(), 250)
 
-/** O tema guardado neste aparelho (usado para criar o settings.json de um workspace sem ele). */
+/** O tema guardado neste aparelho (vale para um workspace que veio da 1.4.3, sem settings.json, e para um settings.json com erro). */
 function deviceTheme(): ThemePreference {
   return hasDesktopApi() ? (desktop().bootstrap?.settings?.theme ?? 'system') : 'system'
 }

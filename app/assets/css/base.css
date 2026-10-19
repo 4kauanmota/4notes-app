@@ -402,3 +402,19 @@ html.is-sorting * {
   cursor: grabbing !important;
   user-select: none !important;
 }
+
+/*
+ * Conteúdo das telas dos módulos (Tarefas, Links, Timer…) — 1.6.3.
+ * Ocupa TODA a largura disponível, com as mesmas margens em todas as telas: nada de
+ * limitar o conteúdo com width: min(820px, 100%) (sobrava um vazio grande à direita
+ * em janelas largas). Uma tela nova usa esta classe no contêiner do conteúdo; o que
+ * precisa de uma largura confortável de leitura (um campo, um texto) limita só a si
+ * mesmo. O teste tests/layout-width.test.ts confere a regra nas páginas.
+ */
+.module-content {
+  width: 100%;
+  padding: 24px var(--page-pad-x) 80px;
+}
+html[data-layout='compact'] .module-content {
+  padding: 14px 14px 72px;
+}

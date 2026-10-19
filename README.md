@@ -1,177 +1,182 @@
 <div align="center">
 
-<img src="build/icon.svg" alt="Logo do 4notes" width="112" />
+<img src="build/icon.svg" alt="4notes logo" width="112" />
 
 # 4notes
 
-**Notas, tarefas, mapas mentais, links e timer num só app — 100% local, no computador e no celular.**
+**Notes, tasks, mind maps, links and a timer in a single app — 100% local, on your computer and on your phone.**
 
-![Versão](https://img.shields.io/badge/versão-1.6.2-7c5cf0?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.6.3-7c5cf0?style=flat-square)
 ![Windows](https://img.shields.io/badge/Windows-Electron_44-7c5cf0?style=flat-square&logo=electron&logoColor=white)
 ![Android](https://img.shields.io/badge/Android_7+-Capacitor_8-fdcf3f?style=flat-square&logo=android&logoColor=black)
 ![Nuxt](https://img.shields.io/badge/Nuxt_4-Vue_3-00dc82?style=flat-square&logo=nuxt.js&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-estrito-3178c6?style=flat-square&logo=typescript&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-Vitest-6e9f18?style=flat-square&logo=vitest&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square&logo=typescript&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-Vitest-6e9f18?style=flat-square&logo=vitest&logoColor=white)
 
-[Recursos](#recursos) ·
-[Arquitetura](#arquitetura) ·
-[Começando](#comecando) ·
+[Features](#features) ·
+[Architecture](#architecture) ·
+[Getting started](#getting-started) ·
 [Builds](#builds) ·
-[Celular](#celular) ·
-[Atalhos](#atalhos) ·
-[Arquitetura detalhada](docs/ARQUITETURA.md)
+[Mobile](#mobile) ·
+[Shortcuts](#shortcuts) ·
+[Detailed architecture](docs/ARQUITETURA.md)
 
 </div>
 
 ---
 
-## 💡 Sobre
+## 💡 About
 
-O 4notes é um aplicativo pessoal de organização inspirado no Bloco de Notas do Windows, no Obsidian, no Capacities e no Notion. Ele junta, numa interface só, as coisas que costumam ficar espalhadas por vários apps: anotações rápidas, tarefas recorrentes, mapas de ideias, links salvos e o registro do tempo dedicado a cada atividade.
+4notes is a personal organization app inspired by Windows Notepad, Obsidian, Capacities and Notion. It brings together, in a single interface, the things that usually end up scattered across several apps: quick notes, recurring tasks, idea maps, saved links and a log of the time spent on each activity.
 
-O que o diferencia:
+What sets it apart:
 
-- **Seus dados são arquivos seus.** Sem login, sem servidor, sem banco de dados. Tudo fica num **workspace** — uma pasta que você cria e nomeia — em **Markdown** (`.md`) e **JSON**. Backup é copiar a pasta; os arquivos abrem no VS Code, no Obsidian ou no Bloco de Notas.
-- **Um editor que esconde o Markdown.** Você vê só o texto formatado — títulos, listas, checklists, cores, blocos de código coloridos, imagens — e nunca os `**`, `#` ou as cercas ` ``` `. O arquivo continua sendo Markdown comum.
-- **A mesma interface no Windows e no Android.** O código da interface é um só; muda apenas a camada que fala com o sistema. Com a pasta sincronizada (Google Drive, por exemplo), notas, tarefas, mapas e configurações são os mesmos nos dois aparelhos.
-- **Módulos ligados só onde faz sentido.** Cada módulo é independente; a única ligação entre eles são as **menções** (`@`), que funcionam entre todos.
+- **Your data are your own files.** No login, no server, no database. Everything lives in a **workspace** — a folder you create and name — as **Markdown** (`.md`) and **JSON**. Backing up means copying the folder; the files open in VS Code, Obsidian or Notepad.
+- **An editor that hides the Markdown.** You only see the formatted text — headings, lists, checklists, colors, highlighted code blocks, images — and never the `**`, `#` or ` ``` ` fences. The file is still plain Markdown.
+- **The same interface on Windows and Android.** There is a single interface codebase; only the layer that talks to the operating system changes. With the folder synced (Google Drive, for example), notes, tasks, maps and settings are the same on both devices.
+- **Modules connected only where it makes sense.** Each module is independent; the only link between them is **mentions** (`@`), which work across all of them.
 
----
-
-<a id="recursos"></a>
-
-## ✨ Recursos
-
-### Os cinco módulos
-
-| | Módulo | Em resumo |
-| :-: | --- | --- |
-| 📝 | **Notas** | Notas rápidas em abas, categorias com cor, ícone ou foto, pastas automáticas pelo título, navegação entre versões, exportação TXT/PDF. |
-| ✅ | **Tarefas** | Categorias, datas, recorrência (que funciona com o app fechado), criação rápida e descrição com a mesma formatação das notas. |
-| 🧠 | **Mapa Mental** | Vários mapas; cada nó é uma nota permanente. Conexões por arraste, seleção de várias notas e um "Reorganizar" que evita cruzamentos. |
-| 🔗 | **Links** | Cole um endereço e o título e o ícone do site chegam sozinhos. Categorias, busca e importação dos favoritos do navegador. |
-| ⏱️ | **Timer** | Cronômetro, temporizador e Pomodoro, com histórico filtrável e estatísticas com gráficos e comparação entre períodos. |
-
-Os módulos podem ser **ativados, desativados e reordenados** (arrastando no menu lateral). Desativar só tira o módulo do menu: nenhum dado é apagado.
-
-<details>
-<summary><b>📝 Notas — detalhes</b></summary>
-
-<br>
-
-- **Abas compactas** com rolagem horizontal; a aba ativa leva a cor da categoria da nota.
-- **Título automático**: a primeira linha é o título, e o nome do arquivo acompanha o título (`Ideias de jogo.md`).
-- **Salvamento automático** 0,6 s depois da última tecla, com escrita atômica — também ao fechar a aba, com `Ctrl+S` e ao fechar o app.
-- **Categorias** são pastas dentro de `notes/`, com cor, um ícone pronto ou uma foto da biblioteca de imagens. Mova notas pelo menu de contexto ou arrastando.
-- **Pastas pelo título** (só na lista; os arquivos não mudam): `4notes 1.1.1` e `4notes 1.2.0` aparecem como **4notes › 1.1.1, 1.2.0**. O **+** de uma pasta cria uma nota que já começa com o título dela.
-- **Categoria automática pelo título** (opcional, desligada por padrão): uma nota nova vai sozinha para a categoria que já tem notas com o mesmo começo de título.
-- **Versões**: numa nota como `4notes 1.4.1`, botões discretos abrem a versão anterior (**‹ 1.4.0**) e a próxima (**1.4.2 ›**), quando existem.
-- **Exportar** pelo menu de contexto: **TXT** (só o texto, sem formatação) ou **PDF** (como aparece na tela, com imagens e código colorido).
-- Notas **sem categoria** perguntam ao fechar a aba se você quer guardá-las ou apagá-las; as que estão numa categoria fecham direto, já salvas.
-
-</details>
-
-<details>
-<summary><b>✅ Tarefas — detalhes</b></summary>
-
-<br>
-
-- **Criação rápida**: `Estudar Godot amanhã #estudos` já define a data e a categoria.
-- **Recorrência**: diária, semanal, a cada N dias/semanas/meses/anos, contando a partir da data programada ou da conclusão. A tarefa guarda só a regra e a próxima data — por isso funciona com o app fechado, sem processo em segundo plano.
-- Ao concluir, a próxima ocorrência é calculada a partir de hoje (as perdidas são puladas); também dá para **pular** uma ocorrência.
-- Listas de **Pendentes** (Hoje e Atrasadas), **Agendadas** e **Concluídas**.
-- **Descrição formatada** com o mesmo editor das notas: negrito, listas, checklists, código, imagens coladas e menções.
-- O painel de edição fecha ao clicar fora (sem perder o rascunho de uma tarefa nova).
-
-</details>
-
-<details>
-<summary><b>🧠 Mapa Mental — detalhes</b></summary>
-
-<br>
-
-- **Vários mapas**, cada um numa pasta com uma nota `.md` por nó e um `mapa.json` com as conexões e as cores.
-- Nós em **cards** (padrão) ou **círculos**, no estilo do Graph View do Obsidian; desenho em `<canvas>`, leve mesmo com centenas de nós.
-- **Arrastar** move a nota; **Shift + arrastar** cria uma conexão; soltar a seta **no vazio** cria uma nota nova já conectada.
-- **Seleção de várias notas**: `Ctrl + arrastar` seleciona uma área e `Ctrl + clique` põe ou tira uma nota. Mova, pinte ou exclua o grupo de uma vez, com um único **Desfazer**.
-- **Reorganizar o mapa**: layout radial que minimiza cruzamentos, encurta as conexões e mantém o mapa compacto.
-- No toque: pinça para zoom, uma alça com seta para conectar sem Shift e toque prolongado para o menu.
-
-</details>
-
-<details>
-<summary><b>🔗 Links — detalhes</b></summary>
-
-<br>
-
-- **Salvar** colando no campo do topo, com `Ctrl+V` em qualquer lugar da tela ou arrastando um link do navegador. Links repetidos são detectados pela URL.
-- **Título e ícone** buscados automaticamente e guardados em `links/icons/`, para aparecerem sem internet.
-- **Categorias** com cor, ícone ou foto; ordenação por **Recentes**, **A–Z** ou **URL**.
-- **Importar do navegador**: Brave, Opera GX, Opera, Chrome, Edge, Vivaldi, **Firefox** e **Zen** são encontrados automaticamente (um item por perfil). Outros navegadores: arquivo HTML de favoritos. Nada é alterado no navegador.
-- Lista preparada para milhares de links (testada com 3.000).
-
-</details>
-
-<details>
-<summary><b>⏱️ Timer — detalhes</b></summary>
-
-<br>
-
-- **Cronômetro**, **temporizador** (durações prontas ou `40`, `1:30`, `2h`) e **Pomodoro** com foco, pausa curta, pausa longa e início automático configuráveis.
-- **Categoria e atividade** opcionais (ex.: categoria _Estudo_, atividade _Estudando Godot_); atividades recentes recomeçam com um clique.
-- **A contagem vem do relógio**, não de um contador na tela: trocar de módulo, minimizar ou fechar o app não atrapalha. Um temporizador que termina com o app fechado é registrado no horário certo.
-- **Histórico** com período, busca, filtros, agrupamento e edição do tempo válido. Sessões concluídas, interrompidas e canceladas são diferenciadas.
-- **Estatísticas** só com dados reais: tempo por dia, categoria e atividade, rosca de distribuição, mapa de calor dias × horas e **comparação com o período anterior** (com o período em andamento, compara o mesmo trecho dos dois).
-- Gráficos próprios em SVG, sem biblioteca externa, legíveis no claro, no escuro e no celular.
-
-</details>
-
-### Recursos que valem para o app inteiro
-
-| | Recurso | Descrição |
-| :-: | --- | --- |
-| ✍️ | **Editor visual de Markdown** | Barra de formatação ao selecionar texto; listas que se renumeram; checklists clicáveis; blocos de código com linguagem detectada ao colar; blocos de texto; imagens coladas; `Ctrl+D` para editar várias ocorrências. |
-| 🔁 | **Menções (`@`)** | Notas e tarefas mencionam notas, mapas, tarefas, links salvos e registros do Timer. Um clique abre o item no módulo dele; renomear no app corrige as menções. |
-| 🖼️ | **Biblioteca de imagens** | Toda imagem enviada fica em `attachments/` para ser reutilizada em notas, tarefas e categorias, sem cópias repetidas. |
-| 🗂️ | **Workspaces** | Crie quantos quiser, cada um com seus dados e configurações. O nome do workspace aparece no canto superior esquerdo. |
-| 🎓 | **Tutoriais** | `F1` (ou o **?** do menu lateral) abre um painel com o propósito, os recursos, o menu de contexto e os atalhos de cada módulo. |
-| 🌗 | **Tema claro e escuro** | Em roxo e amarelo, também nos menus de contexto. Animações respeitam o "reduzir movimento" do sistema. |
-| 🔄 | **Atualizações automáticas** | Ao abrir, o app procura uma versão nova no GitHub Releases e instala com um clique (Windows e Android). |
-| 🚀 | **Iniciar com o computador** | Opcional, no app instalado. |
+> [!NOTE]
+> The app's interface is in Brazilian Portuguese. Menu items, buttons and settings are written below exactly as they appear in the app, with an English translation in parentheses where it helps.
 
 ---
 
-## 🧰 Tecnologias
+<a id="features"></a>
 
-| Camada | Tecnologia | Uso no projeto |
+## ✨ Features
+
+### The five modules
+
+| | Module | In short |
+| :-: | --- | --- |
+| 📝 | **Notes** (_Notas_) | Quick notes in tabs, categories with a color, icon or photo, automatic folders by title, newest notes on top, navigation between versions, TXT/PDF export. |
+| ✅ | **Tasks** (_Tarefas_) | Categories, dates, recurrence (that works with the app closed), quick creation and a description with the same formatting as notes. |
+| 🧠 | **Mind Map** (_Mapa Mental_) | Multiple maps; each node is a permanent note. Connections by dragging, multi-note selection and a "Reorganize" (_Reorganizar_) that avoids crossings. |
+| 🔗 | **Links** | Paste an address and the site's title and icon arrive on their own. Categories, search and import of browser bookmarks. |
+| ⏱️ | **Timer** | Stopwatch, countdown timer and Pomodoro, with a filterable history and statistics with charts and period comparison. |
+
+Modules can be **enabled, disabled and reordered** (by dragging in the side menu). Disabling only removes the module from the menu: no data is deleted.
+
+<details>
+<summary><b>📝 Notes — details</b></summary>
+
+<br>
+
+- **Compact tabs** with horizontal scrolling; the active tab takes the color of the note's category.
+- **Automatic title**: the first line is the title, and the file name follows the title (`Game ideas.md`). By default, the first line of a new note already starts as a heading; **Título na primeira linha** (_Title on the first line_, in Settings › Modules › Notes) turns that off, and the first line starts as regular text — it still names the note.
+- **Autosave** 0.6 s after the last keystroke, with atomic writes — also when closing the tab, with `Ctrl+S` and when closing the app.
+- **Categories** are folders inside `notes/`, with a color, a built-in icon or a photo from the image library. Move notes through the context menu or by dragging.
+- **Newest on top**: the list shows the most recently changed notes first, also inside the folders (a folder counts by its newest note).
+- **Folders by title** (only in the list; the files don't change): `4notes 1.1.1` and `4notes 1.2.0` show up as **4notes › 1.1.1, 1.2.0**. A folder's **+** creates a note that already starts with the folder's title, and its **clock** (or **Abrir a mais recente** — _Open the newest_ — in its context menu) opens the folder's newest note without having to look for it.
+- **Automatic category by title** (optional, off by default): a new note goes on its own to the category that already has notes starting with the same title.
+- **Versions**: in a note such as `4notes 1.4.1`, discreet buttons open the previous version (**‹ 1.4.0**) and the next one (**1.4.2 ›**), when they exist.
+- **Export** from the context menu: **TXT** (text only, no formatting) or **PDF** (as it looks on screen, with images and highlighted code).
+- Notes **without a category** ask, when you close the tab, whether you want to keep or delete them; notes in a category close right away, already saved.
+
+</details>
+
+<details>
+<summary><b>✅ Tasks — details</b></summary>
+
+<br>
+
+- **Quick creation**: `Estudar Godot amanhã #estudos` (_Study Godot tomorrow #studies_) already sets the date and the category.
+- **Recurrence**: daily, weekly, every N days/weeks/months/years, counted from the scheduled date or from completion. A task stores only the rule and the next date — that's why it works with the app closed, with no background process.
+- When completed, the next occurrence is calculated from today (missed ones are skipped); you can also **skip** an occurrence.
+- **Pending** lists (Today and Overdue), **Scheduled** and **Completed**.
+- **Formatted description** with the same editor as notes: bold, lists, checklists, code, pasted images and mentions.
+- The edit panel closes when you click outside it (without losing the draft of a new task).
+
+</details>
+
+<details>
+<summary><b>🧠 Mind Map — details</b></summary>
+
+<br>
+
+- **Multiple maps**, each in a folder with one `.md` note per node and a `mapa.json` with the connections and colors.
+- Nodes as **cards** (default) or **circles**, in the style of Obsidian's Graph View; drawn on a `<canvas>`, light even with hundreds of nodes.
+- **Dragging** moves the note; **Shift + drag** creates a connection; dropping the arrow **on empty space** creates a new, already connected note.
+- **Selecting multiple notes**: `Ctrl + drag` selects an area and `Ctrl + click` adds or removes a note. Move, color or delete the group at once, with a single **Undo**.
+- **Reorganize the map**: a radial layout that minimizes crossings, shortens connections and keeps the map compact.
+- On touch: pinch to zoom, a handle with an arrow to connect without Shift and long press for the menu.
+
+</details>
+
+<details>
+<summary><b>🔗 Links — details</b></summary>
+
+<br>
+
+- **Save** by pasting in the field at the top, with `Ctrl+V` anywhere on the screen or by dragging a link from the browser. Duplicate links are detected by URL.
+- **Title and icon** fetched automatically and stored in `links/icons/`, so they show up without internet.
+- **Categories** with a color, icon or photo; sorting by **Recentes** (_Recent_), **A–Z** or **URL**.
+- **Import from the browser**: Brave, Opera GX, Opera, Chrome, Edge, Vivaldi, **Firefox** and **Zen** are found automatically (one entry per profile). Other browsers: an HTML bookmarks file. Nothing is changed in the browser.
+- A list ready for thousands of links (tested with 3,000).
+
+</details>
+
+<details>
+<summary><b>⏱️ Timer — details</b></summary>
+
+<br>
+
+- **Stopwatch**, **countdown timer** (preset durations or `40`, `1:30`, `2h`) and **Pomodoro** with configurable focus, short break, long break and auto-start.
+- Optional **category and activity** (e.g. category _Estudo_, activity _Estudando Godot_); recent activities restart with one click.
+- **Time comes from the clock**, not from an on-screen counter: switching modules, minimizing or closing the app doesn't get in the way. A countdown that ends with the app closed is recorded at the right time.
+- **History** with period, search, filters, grouping and editing of the valid time. Completed, interrupted and canceled sessions are told apart.
+- **Statistics** with real data only: time per day, category and activity, a distribution donut, a days × hours heat map and a **comparison with the previous period** (for the current period, it compares the same stretch of both).
+- Custom SVG charts, with no external library, readable in light mode, dark mode and on the phone.
+
+</details>
+
+### App-wide features
+
+| | Feature | Description |
+| :-: | --- | --- |
+| ✍️ | **Visual Markdown editor** | Formatting toolbar when you select text; lists that renumber themselves; clickable checklists; text blocks and code blocks from the toolbar (the block's name switches between text and code and picks the language, with syntax highlighting); language detected when pasting code; pasted images; `Ctrl+D` to edit several occurrences. |
+| 🔁 | **Mentions (`@`)** | Notes and tasks mention notes, maps, tasks, saved links and Timer records. One click opens the item in its module; renaming in the app fixes the mentions. |
+| 🖼️ | **Image library** | Every uploaded image goes to `attachments/` to be reused in notes, tasks and categories, with no duplicate copies. |
+| 🗂️ | **Workspaces** | Create as many as you want, each with its own data and settings (a new workspace starts with the default settings). The workspace name appears in the top-left corner. |
+| 🖥️ | **Full-width screens** | Tasks, Links and the Timer use the whole width of the window, at any size. |
+| 🎓 | **Tutorials** | `F1` (or the **?** in the side menu) opens a panel with each module's purpose, features, context menu and shortcuts. |
+| 🌗 | **Light and dark theme** | In purple and yellow, also in the context menus. Animations respect the system's "reduce motion" setting. |
+| 🔄 | **Automatic updates** | On startup, the app looks for a new version on GitHub Releases and installs it with one click (Windows and Android). |
+| 🚀 | **Start with the computer** | Optional, in the installed app. |
+
+---
+
+## 🧰 Technologies
+
+| Layer | Technology | Use in the project |
 | --- | --- | --- |
-| Interface | **Nuxt 4** (SPA, `ssr: false`) + **Vue 3** | Telas, componentes, rotas por arquivo e estado com `reactive()` (sem Pinia). |
-| Editor | **CodeMirror 6** + `@codemirror/language-data` | Editor de Markdown com formatação ao vivo e cores para dezenas de linguagens. |
-| Desktop | **Electron 44** + **electron-builder** | Janela nativa, acesso a arquivos via IPC e instalador NSIS para Windows. |
-| Celular | **Capacitor 8** | App Android com a mesma interface num WebView e um plugin nativo pequeno em Java. |
-| Atualizações | **electron-updater** + GitHub Releases | Atualização do Windows; o Android usa a API do GitHub e um plugin próprio. |
-| Build | **esbuild** | Compila o processo principal e o preload do Electron. |
-| Qualidade | **TypeScript** (estrito) + **Vitest** | Tipagem da interface e do Electron e testes unitários das regras puras. |
+| Interface | **Nuxt 4** (SPA, `ssr: false`) + **Vue 3** | Screens, components, file-based routes and state with `reactive()` (no Pinia). |
+| Editor | **CodeMirror 6** + `@codemirror/language-data` | Markdown editor with live formatting and colors for dozens of languages. |
+| Desktop | **Electron 44** + **electron-builder** | Native window, file access through IPC and an NSIS installer for Windows. |
+| Mobile | **Capacitor 8** | Android app with the same interface in a WebView and a small native plugin in Java. |
+| Updates | **electron-updater** + GitHub Releases | Windows updates; Android uses the GitHub API and a custom plugin. |
+| Build | **esbuild** | Compiles Electron's main process and preload. |
+| Quality | **TypeScript** (strict) + **Vitest** | Typing of the interface and of Electron, and unit tests of the pure rules. |
 
-Não há bibliotecas de UI, de ícones, de gráficos nem de CSS: os estilos usam variáveis CSS (`app/assets/css/tokens.css`) e os ícones e gráficos são SVG próprios.
+There are no UI, icon, chart or CSS libraries: styles use CSS variables (`app/assets/css/tokens.css`) and icons and charts are custom SVG.
 
 ---
 
-<a id="arquitetura"></a>
+<a id="architecture"></a>
 
-## 🏗️ Arquitetura
+## 🏗️ Architecture
 
-A interface (`app/`) não sabe em que plataforma está. Ela conversa com uma única API — `window.fourNotes`, definida em [`shared/ipc.ts`](shared/ipc.ts) — que o **Electron** oferece no Windows e a camada **`app/lib/mobile/`** oferece no Android.
+The interface (`app/`) doesn't know which platform it is running on. It talks to a single API — `window.fourNotes`, defined in [`shared/ipc.ts`](shared/ipc.ts) — which **Electron** provides on Windows and the **`app/lib/mobile/`** layer provides on Android.
 
 ```mermaid
 flowchart TB
-    subgraph UI["app/ — interface Nuxt + Vue (a mesma nas duas plataformas)"]
+    subgraph UI["app/ — Nuxt + Vue interface (the same on both platforms)"]
         direction LR
-        P["pages/<br/>Notas · Tarefas · Mapa · Links · Timer"] --> S["stores/<br/>estado de cada módulo"]
-        S --> L["lib/<br/>regras puras + repositórios"]
+        P["pages/<br/>Notes · Tasks · Map · Links · Timer"] --> S["stores/<br/>state of each module"]
+        S --> L["lib/<br/>pure rules + repositories"]
     end
 
-    L -- "window.fourNotes<br/>(contrato em shared/ipc.ts)" --> API{{"Plataforma"}}
+    L -- "window.fourNotes<br/>(contract in shared/ipc.ts)" --> API{{"Platform"}}
 
     API --> E["🖥️ Windows — Electron<br/>electron/preload.ts → ipc.ts → files.ts"]
     API --> M["📱 Android — Capacitor<br/>app/lib/mobile/ + FourNotesPlugin.java"]
@@ -179,118 +184,118 @@ flowchart TB
     E --> W[("📁 Workspace<br/>.md + .json")]
     M --> W
 
-    W <-. "sincronização opcional<br/>(Google Drive, FolderSync…)" .-> W2[("📁 Mesmo workspace<br/>no outro aparelho")]
+    W <-. "optional sync<br/>(Google Drive, FolderSync…)" .-> W2[("📁 Same workspace<br/>on the other device")]
 ```
 
-Princípios que guiam o código:
+Principles that guide the code:
 
-- **A interface nunca acessa o disco diretamente.** No desktop, `contextIsolation` e `sandbox` estão ligados; todo caminho é relativo ao workspace e validado (nada de `../`).
-- **Escrita atômica**: o conteúdo vai para um arquivo temporário e só então substitui o original — uma queda de energia não corrompe nada.
-- **Excluir manda para a Lixeira** do Windows (no Android, para `.4notes/trash/`), sempre com **Desfazer**.
-- **Módulos independentes**: cada um tem seu store, repositório e pasta. A ponte de menções (`app/stores/mentions.ts`) é a única ligação entre eles.
-- **Configurações no workspace, estado da tela no aparelho**: tema, módulos e ajustes ficam em `.4notes/settings.json` (iguais em todos os aparelhos); abas abertas e último módulo ficam em cada aparelho.
+- **The interface never accesses the disk directly.** On desktop, `contextIsolation` and `sandbox` are on; every path is relative to the workspace and validated (no `../`).
+- **Atomic writes**: content goes to a temporary file and only then replaces the original — a power outage doesn't corrupt anything.
+- **Deleting sends to the Recycle Bin** on Windows (on Android, to `.4notes/trash/`), always with **Undo**.
+- **Independent modules**: each one has its own store, repository and folder. The mentions bridge (`app/stores/mentions.ts`) is the only link between them.
+- **Settings in the workspace, screen state on the device**: theme, modules and module settings live in `.4notes/settings.json` (the same on every device, and each workspace with its own); open tabs and the last module stay on each device.
 
-> 📘 A explicação completa — protocolos `app://` e `workspace://`, recorrência, menções, layout do mapa, Timer, Android e atualizações — está em **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)**.
+> 📘 The full explanation — the `app://` and `workspace://` protocols, recurrence, mentions, map layout, Timer, Android and updates — is in **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)** (in Portuguese).
 
 ---
 
-## 📁 Seus dados
+## 📁 Your data
 
-Um workspace é uma pasta comum. O nome dele é o nome da pasta:
+A workspace is a regular folder. Its name is the folder's name:
 
 ```text
-Pessoal/                      ← o workspace
-├── notes/                    Notas rápidas — um .md por nota
-│   ├── Ideias de jogo.md
-│   ├── categorias.json       ordem, cor, ícone e imagem das categorias
-│   └── Trabalho/             uma pasta por categoria
-├── tasks/tasks.json          tarefas e categorias
+Personal/                     ← the workspace
+├── notes/                    Quick notes — one .md per note
+│   ├── Game ideas.md
+│   ├── categorias.json       order, color, icon and image of the categories
+│   └── Work/                 one folder per category
+├── tasks/tasks.json          tasks and categories
 ├── mindmap/
-│   └── Principal/            uma pasta por mapa
-│       ├── mapa.json         conexões e cores
-│       └── Godot.md          um .md por nó
+│   └── Principal/            one folder per map
+│       ├── mapa.json         connections and colors
+│       └── Godot.md          one .md per node
 ├── links/
-│   ├── links.json            links e categorias
-│   └── icons/                ícones dos sites
-├── timer/timer.json          categorias, histórico e sessão em andamento
-├── attachments/              biblioteca de imagens
-└── .4notes/                  settings.json, posições dos nós e backups
+│   ├── links.json            links and categories
+│   └── icons/                site icons
+├── timer/timer.json          categories, history and the running session
+├── attachments/              image library
+└── .4notes/                  settings.json, node positions and backups
 ```
 
-| Conteúdo | Formato | Por quê |
+| Content | Format | Why |
 | --- | --- | --- |
-| Notas e nós do mapa | Markdown (`.md`) | Texto puro, compatível com Obsidian e VS Code. |
-| Categorias das Notas | Pastas + `categorias.json` | A categoria aparece igual no Explorador de Arquivos. |
-| Tarefas, links, Timer, conexões do mapa | JSON | Dados estruturados, ainda editáveis à mão. |
-| Imagens | Arquivos em `attachments/` + caminho relativo | Vão junto no backup e aparecem em outros editores. |
-| Configurações | `.4notes/settings.json` | Valem para o workspace, em todos os aparelhos. |
+| Notes and map nodes | Markdown (`.md`) | Plain text, compatible with Obsidian and VS Code. |
+| Note categories | Folders + `categorias.json` | The category looks the same in File Explorer. |
+| Tasks, links, Timer, map connections | JSON | Structured data, still editable by hand. |
+| Images | Files in `attachments/` + relative path | They go along with the backup and show up in other editors. |
+| Settings | `.4notes/settings.json` | They apply to the workspace, on every device. |
 
-Tarefas, links e o Timer ganham **uma cópia por dia da semana** em `.4notes/backups/`. Se um desses arquivos for editado à mão e ficar inválido, o app avisa e **não sobrescreve nada**.
+Tasks, links and the Timer get **one copy per day of the week** in `.4notes/backups/`. If one of these files is edited by hand and becomes invalid, the app warns you and **overwrites nothing**.
 
-A formatação continua sendo Markdown comum: `# título`, `- lista`, `- [ ] tarefa`, `**negrito**`, `==marca-texto==`, ` ```linguagem `. Sublinhado e cor usam HTML simples (`<u>…</u>`, `<span style="color: red">…</span>`), que o Obsidian também entende.
+Formatting is still plain Markdown: `# heading`, `- list`, `- [ ] task`, `**bold**`, `==highlight==`, ` ```language `, ` ```text ` (text block). Underline and color use simple HTML (`<u>…</u>`, `<span style="color: red">…</span>`), which Obsidian also understands.
 
 ---
 
-<a id="comecando"></a>
+<a id="getting-started"></a>
 
-## 🚀 Começando
+## 🚀 Getting started
 
-### Pré-requisitos
+### Prerequisites
 
-| Requisito | Para quê |
+| Requirement | What for |
 | --- | --- |
-| **Node.js 22.12+** (confira com `node -v`) | Desenvolver e gerar qualquer versão. |
-| Windows 10/11 | Plataforma principal do desktop (o Electron também roda em macOS e Linux). |
-| **[Android Studio](https://developer.android.com/studio)** | Só para gerar o app Android (traz o Java e o Android SDK). O app roda no Android 7 ou mais recente. |
+| **Node.js 22.12+** (check with `node -v`) | Developing and building any version. |
+| Windows 10/11 | Main desktop platform (Electron also runs on macOS and Linux). |
+| **[Android Studio](https://developer.android.com/studio)** | Only to build the Android app (it ships Java and the Android SDK). The app runs on Android 7 or newer. |
 
-### Instalação e modo de desenvolvimento
+### Installation and development mode
 
 ```bash
-npm install      # instala as dependências e baixa o Electron (só na primeira vez)
-npm run dev      # abre o 4notes com recarregamento automático
+npm install      # installs the dependencies and downloads Electron (first time only)
+npm run dev      # opens 4notes with automatic reloading
 ```
 
-O `npm run dev` ([`scripts/dev.mjs`](scripts/dev.mjs)) sobe o Nuxt em `http://127.0.0.1:3141`, compila o Electron com o esbuild em modo _watch_ e abre a janela:
+`npm run dev` ([`scripts/dev.mjs`](scripts/dev.mjs)) starts Nuxt at `http://127.0.0.1:3141`, compiles Electron with esbuild in _watch_ mode and opens the window:
 
-- mudou algo em `app/`? A janela atualiza sozinha;
-- mudou algo em `electron/`? O Electron reinicia sozinho;
-- `F12` abre as ferramentas de desenvolvedor.
+- changed something in `app/`? The window updates on its own;
+- changed something in `electron/`? Electron restarts on its own;
+- `F12` opens the developer tools.
 
-Na primeira abertura, escolha **Criar workspace** (você escolhe o local e o nome) ou **Abrir workspace existente**.
+On first launch, choose **Criar workspace** (_Create workspace_ — you pick the location and the name) or **Abrir workspace existente** (_Open existing workspace_).
 
-### Scripts disponíveis
+### Available scripts
 
-| Comando | O que faz |
+| Command | What it does |
 | --- | --- |
-| `npm run dev` | Desenvolvimento (Nuxt + Electron com recarregamento). |
-| `npm start` | Compila e abre a versão de produção sem instalar. |
-| `npm run build` | Gera a interface (`.output/public`) e compila o Electron (`dist-electron/`). |
-| `npm run build:web` | Só a interface, usada pelo Windows e pelo Android. |
-| `npm run build:windows` | Instalador do Windows (o mesmo que `npm run dist:win`). |
-| `npm run dist` | Instalador para o sistema atual (`dist:mac` e `dist:linux` também existem). |
-| `npm run build:android` | APK do Android em `release/android/4notes-<versão>.apk`. |
-| `npm run android:run` | Gera e instala no celular conectado por cabo (depuração USB). |
-| `npm run android:sync` | Só atualiza o projeto `android/` com a interface. |
-| `npm run android:open` | Abre o projeto `android/` no Android Studio. |
-| `npm run build:ios` | Explica o que falta para o iOS (ainda não incluído). |
-| `npm run release` | Publica a versão no GitHub Releases (Windows + Android). |
-| `npm test` | Testes unitários (Vitest). |
-| `npm run typecheck` | Verificação de tipos da interface e do Electron. |
+| `npm run dev` | Development (Nuxt + Electron with reloading). |
+| `npm start` | Builds and opens the production version without installing it. |
+| `npm run build` | Generates the interface (`.output/public`) and compiles Electron (`dist-electron/`). |
+| `npm run build:web` | Interface only, used by Windows and Android. |
+| `npm run build:windows` | Windows installer (the same as `npm run dist:win`). |
+| `npm run dist` | Installer for the current system (`dist:mac` and `dist:linux` also exist). |
+| `npm run build:android` | Android APK at `release/android/4notes-<version>.apk`. |
+| `npm run android:run` | Builds and installs on the phone connected by cable (USB debugging). |
+| `npm run android:sync` | Only updates the `android/` project with the interface. |
+| `npm run android:open` | Opens the `android/` project in Android Studio. |
+| `npm run build:ios` | Explains what is missing for iOS (not included yet). |
+| `npm run release` | Publishes the version on GitHub Releases (Windows + Android). |
+| `npm test` | Unit tests (Vitest). |
+| `npm run typecheck` | Type checking of the interface and of Electron. |
 
 ---
 
 <a id="builds"></a>
 
-## 📦 Gerando as versões
+## 📦 Building the versions
 
-O número da versão fica no campo `"version"` do `package.json` e vale para o Windows e para o Android. Aumente-o antes de gerar uma atualização.
+The version number lives in the `"version"` field of `package.json` and applies to Windows and Android. Increase it before building an update.
 
 ```mermaid
 flowchart LR
     G["nuxt generate<br/>→ .output/public"] --> B["build-electron.mjs<br/>→ dist-electron/"]
-    B --> EB["electron-builder --win<br/>→ release/{versão}/4notes-Setup-{versão}.exe"]
+    B --> EB["electron-builder --win<br/>→ release/{version}/4notes-Setup-{version}.exe"]
     G --> CS["npx cap sync android"]
-    CS --> GR["gradlew assembleRelease<br/>→ release/android/4notes-{versão}.apk"]
+    CS --> GR["gradlew assembleRelease<br/>→ release/android/4notes-{version}.apk"]
 ```
 
 ### 🖥️ Windows
@@ -299,58 +304,58 @@ flowchart LR
 npm run build:windows
 ```
 
-O instalador fica em `release/<versão>/4notes-Setup-<versão>.exe`. Ele instala só para o seu usuário (sem pedir administrador), permite escolher a pasta e pergunta se você quer um atalho na área de trabalho ([`build/installer.nsh`](build/installer.nsh)). Desinstalar **nunca** apaga os workspaces.
+The installer goes to `release/<version>/4notes-Setup-<version>.exe`. It installs for your user only (without asking for administrator rights), lets you choose the folder and asks whether you want a desktop shortcut ([`build/installer.nsh`](build/installer.nsh)). Uninstalling **never** deletes the workspaces.
 
 > [!NOTE]
-> O instalador não é assinado digitalmente. Se o Windows mostrar _"O Windows protegeu o computador"_, clique em **Mais informações → Executar assim mesmo**.
+> The installer is not digitally signed. If Windows shows _"Windows protected your PC"_, click **More info → Run anyway**.
 
 ### 📱 Android
 
-1. Instale o Android Studio e abra-o uma vez: o assistente baixa o Android SDK.
-2. Rode:
+1. Install Android Studio and open it once: the setup wizard downloads the Android SDK.
+2. Run:
 
    ```bash
    npm run build:android
    ```
 
-3. O APK fica em `release/android/4notes-<versão>.apk`. A primeira compilação demora alguns minutos (o Gradle baixa o que precisa).
+3. The APK goes to `release/android/4notes-<version>.apk`. The first build takes a few minutes (Gradle downloads what it needs).
 
-O script [`scripts/android.mjs`](scripts/android.mjs) encontra sozinho um Java compatível com o Gradle (17 a 24) e o Android SDK — ou usa `JAVA_HOME` e `ANDROID_HOME`.
+The [`scripts/android.mjs`](scripts/android.mjs) script finds on its own a Java version compatible with Gradle (17 to 24) and the Android SDK — or uses `JAVA_HOME` and `ANDROID_HOME`.
 
-- **Assinatura**: com `android/keystore.properties` (fora do Git), o APK usa a sua chave; sem ele, a chave de testes do Android Studio do computador. O Android só atualiza um app com um APK assinado pela **mesma chave**.
-- **Versão**: `1.6.2` vira o `versionCode` 10602.
+- **Signing**: with `android/keystore.properties` (outside Git), the APK uses your key; without it, the computer's Android Studio debug key. Android only updates an app with an APK signed by the **same key**.
+- **Version**: `1.6.3` becomes `versionCode` 10603.
 
 ### 🍎 iOS
 
-Ainda não incluído. O mesmo código serviria (Capacitor), mas o build exige um Mac com o Xcode, e o iOS não permite usar uma pasta qualquer como workspace. `npm run build:ios` explica os passos.
+Not included yet. The same code would work (Capacitor), but the build requires a Mac with Xcode, and iOS doesn't allow using an arbitrary folder as a workspace. `npm run build:ios` explains the steps.
 
 ---
 
-## 🔄 Atualizações automáticas
+## 🔄 Automatic updates
 
-Ao abrir, o 4notes procura uma versão nova no **GitHub Releases**. Se encontrar, pergunta se você quer instalar: no Windows, o app fecha, atualiza e abre de novo; no Android, abre o instalador do sistema. **Agora não** guarda a versão em **Configurações › Geral › Atualizações**. Atualizar nunca mexe nos dados do workspace. Com `npm run dev`, a procura fica desligada.
+On startup, 4notes looks for a new version on **GitHub Releases**. If it finds one, it asks whether you want to install it: on Windows, the app closes, updates and opens again; on Android, it opens the system installer. **Agora não** (_Not now_) keeps the version in **Configurações › Geral › Atualizações** (_Settings › General › Updates_). Updating never touches the workspace data. With `npm run dev`, the check is off.
 
 <details>
-<summary><b>Preparar a publicação (uma vez só)</b></summary>
+<summary><b>Preparing to publish (only once)</b></summary>
 
 <br>
 
-1. **Repositório público para as versões.** Crie no GitHub um repositório **público** só para os instaladores, com pelo menos um commit (marque _"Add a README file"_). O código do 4notes pode continuar privado.
-2. **Aponte o 4notes para ele** no `package.json`:
+1. **Public repository for the versions.** Create a **public** GitHub repository just for the installers, with at least one commit (check _"Add a README file"_). The 4notes source code can stay private.
+2. **Point 4notes to it** in `package.json`:
 
    ```json
    "updates": {
-     "github": "seu-usuario/seu-repositorio"
+     "github": "your-user/your-repository"
    }
    ```
 
-3. **Token para publicar.** Em GitHub → _Settings_ → _Developer settings_ → _Fine-grained tokens_, crie um token só para esse repositório com **Contents: Read and write** e coloque-o no arquivo `.env` na raiz do projeto (ignorado pelo Git):
+3. **Token to publish.** In GitHub → _Settings_ → _Developer settings_ → _Fine-grained tokens_, create a token for that repository only with **Contents: Read and write** and put it in the `.env` file at the project root (ignored by Git):
 
    ```bash
    GH_TOKEN=github_pat_...
    ```
 
-4. **Chave fixa do Android** em `android/keystore.properties` (também fora do Git):
+4. **A fixed Android key** in `android/keystore.properties` (also outside Git):
 
    ```properties
    storeFile=4notes.keystore
@@ -359,259 +364,260 @@ Ao abrir, o 4notes procura uma versão nova no **GitHub Releases**. Se encontrar
    keyPassword=...
    ```
 
-   Para continuar atualizando o APK que já está no celular, use a mesma chave com que ele foi assinado (por exemplo, uma cópia de `%USERPROFILE%\.android\debug.keystore`, senhas `android` e alias `androiddebugkey`). Guarde uma cópia da chave em lugar seguro.
+   To keep updating the APK that is already on the phone, use the same key it was signed with (for example, a copy of `%USERPROFILE%\.android\debug.keystore`, passwords `android` and alias `androiddebugkey`). Keep a copy of the key somewhere safe.
 
 5. `npm install`.
 
 </details>
 
 <details>
-<summary><b>Publicar uma versão</b></summary>
+<summary><b>Publishing a version</b></summary>
 
 <br>
 
-1. Aumente o `"version"` do `package.json`.
-2. (Opcional) descreva as novidades em `release-notes.md` — o texto aparece na pergunta de atualização.
-3. Publique:
+1. Increase `"version"` in `package.json`.
+2. (Optional) describe what's new in `release-notes.md` — the text shows up in the update prompt.
+3. Publish:
 
    ```bash
    npm run release                         # Windows + Android
-   npm run release -- --windows            # só o Windows
-   npm run release -- --android            # só o Android (acrescenta o APK a uma versão já publicada)
-   npm run release -- --notes "Correções"  # notas na linha de comando (ou --notes-file arquivo.md)
-   npm run release -- --draft              # deixa como rascunho no GitHub
+   npm run release -- --windows            # Windows only
+   npm run release -- --android            # Android only (adds the APK to an already published version)
+   npm run release -- --notes "Fixes"      # notes on the command line (or --notes-file file.md)
+   npm run release -- --draft              # leaves it as a draft on GitHub
    ```
 
-O [`scripts/release.mjs`](scripts/release.mjs) confere o repositório, o token e a chave; gera o `.exe` e o APK; cria o Release `v<versão>` como rascunho, envia `4notes-Setup-<versão>.exe`, `latest.yml` e `4notes-<versão>.apk` e só então publica — os apps nunca veem uma versão pela metade. Ele não republica uma versão existente. Outras opções: `--skip-build` (usa os arquivos já gerados) e `--allow-debug-key`.
+[`scripts/release.mjs`](scripts/release.mjs) checks the repository, the token and the key; builds the `.exe` and the APK; creates the `v<version>` Release as a draft, uploads `4notes-Setup-<version>.exe`, `latest.yml` and `4notes-<version>.apk`, and only then publishes it — the apps never see a half-uploaded version. It doesn't republish an existing version. Other options: `--skip-build` (uses the files already built) and `--allow-debug-key`.
 
 > [!IMPORTANT]
-> Versões anteriores à 1.6.2 não sabem procurar atualizações: a 1.6.2 precisa ser instalada à mão uma vez.
+> Versions before 1.6.2 don't know how to look for updates: 1.6.2 needs to be installed by hand once.
 
 </details>
 
 ---
 
-<a id="celular"></a>
+<a id="mobile"></a>
 
-## 📱 Celular e sincronização
+## 📱 Mobile and sync
 
-**Instalar**: passe o `.apk` para o celular e toque nele (permita _"instalar apps desconhecidos"_ para o app que abriu o arquivo). Na primeira abertura, o 4notes pede o **Acesso a todos os arquivos**: é ele que permite manter o workspace numa pasta escolhida por você, visível para apps de sincronização.
+**Install**: copy the `.apk` to the phone and tap it (allow _"install unknown apps"_ for the app that opened the file). On first launch, 4notes asks for **All files access**: that's what lets it keep the workspace in a folder of your choice, visible to sync apps.
 
-**Adaptado a cada tela**, incluindo o Galaxy Z Fold:
+**Adapted to each screen**, including the Galaxy Z Fold:
 
-| Tamanho | Exemplos | Como fica |
+| Size | Examples | How it looks |
 | --- | --- | --- |
-| `compact` | Celular em pé, tela externa do Fold | Uma coisa por vez, módulos na barra de baixo, menus em folhas que sobem de baixo. |
-| `medium` | Tela interna do Fold, celular deitado | Menu lateral, lista e conteúdo lado a lado. |
-| `expanded` | Tablet, computador | O layout do desktop. |
+| `compact` | Phone in portrait, the Fold's cover screen | One thing at a time, modules in the bottom bar, menus in sheets that slide up from the bottom. |
+| `medium` | The Fold's inner screen, phone in landscape | Side menu, list and content side by side. |
+| `expanded` | Tablet, computer | The desktop layout. |
 
-Girar a tela ou abrir e fechar o dobrável só reorganiza a interface — nada se perde. No toque, **segurar o dedo** faz o papel do botão direito e o **voltar** do Android fecha o que estiver aberto.
+Rotating the screen or opening and closing the foldable only rearranges the interface — nothing is lost. On touch, **long press** works as the right click and Android's **back** closes whatever is open.
 
 <details>
-<summary><b>Usar o mesmo workspace no computador e no celular</b></summary>
+<summary><b>Using the same workspace on the computer and on the phone</b></summary>
 
 <br>
 
-O 4notes **não sincroniza** sozinho e não usa nenhum servidor: ele lê e grava uma pasta, e um app de sincronização a mantém igual nos dois aparelhos.
+4notes **doesn't sync** on its own and doesn't use any server: it reads and writes a folder, and a sync app keeps it the same on both devices.
 
-1. **No computador**: instale o Google Drive para computador no modo **Espelhar arquivos** e coloque o workspace dentro do "Meu Drive".
-2. **No celular**: o app do Google Drive não sincroniza pastas — use um app de sincronização em duas vias, como o **Autosync** ou o **FolderSync**, ligando uma pasta do celular à pasta do Drive.
-3. No 4notes do celular: **Abrir workspace existente** e escolha a pasta sincronizada.
-4. Confira se a pasta oculta `.4notes/` também é sincronizada (é nela que ficam as configurações).
+1. **On the computer**: install Google Drive for desktop in **Mirror files** mode and put the workspace inside "My Drive".
+2. **On the phone**: the Google Drive app doesn't sync folders — use a two-way sync app, such as **Autosync** or **FolderSync**, linking a folder on the phone to the Drive folder.
+3. In 4notes on the phone: **Abrir workspace existente** (_Open existing workspace_) and choose the synced folder.
+4. Make sure the hidden `.4notes/` folder is synced too (that's where the settings are).
 
-**Iguais nos dois aparelhos**: notas, tarefas, mapas (com as posições dos nós), links, Timer, imagens e configurações. **De cada aparelho**: abas abertas, último módulo e mapa aberto. O app relê os arquivos ao voltar para ele e a cada minuto. Use um aparelho de cada vez para evitar conflitos.
+**The same on both devices**: notes, tasks, maps (with the node positions), links, Timer, images and settings. **Per device**: open tabs, last module and the open map. The app rereads the files when you come back to it and every minute. Use one device at a time to avoid conflicts.
 
-**Diferenças no Android**: excluir vai para `.4notes/trash/`; o PDF sai pela impressão do sistema; a importação de links aceita o arquivo HTML de favoritos; não existem "Mostrar no Explorador" nem "Iniciar com o computador".
+**Differences on Android**: deleting goes to `.4notes/trash/`; PDFs go through the system's print dialog; link import accepts the HTML bookmarks file; there is no "Show in Explorer" nor "Start with the computer".
 
 </details>
 
 ---
 
-<a id="atalhos"></a>
+<a id="shortcuts"></a>
 
-## ⌨️ Atalhos
+## ⌨️ Shortcuts
 
-Os atalhos de cada módulo também estão no tutorial (`F1`). No macOS, `Ctrl` vira `⌘`.
+Each module's shortcuts are also in its tutorial (`F1`). On macOS, `Ctrl` becomes `⌘`.
 
 <details open>
-<summary><b>Gerais</b></summary>
+<summary><b>General</b></summary>
 
 <br>
 
-| Atalho | Ação |
+| Shortcut | Action |
 | --- | --- |
-| `Ctrl+1` … `Ctrl+5` | Notas / Tarefas / Mapa Mental / Links / Timer |
-| `Ctrl+N` | Novo item no módulo atual |
-| `Ctrl+,` | Configurações |
-| `F1` | Tutorial do módulo atual |
-| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom da interface |
+| `Ctrl+1` … `Ctrl+5` | Notes / Tasks / Mind Map / Links / Timer |
+| `Ctrl+N` | New item in the current module |
+| `Ctrl+,` | Settings |
+| `F1` | Tutorial of the current module |
+| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Interface zoom |
 
 </details>
 
 <details>
-<summary><b>Notas e editor</b></summary>
+<summary><b>Notes and editor</b></summary>
 
 <br>
 
-| Atalho | Ação |
+| Shortcut | Action |
 | --- | --- |
-| `Ctrl+W` | Fechar a aba |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Próxima / anterior aba |
-| `Ctrl+Shift+T` | Reabrir a aba fechada |
-| `Ctrl+\` | Mostrar/ocultar a lista de notas |
-| `Ctrl+F` | Procurar na nota |
-| `Ctrl+D` | Selecionar também a próxima ocorrência (edita todas juntas) |
-| `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | Negrito / itálico / sublinhado |
-| `Ctrl+Shift+X` / `Ctrl+Shift+H` | Tachado / marca-texto |
-| `Ctrl+E` | Código na linha |
-| `Ctrl+K` | Link no texto selecionado |
-| `Ctrl+Shift+V` | Colar sem formatação (código não vira bloco) |
-| `Ctrl+clique` | Abrir o link no navegador |
-| `@` | Mencionar uma nota, mapa, tarefa, link ou registro do Timer |
+| `Ctrl+W` | Close the tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
+| `Ctrl+Shift+T` | Reopen the closed tab |
+| `Ctrl+\` | Show/hide the notes list |
+| `Ctrl+F` | Find in the note |
+| `Ctrl+D` | Also select the next occurrence (edits them all together) |
+| `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | Bold / italic / underline |
+| `Ctrl+Shift+X` / `Ctrl+Shift+H` | Strikethrough / highlight |
+| `Ctrl+E` | Inline code |
+| `Ctrl+K` | Link on the selected text |
+| `Ctrl+Shift+V` | Paste without formatting (code doesn't become a block) |
+| `Ctrl+click` | Open the link in the browser |
+| `@` | Mention a note, map, task, link or Timer record |
 
-Os atalhos do Markdown funcionam no começo da linha: `# `, `- `, `1. `, `- [ ] `, `> ` e ` ``` ` + `Enter`.
+Markdown shortcuts work at the start of a line: `# `, `- `, `1. `, `- [ ] `, `> ` and ` ``` ` + `Enter`.
 
 </details>
 
 <details>
-<summary><b>Tarefas, Mapa Mental, Links e Timer</b></summary>
+<summary><b>Tasks, Mind Map, Links and Timer</b></summary>
 
 <br>
 
-| Módulo | Atalho | Ação |
+| Module | Shortcut | Action |
 | --- | --- | --- |
-| Tarefas | `Enter` / `Espaço` | Abrir / concluir a tarefa selecionada |
-| Tarefas | `Esc` | Fechar o painel |
-| Mapa | `Ctrl+K` | Buscar no mapa |
-| Mapa | `Shift` + arrastar | Conectar notas (soltar no vazio cria uma nota) |
-| Mapa | `Ctrl` + arrastar / `Ctrl` + clique | Selecionar por área / pôr ou tirar da seleção |
-| Mapa | `Delete` | Excluir as notas ou a conexão selecionadas |
-| Mapa | `Esc` | Fechar a nota / tirar a seleção |
-| Links | `Ctrl+V` | Salvar o endereço copiado |
-| Links | `↑` `↓` / `Enter` / `F2` / `Delete` | Escolher / abrir / editar / excluir |
-| Links | `Ctrl+C` | Copiar o endereço |
-| Timer | `Espaço` | Iniciar, pausar ou retomar |
-| Timer | `Ctrl+Enter` | Finalizar a sessão |
-| Timer | `←` / `→` | Período anterior / próximo |
+| Tasks | `Enter` / `Space` | Open / complete the selected task |
+| Tasks | `Esc` | Close the panel |
+| Map | `Ctrl+K` | Search the map |
+| Map | `Shift` + drag | Connect notes (dropping on empty space creates a note) |
+| Map | `Ctrl` + drag / `Ctrl` + click | Select by area / add to or remove from the selection |
+| Map | `Delete` | Delete the selected notes or connection |
+| Map | `Esc` | Close the note / clear the selection |
+| Links | `Ctrl+V` | Save the copied address |
+| Links | `↑` `↓` / `Enter` / `F2` / `Delete` | Choose / open / edit / delete |
+| Links | `Ctrl+C` | Copy the address |
+| Timer | `Space` | Start, pause or resume |
+| Timer | `Ctrl+Enter` | Finish the session |
+| Timer | `←` / `→` | Previous / next period |
 
 </details>
 
 ---
 
-## 🧪 Testes
+## 🧪 Tests
 
 ```bash
-npm test             # testes unitários (Vitest)
-npm run typecheck    # TypeScript estrito na interface e no Electron
+npm test             # unit tests (Vitest)
+npm run typecheck    # strict TypeScript in the interface and in Electron
 ```
 
-Os testes ficam em [`tests/`](tests/) (23 arquivos) e cobrem as regras puras, sem Vue e sem disco: datas e recorrência, títulos e nomes de arquivo, formatação e Markdown escondido, listas, detecção de código, blocos de texto e `Ctrl+D`, categorias e pastas pelo título, versões das notas, exportação, menções entre módulos, mapa (grafo e layout), links e favoritos de navegadores (Chromium, Firefox/Zen, HTML), biblioteca de imagens, módulos, configurações sincronizadas, a camada Android sobre um disco em memória, tamanhos de tela, Timer (em vários fusos) e atualizações.
+The tests live in [`tests/`](tests/) (24 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order), note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones) and updates.
 
 ---
 
-## 🗺️ Estrutura do projeto
+## 🗺️ Project structure
 
 ```text
 4notes/
-├── app/                    Interface (Nuxt 4 + Vue 3) — a mesma no Windows e no Android
-│   ├── pages/              Um arquivo por módulo: notes, tasks, mindmap, links, timer
+├── app/                    Interface (Nuxt 4 + Vue 3) — the same on Windows and Android
+│   ├── pages/              One file per module: notes, tasks, mindmap, links, timer
 │   ├── components/         editor/, notes/, tasks/, mindmap/, links/, timer/, shell/, ui/
-│   ├── stores/             Estado de cada módulo + mentions.ts (a ponte entre módulos)
-│   ├── lib/                Regras puras e persistência; lib/mobile/ é a camada do Android
-│   ├── composables/        Tema, atalhos, layout por tamanho de tela, diálogos…
-│   ├── plugins/            Tema, plataforma e animação de clique nos ícones
-│   └── assets/css/         Cores (tokens.css), estilos base e mobile.css
-├── electron/               Processo principal: janela, IPC, arquivos, workspaces, links, export, updates
-├── shared/                 Contrato da API (ipc.ts) e regras usadas pelas duas plataformas
-├── android/                Projeto Android (Capacitor) + plugins nativos em Java
-├── scripts/                dev, build-electron, android, ios e release
-├── tests/                  Testes unitários (Vitest)
-├── build/                  Ícones e script do instalador (installer.nsh)
-├── docs/ARQUITETURA.md     Documentação técnica detalhada
-├── capacitor.config.ts     Configuração do app Android
-├── electron-builder.yml    Configuração do instalador
-└── nuxt.config.ts          Configuração do Nuxt (SPA)
+│   ├── stores/             State of each module + mentions.ts (the bridge between modules)
+│   ├── lib/                Pure rules and persistence; lib/mobile/ is the Android layer
+│   ├── composables/        Theme, shortcuts, layout by screen size, dialogs…
+│   ├── plugins/            Theme, platform and click animation on icons
+│   └── assets/css/         Colors (tokens.css), base styles and mobile.css
+├── electron/               Main process: window, IPC, files, workspaces, links, export, updates
+├── shared/                 API contract (ipc.ts) and rules used by both platforms
+├── android/                Android project (Capacitor) + native plugins in Java
+├── scripts/                dev, build-electron, android, ios and release
+├── tests/                  Unit tests (Vitest)
+├── build/                  Icons and the installer script (installer.nsh)
+├── docs/ARQUITETURA.md     Detailed technical documentation (in Portuguese)
+├── capacitor.config.ts     Android app configuration
+├── electron-builder.yml    Installer configuration
+└── nuxt.config.ts          Nuxt configuration (SPA)
 ```
 
-Para saber **onde mexer** em cada funcionalidade, veja a tabela no fim de [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+To find out **where to change** each feature, see the table at the end of [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 
 ---
 
-## 🩺 Problemas comuns
+## 🩺 Common problems
 
 <details>
-<summary><b><code>npm install</code> falha com <code>EPERM</code>/<code>EBUSY</code> dentro do OneDrive</b></summary>
+<summary><b><code>npm install</code> fails with <code>EPERM</code>/<code>EBUSY</code> inside OneDrive</b></summary>
 
 <br>
 
-O OneDrive pode travar arquivos de `node_modules` durante a sincronização. Pause a sincronização durante a instalação ou mantenha o **código-fonte** fora do OneDrive (ex.: `C:\dev\4notes`). O workspace com os dados pode ficar no OneDrive sem problema.
+OneDrive may lock `node_modules` files while syncing. Pause syncing during the installation or keep the **source code** outside OneDrive (e.g. `C:\dev\4notes`). The workspace with your data can stay in OneDrive without any problem.
 
 </details>
 
 <details>
-<summary><b>Tarefas, links ou o Timer não carregam</b></summary>
+<summary><b>Tasks, links or the Timer don't load</b></summary>
 
 <br>
 
-O `tasks.json`, o `links.json` ou o `timer.json` foi editado e ficou com JSON inválido. O app não sobrescreve nada: corrija o arquivo ou restaure uma cópia de `.4notes/backups/`.
+`tasks.json`, `links.json` or `timer.json` was edited and became invalid JSON. The app doesn't overwrite anything: fix the file or restore a copy from `.4notes/backups/`.
 
 </details>
 
 <details>
-<summary><b>O <code>build:android</code> não encontra o Java ou o Android SDK</b></summary>
+<summary><b><code>build:android</code> can't find Java or the Android SDK</b></summary>
 
 <br>
 
-Abra o Android Studio uma vez e deixe o assistente terminar. Se ele estiver instalado num lugar diferente do padrão, configure `JAVA_HOME` (a pasta `jbr` do Android Studio) e `ANDROID_HOME` (a pasta do SDK). Um erro `Unsupported class file major version 69` significa Java 25 ou mais novo: instale um JDK entre 17 e 24 (o script escolhe sozinho um compatível quando existe).
+Open Android Studio once and let the setup wizard finish. If it's installed somewhere other than the default location, set `JAVA_HOME` (Android Studio's `jbr` folder) and `ANDROID_HOME` (the SDK folder). An `Unsupported class file major version 69` error means Java 25 or newer: install a JDK between 17 and 24 (the script picks a compatible one on its own when there is one).
 
 </details>
 
 <details>
-<summary><b>"App não instalado" ao atualizar no celular</b></summary>
+<summary><b>"App not installed" when updating on the phone</b></summary>
 
 <br>
 
-O APK novo foi assinado com outra chave ou tem uma versão menor que a instalada. Gere com a mesma chave (`android/keystore.properties`) e aumente a versão no `package.json`. Se precisar desinstalar o app, o workspace não é apagado.
+The new APK was signed with a different key or has a lower version than the installed one. Build it with the same key (`android/keystore.properties`) and increase the version in `package.json`. If you need to uninstall the app, the workspace is not deleted.
 
 </details>
 
 <details>
-<summary><b>Uma mudança feita num aparelho não aparece no outro</b></summary>
+<summary><b>A change made on one device doesn't show up on the other</b></summary>
 
 <br>
 
-Confira se o app de sincronização terminou e se ele sincroniza a pasta oculta `.4notes/`. O 4notes relê os arquivos quando você volta para ele.
+Check that the sync app has finished and that it syncs the hidden `.4notes/` folder. 4notes rereads the files when you come back to it.
 
 </details>
 
 <details>
-<summary><b>Um link ficou sem ícone</b></summary>
+<summary><b>A link has no icon</b></summary>
 
 <br>
 
-O site estava fora do ar ou bloqueou o acesso. Use **Atualizar título e ícone** no botão direito do link; enquanto isso, ele aparece com a inicial do site.
+The site was down or blocked access. Use **Atualizar título e ícone** (_Update title and icon_) on the link's right-click menu; meanwhile, it shows the site's initial.
 
 </details>
 
 <details>
-<summary><b>Notas de migração entre versões</b></summary>
+<summary><b>Migration notes between versions</b></summary>
 
 <br>
 
-- **Vindo da 1.0.0**: na primeira abertura da 1.0.1, as notas do Mapa Mental vão para o mapa `Principal` e os `[[links]]` viram conexões no `mapa.json`. Uma cópia das notas originais fica em `.4notes/backups/mindmap-1.0.0-<data>/`.
-- **Vindo da 1.4.3**: na primeira abertura da 1.5.0, as configurações passam para `.4notes/settings.json` e o estado da tela passa a ficar em cada aparelho. Os arquivos antigos vão para `.4notes/backups/1.5.0/`. Atualize todos os aparelhos que usam o workspace.
+- **Coming from 1.0.0**: on the first launch of 1.0.1, the Mind Map notes go to the `Principal` map and the `[[links]]` become connections in `mapa.json`. A copy of the original notes stays in `.4notes/backups/mindmap-1.0.0-<date>/`.
+- **Coming from 1.4.3**: on the first launch of 1.5.0, the settings move to `.4notes/settings.json` and the screen state starts living on each device. The old files go to `.4notes/backups/1.5.0/`. Update every device that uses the workspace.
+- **1.6.3**: a new workspace starts with the default settings (until 1.6.2, it inherited the theme of the workspace opened before it). Existing workspaces keep their settings.
 
 </details>
 
 ---
 
-## 📄 Licença
+## 📄 License
 
-Projeto pessoal de **Kauan**, sem licença de uso aberta (`"license": "UNLICENSED"` no `package.json`). Todos os direitos reservados.
+A personal project by **Kauan**, with no open license (`"license": "UNLICENSED"` in `package.json`). All rights reserved.
 
 <div align="center">
 <br>
 <img src="build/icon.svg" alt="" width="32" />
 <br>
-<sub>Feito com Nuxt, Electron e Capacitor — seus dados, sempre na sua pasta.</sub>
+<sub>Made with Nuxt, Electron and Capacitor — your data, always in your folder.</sub>
 </div>

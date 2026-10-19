@@ -10,10 +10,13 @@
  * - Na nota, o bloco é uma peça só: o cursor da nota pula o bloco; ↑/↓ entram nele.
  *   Uma seleção da nota que cai dentro do código (setas, desfazer, busca, Enter em
  *   ```) aparece no editor do bloco.
- * - Digitar ``` (ou ```linguagem) numa linha e apertar Enter cria um bloco; a
- *   linguagem muda pelo nome dela no cabeçalho. Backspace num bloco vazio o remove.
+ * - Digitar ``` (ou ```linguagem) numa linha e apertar Enter cria um bloco — ou o botão
+ *   "Bloco de código" da barra de formatação, com o trecho selecionado (text-blocks.ts).
+ *   A linguagem muda pelo nome dela no cabeçalho. Backspace num bloco vazio o remove.
  * - Blocos de texto (```text, criados pela barra de formatação — text-blocks.ts) usam
  *   o mesmo cartão, mas com a fonte do texto, linhas que quebram e sem linguagem.
+ * - O nome no cabeçalho também troca o tipo do bloco (1.6.3): texto ↔ código, com a
+ *   linguagem escolhida (o cartão é refeito com o editor do tipo novo).
  * - O arquivo continua sendo Markdown comum.
  */
 import { redo, undo } from '@codemirror/commands'
@@ -147,22 +150,15 @@ const TEXT_ACTIONS = [
 function header(info: string): HTMLElement {
   const head = el('div', 'cm-codeblock-head')
   const text = isTextBlockInfo(info)
-  let label: HTMLElement
-  if (text) {
-    // Bloco de texto: sem linguagem para trocar
-    label = el('span', 'cm-codeblock-kind')
-    label.innerHTML = iconSvg('text-block', 13)
-    label.append('Texto')
-  } else {
-    const button = el('button', 'cm-codeblock-lang')
-    button.type = 'button'
-    button.dataset.action = 'language'
-    button.dataset.tip = 'Trocar a linguagem'
-    button.dataset.tipPos = 'top'
-    button.textContent = languageLabel(info)
-    button.insertAdjacentHTML('beforeend', iconSvg('chevron-down', 12))
-    label = button
-  }
+  // O nome do bloco é um botão: troca a linguagem e o tipo (texto ↔ código)
+  const label = el('button', text ? 'cm-codeblock-lang cm-codeblock-kind' : 'cm-codeblock-lang')
+  label.type = 'button'
+  label.dataset.action = 'language'
+  label.dataset.tip = text ? 'Trocar para bloco de código' : 'Trocar a linguagem (ou para texto)'
+  label.dataset.tipPos = 'top'
+  if (text) label.innerHTML = iconSvg('text-block', 13)
+  label.append(languageLabel(info))
+  label.insertAdjacentHTML('beforeend', iconSvg('chevron-down', 12))
   const actions = el('span', 'cm-codeblock-actions')
   for (const { action, icon, tip } of text ? TEXT_ACTIONS : ACTIONS) {
     const button = el('button', 'cm-codeblock-btn')

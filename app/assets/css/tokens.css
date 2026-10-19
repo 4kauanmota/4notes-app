@@ -46,6 +46,8 @@
 
   --titlebar-h: 40px;
   --rail-w: 64px;
+  /* Margem lateral do conteúdo das telas dos módulos (.module-content, em base.css) */
+  --page-pad-x: clamp(18px, 2.2vw, 40px);
 }
 
 :root,

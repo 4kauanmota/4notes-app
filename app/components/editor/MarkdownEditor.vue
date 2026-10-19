@@ -35,13 +35,13 @@ import {
   type InlineFormat,
   type LineFormat,
 } from '~/lib/editor/formatting'
-import { languageLabel } from '~/lib/editor/languages'
+import { isTextBlockInfo, languageLabel, TEXT_BLOCK_INFO } from '~/lib/editor/languages'
 import { insertImageFromLibrary } from '~/lib/editor/paste'
 import { stripImages } from '~/lib/editor/markup'
 import type { CodeEditRequest, EditorHost, MentionHost } from '~/lib/editor/host'
 import { refreshMentions } from '~/lib/editor/mentions'
 import { buildExtensions, minimalChange, type CursorInfo } from '~/lib/editor/setup'
-import { canWrapInTextBlock, wrapInTextBlock } from '~/lib/editor/text-blocks'
+import { canWrapInTextBlock, wrapInCodeBlock, wrapInTextBlock } from '~/lib/editor/text-blocks'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 
 const props = defineProps<{
@@ -192,6 +192,7 @@ const applyColor = (color: PaletteColor | null) => run((v) => (color ? toggleFor
 const applyLine = (format: LineFormat) => run((v) => toggleLineFormat(v, format))
 /** "Bloco de texto": a seleção vira um bloco (só por aqui — nada vira bloco de texto sozinho). */
 const applyTextBlock = () => run(wrapInTextBlock)
+const applyCodeBlock = () => run(wrapInCodeBlock)
 
 // ── Links (o endereço é editado na própria barra) ───────────────────────────
 
@@ -251,10 +252,10 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-// ── Linguagem dos blocos de código ──────────────────────────────────────────
+// ── Tipo e linguagem dos blocos (nome no cabeçalho do bloco) ────────────────
 
 const LANGUAGES = [
-  ['', 'Texto simples'],
+  ['', 'Sem linguagem'],
   ['js', 'JavaScript'],
   ['ts', 'TypeScript'],
   ['vue', 'Vue'],
@@ -272,18 +273,26 @@ const LANGUAGES = [
   ['markdown', 'Markdown'],
 ] as const
 
+/**
+ * Menu do nome do bloco: "Bloco de texto" (```text) ou código numa linguagem — o mesmo
+ * menu nos dois tipos, então dá para trocar texto ↔ código (1.6.3).
+ */
 async function chooseLanguage(current: string): Promise<string | null> {
+  const text = isTextBlockInfo(current)
   const label = languageLabel(current)
-  const known = LANGUAGES.some(([, name]) => name === label)
+  const known = text || LANGUAGES.some(([, name]) => name === label)
+  const custom = !known && !!current.trim()
   const items: MenuItemSpec[] = [
+    { id: `lang:${TEXT_BLOCK_INFO}`, label: 'Bloco de texto', type: 'radio', checked: text },
+    separator,
     ...LANGUAGES.map(([id, name]) => ({
       id: `lang:${id}`,
       label: name,
       type: 'radio' as const,
-      checked: id === '' ? !current.trim() : name === label,
+      checked: !text && (id === '' ? !current.trim() : name === label),
     })),
     separator,
-    { id: 'other', label: known || !current.trim() ? 'Outra…' : `Outra (${label})…`, type: 'radio', checked: !known && !!current.trim() },
+    { id: 'other', label: custom ? `Outra (${label})…` : 'Outra…', type: 'radio', checked: custom },
   ]
   const choice = await showContextMenu(items)
   if (!choice) return null
@@ -291,7 +300,7 @@ async function chooseLanguage(current: string): Promise<string | null> {
   const typed = await promptDialog({
     title: 'Linguagem do bloco',
     label: 'Nome ou extensão (ex.: rust, go, php)',
-    value: current.trim(),
+    value: text ? '' : current.trim(),
     confirmLabel: 'Usar',
     icon: 'code',
   })
@@ -337,7 +346,10 @@ const appHost: EditorHost = {
     showToast({ message, icon: 'check', action: undo ? { label: 'Desfazer', run: undo } : undefined })
   },
   mentions: props.mentions,
-  titleFirstLine: props.titleFirstLine,
+  // Getter: a configuração "Título na primeira linha" pode mudar com a nota aberta
+  get titleFirstLine() {
+    return props.titleFirstLine
+  },
 }
 
 function closeCode(): void {
@@ -443,6 +455,19 @@ watch(
   },
 )
 
+// "Título na primeira linha" (configuração das Notas) mudou: a nota vazia aberta passa a
+// mostrar o texto de espera certo (o "# " automático já pergunta ao app a cada nota vazia)
+watch(
+  () => [props.titleFirstLine, props.placeholder] as const,
+  () => {
+    for (const [key, entry] of cache) if (!entry.state.doc.length) cache.delete(key)
+    if (!view || view.state.doc.length) return
+    const focused = view.hasFocus
+    view.setState(createState(''))
+    if (focused) view.focus()
+  },
+)
+
 // Um título ou estado mencionado mudou (tarefa concluída, nota renomeada…): redesenha os chips
 const mentionsRevision = computed(() => props.mentions?.revision() ?? '')
 watch(mentionsRevision, () => view?.dispatch({ effects: refreshMentions.of(null) }))
@@ -488,6 +513,7 @@ defineExpose({
       @close-link="closeLink"
       @clear="run(clearFormatting)"
       @text-block="applyTextBlock"
+      @code-block="applyCodeBlock"
       @image="insertImage"
       @open-url="openActiveLink"
     />

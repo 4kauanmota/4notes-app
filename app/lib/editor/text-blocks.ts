@@ -3,6 +3,11 @@
  * formatação). É sempre manual — nada vira bloco de texto sozinho (colar continua
  * criando bloco só para código reconhecido, ver paste.ts).
  *
+ * Bloco de código (1.6.3): o botão "Bloco de código", ao lado, faz o mesmo com uma
+ * cerca de código — ```linguagem, com a linguagem reconhecida pelo conteúdo
+ * (code-detect.ts) ou sem linguagem. O nome no cabeçalho do bloco troca a linguagem
+ * e também o tipo (texto ↔ código), em qualquer um dos dois.
+ *
  * - O bloco guarda o texto como ele aparece na tela, sem nenhum tratamento: sem
  *   linguagem, sem cores, sem mexer na indentação. A formatação escondida (negrito,
  *   links…) não existe dentro de um bloco, então fica só o texto visível — as mesmas
@@ -20,6 +25,7 @@ import { EditorSelection, type EditorState, type Line, type TransactionSpec } fr
 import type { EditorView } from '@codemirror/view'
 import { noteToPlainText } from '../notes/export'
 import { codeBlocks } from './code-blocks'
+import { guessLanguage } from './code-detect'
 import { findElements, hasContent, hasHiddenMarkup, type FormatElement } from './elements'
 import { balancedSlice } from './hidden-markup'
 import { editorHost } from './host'
@@ -114,6 +120,19 @@ export function canWrapInTextBlock(state: EditorState): boolean {
  * `noteDir` é a pasta da nota (as menções viram o título, como na tela).
  */
 export function textBlockChange(state: EditorState, noteDir: string): TransactionSpec | null {
+  return blockChange(state, noteDir, () => TEXT_BLOCK_INFO)
+}
+
+/**
+ * O mesmo, para um bloco de código: a linguagem é a reconhecida pelo conteúdo
+ * (JavaScript, Python, GDScript…) ou nenhuma — troca-se depois pelo cabeçalho do bloco.
+ */
+export function codeBlockChange(state: EditorState, noteDir: string): TransactionSpec | null {
+  return blockChange(state, noteDir, (content) => guessLanguage(content) ?? '')
+}
+
+/** Bloco de texto ou de código (`infoFor` dá o texto depois da cerca, a partir do conteúdo). */
+function blockChange(state: EditorState, noteDir: string, infoFor: (content: string) => string): TransactionSpec | null {
   if (!canWrapInTextBlock(state)) return null
   const { doc } = state
   let { from: a, to: b } = state.selection.main
@@ -177,7 +196,7 @@ export function textBlockChange(state: EditorState, noteDir: string): Transactio
   const markerText = marker ? state.sliceDoc(firstLine.from, marker.to) : ''
 
   const fence = fenceFor(content)
-  const block = `${fence}${TEXT_BLOCK_INFO}\n${content}\n${fence}`
+  const block = `${fence}${infoFor(content)}\n${content}\n${fence}`
   const head = keepBefore ? `${closers}\n` : ''
   const atDocEnd = end === doc.length
   const tail = keepAfter ? `\n${markerText}${openers}` : atDocEnd ? '\n' : ''
@@ -195,6 +214,15 @@ export function textBlockChange(state: EditorState, noteDir: string): Transactio
 export function wrapInTextBlock(view: EditorView): boolean {
   const host = view.state.facet(editorHost)
   const spec = textBlockChange(view.state, host?.assetBase() ?? 'notes')
+  if (!spec) return false
+  view.dispatch(spec)
+  return true
+}
+
+/** Botão "Bloco de código" da barra de formatação. */
+export function wrapInCodeBlock(view: EditorView): boolean {
+  const host = view.state.facet(editorHost)
+  const spec = codeBlockChange(view.state, host?.assetBase() ?? 'notes')
   if (!spec) return false
   view.dispatch(spec)
   return true

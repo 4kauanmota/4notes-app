@@ -7,7 +7,7 @@ import type { TreeRow } from '~/lib/notes/title-tree'
 import { noteTitle, useNotesStore, type QuickNote } from '~/stores/notes'
 
 const props = defineProps<{ row: TreeRow<QuickNote> }>()
-const emit = defineEmits<{ activate: []; toggle: []; menu: []; new: [] }>()
+const emit = defineEmits<{ activate: []; toggle: []; menu: []; new: []; latest: [] }>()
 const notes = useNotesStore()
 const now = useNow()
 
@@ -40,6 +40,17 @@ function onDragStart(event: DragEvent) {
     <span class="row-label" :title="row.note ? noteTitle(row.note) : row.label">{{ row.label }}</span>
     <template v-if="row.kind === 'folder'">
       <span class="row-count">{{ row.count }}</span>
+      <button
+        v-if="row.latest"
+        class="row-latest icon-btn sm"
+        :data-tip="`Abrir a mais recente: “${noteTitle(row.latest)}”`"
+        data-tip-pos="left"
+        aria-label="Abrir a nota mais recente da pasta"
+        data-action="open-latest"
+        @click.stop="emit('latest')"
+      >
+        <AppIcon name="clock" :size="14" />
+      </button>
       <button
         class="row-new icon-btn sm"
         :data-tip="`Nova nota em “${row.titlePath}”`"
@@ -163,14 +174,19 @@ html[data-touch] .tree-row {
 .tree-row:hover .row-time {
   display: none;
 }
-/* Pasta: o + aparece no lugar da contagem */
+/* Pasta: "abrir a mais recente" e o + aparecem no lugar da contagem */
+.row-latest,
 .row-new {
   display: none;
   flex: none;
   width: 22px;
   height: 22px;
+}
+.row-new {
   margin-right: -4px;
 }
+.tree-row.folder:hover .row-latest,
+.tree-row.folder:focus-within .row-latest,
 .tree-row.folder:hover .row-new,
 .tree-row.folder:focus-within .row-new {
   display: grid;

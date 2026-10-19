@@ -72,10 +72,11 @@ describe('passagem da 1.4.3 para o settings.json', () => {
     ])
   })
 
-  it('workspace novo: só o tema do aparelho', async () => {
+  it('workspace novo: as configurações padrão (nada do workspace aberto antes, nem o tema)', async () => {
+    // O aparelho guarda "dark" (o tema do último workspace aberto): o novo não herda
     const { settings } = await freshStores()
     await settings.loadSettings()
-    expect(read('.4notes/settings.json')).toEqual({ version: 1, theme: 'dark' })
+    expect(read('.4notes/settings.json')).toEqual({ version: 1, theme: 'system' })
     expect(settings.settingsSection('notes')).toBeUndefined()
   })
 
@@ -88,6 +89,50 @@ describe('passagem da 1.4.3 para o settings.json', () => {
     // O mesmo caminho escrito de outro jeito é o mesmo workspace
     api.bootstrap.dataDir.path = 'c:\\users\\kauan\\pessoal\\'
     expect(device.readDeviceState('notes')).toEqual({ openTabs: ['notes/B.md'] })
+    api.bootstrap.dataDir.path = 'C:\\Users\\Kauan\\Pessoal'
+  })
+})
+
+describe('cada workspace com as suas configurações (1.6.3)', () => {
+  it('reabrir restaura as configurações; um workspace novo não herda as do anterior', async () => {
+    const disks = { pessoal: new Map<string, string>(), trabalho: new Map<string, string>() }
+    async function open(name: keyof typeof disks) {
+      files = disks[name]
+      api.bootstrap.dataDir.path = `C:\\Users\\Kauan\\${name}`
+      const { settings } = await freshStores()
+      await settings.loadSettings()
+      const notes = (await import('~/stores/notes')).useNotesStore()
+      const modules = (await import('~/stores/modules')).useModulesStore()
+      await Promise.all([notes.load(), modules.load()])
+      return { settings, notes, modules }
+    }
+
+    // Pessoal: tema escuro, sem título na primeira linha, menu só com ícones
+    let ws = await open('pessoal')
+    ws.settings.updateSettingsSection('theme', 'dark')
+    ws.notes.updateSettings({ titleFirstLine: false })
+    ws.modules.setNavStyle('icon')
+    await ws.settings.flushSettings()
+    // O aparelho guarda uma cópia do tema do último workspace aberto
+    api.bootstrap.settings.theme = 'dark'
+
+    // Trabalho (novo): tudo no padrão — nada vem do Pessoal
+    ws = await open('trabalho')
+    expect(ws.settings.settingsSection('theme')).toBe('system')
+    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: true })
+    expect(ws.modules.state.prefs.navStyle).toBe('icon-label')
+    ws.notes.updateSettings({ folderCase: 'upper' })
+    await ws.settings.flushSettings()
+
+    // De volta ao Pessoal: as configurações dele, intactas
+    ws = await open('pessoal')
+    expect(ws.settings.settingsSection('theme')).toBe('dark')
+    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: false })
+    expect(ws.modules.state.prefs.navStyle).toBe('icon')
+    // E o Trabalho continua com as dele
+    expect(JSON.parse(disks.trabalho.get('.4notes/settings.json')!)).toMatchObject({ theme: 'system', notes: { folderCase: 'upper', titleFirstLine: true } })
+
+    files = new Map()
     api.bootstrap.dataDir.path = 'C:\\Users\\Kauan\\Pessoal'
   })
 })
@@ -139,17 +184,17 @@ describe('os módulos leem e gravam a parte deles', () => {
     const links = (await import('~/stores/links')).useLinksStore()
     const modules = (await import('~/stores/modules')).useModulesStore()
     await Promise.all([notes.load(), links.load(), modules.load()])
-    expect(notes.state.settings).toEqual({ autoCategory: true, folderCase: 'typed' })
+    expect(notes.state.settings).toEqual({ autoCategory: true, folderCase: 'typed', titleFirstLine: true })
     expect(links.state.sort).toBe('name')
     expect(modules.isEnabled('links')).toBe(false)
     expect(modules.state.prefs.navStyle).toBe('icon')
 
-    notes.updateSettings({ folderCase: 'upper' })
+    notes.updateSettings({ folderCase: 'upper', titleFirstLine: false })
     links.setSort('url')
     modules.setNavStyle('icon-label')
     await settings.flushSettings()
     expect(read('.4notes/settings.json')).toMatchObject({
-      notes: { autoCategory: true, folderCase: 'upper' },
+      notes: { autoCategory: true, folderCase: 'upper', titleFirstLine: false },
       links: { sort: 'url' },
       modules: { disabled: ['links'], navStyle: 'icon-label' },
     })

@@ -208,137 +208,141 @@ defineExpose({
 <template>
   <div class="session-layout">
     <section class="session-card" aria-label="Sessão">
-      <div class="mode-row">
-        <UiSegmented v-if="!active" v-model="mode" :options="modeOptions" aria-label="Modo" data-timer-modes />
-        <span v-else class="mode-badge"><AppIcon :name="MODE_ICONS[active.mode]" :size="15" /> {{ MODE_LABELS[active.mode] }}</span>
-      </div>
+      <div class="session-body">
+        <div class="session-main">
+          <div class="mode-row">
+            <UiSegmented v-if="!active" v-model="mode" :options="modeOptions" aria-label="Modo" data-timer-modes />
+            <span v-else class="mode-badge"><AppIcon :name="MODE_ICONS[active.mode]" :size="15" /> {{ MODE_LABELS[active.mode] }}</span>
+          </div>
 
-      <TimerDial
-        :time="dial.time"
-        :caption="dial.caption"
-        :progress="'progress' in dial ? dial.progress : null"
-        :sweep="'sweep' in dial ? dial.sweep : null"
-        :tone="'tone' in dial ? dial.tone : 'focus'"
-        :state="dial.state"
-        :dots="'dots' in dial ? dial.dots : null"
-      />
-      <p class="status-line">{{ statusLine }}</p>
-
-      <Transition name="fade">
-        <div v-if="timer.state.alert" class="alert" role="alert" data-timer-alert>
-          <AppIcon :name="timer.state.alert.kind === 'countdown-end' ? 'hourglass' : 'pomodoro'" :size="18" />
-          <span>{{ timer.state.alert.message }}</span>
-          <button type="button" class="btn btn-sm" @click="timer.dismissAlert()">OK</button>
-        </div>
-      </Transition>
-
-      <div class="controls">
-        <template v-if="!active">
-          <button type="button" class="btn btn-primary btn-lg start" data-action="timer-start" @click="timer.start()">
-            <AppIcon name="play" :size="17" /> Iniciar
-          </button>
-        </template>
-        <template v-else>
-          <button v-if="waitingLabel" type="button" class="btn btn-primary btn-lg" data-action="timer-resume" @click="timer.togglePause()">
-            <AppIcon name="play" :size="17" /> {{ waitingLabel }}
-          </button>
-          <button
-            v-else-if="active.runningSince !== null"
-            type="button"
-            class="btn btn-lg"
-            data-action="timer-pause"
-            @click="timer.togglePause()"
-          >
-            <AppIcon name="pause" :size="17" /> Pausar
-          </button>
-          <button v-else type="button" class="btn btn-primary btn-lg" data-action="timer-resume" @click="timer.togglePause()">
-            <AppIcon name="play" :size="17" /> Retomar
-          </button>
-          <button v-if="onBreak" type="button" class="btn btn-lg" data-action="timer-skip" @click="timer.skipPause()">
-            <AppIcon name="skip" :size="16" /> Pular pausa
-          </button>
-          <button
-            type="button"
-            class="btn btn-lg finish"
-            :class="{ 'btn-primary': active.runningSince !== null && !waitingLabel }"
-            data-action="timer-finish"
-            @click="timer.finishActive()"
-          >
-            <AppIcon name="stop" :size="15" /> Finalizar
-          </button>
-          <button type="button" class="btn btn-ghost cancel" data-action="timer-cancel" @click="timer.cancelActive()">Cancelar</button>
-        </template>
-      </div>
-
-      <!-- Duração do temporizador -->
-      <div v-if="!active && mode === 'countdown'" class="options durations" aria-label="Duração">
-        <button
-          v-for="minutes in PRESETS"
-          :key="minutes"
-          type="button"
-          class="opt-chip"
-          :class="{ active: presetActive(minutes) }"
-          @click="timer.setCountdown(minutes * 60_000)"
-        >
-          {{ minutes < 60 ? `${minutes} min` : `${minutes / 60} h` }}
-        </button>
-        <form v-if="customOpen" class="custom" @submit.prevent="applyCustom">
-          <input
-            v-model="customText"
-            class="input"
-            :class="{ invalid: customError }"
-            placeholder="Ex.: 40, 1:30, 2h"
-            aria-label="Outra duração"
-            autofocus
-            @keydown.esc.stop.prevent="customOpen = false"
+          <TimerDial
+            :time="dial.time"
+            :caption="dial.caption"
+            :progress="'progress' in dial ? dial.progress : null"
+            :sweep="'sweep' in dial ? dial.sweep : null"
+            :tone="'tone' in dial ? dial.tone : 'focus'"
+            :state="dial.state"
+            :dots="'dots' in dial ? dial.dots : null"
           />
-          <button type="submit" class="btn btn-sm btn-primary">Usar</button>
-        </form>
-        <button v-else type="button" class="opt-chip" :class="{ active: customActive }" @click="openCustom">
-          {{ customActive ? formatDuration(settings.countdown) : 'Outro…' }}
-        </button>
-      </div>
+          <p class="status-line">{{ statusLine }}</p>
 
-      <!-- Ciclos do Pomodoro -->
-      <div v-if="!active && mode === 'pomodoro'" class="options">
-        <button type="button" class="opt-chip" data-action="pomodoro-config" @click="pomodoroOpen = true">
-          <AppIcon name="sliders" :size="14" /> Ajustar ciclos
-        </button>
-        <span v-if="settings.pomodoro.autoStart" class="auto-note"><AppIcon name="repeat" :size="13" /> as etapas começam sozinhas</span>
-      </div>
+          <Transition name="fade">
+            <div v-if="timer.state.alert" class="alert" role="alert" data-timer-alert>
+              <AppIcon :name="timer.state.alert.kind === 'countdown-end' ? 'hourglass' : 'pomodoro'" :size="18" />
+              <span>{{ timer.state.alert.message }}</span>
+              <button type="button" class="btn btn-sm" @click="timer.dismissAlert()">OK</button>
+            </div>
+          </Transition>
 
-      <div class="fields">
-        <label class="field-label" for="timer-activity">Atividade <span class="optional">(opcional)</span></label>
-        <input
-          id="timer-activity"
-          ref="activityInput"
-          v-model="activity"
-          class="input"
-          list="timer-activities"
-          maxlength="200"
-          placeholder="No que você vai trabalhar? Ex.: Estudando Godot"
-          autocomplete="off"
-          data-field="timer-activity"
-          @change="onActivityChange"
-          @keydown.enter="($event.target as HTMLInputElement).blur()"
-        />
-        <datalist id="timer-activities">
-          <option v-for="item in suggestions" :key="`${item.activity}|${item.categoryId}`" :value="item.activity" />
-        </datalist>
-        <span class="field-label cat-label">Categoria</span>
-        <TimerCategoryPicker v-model="categoryId" />
-        <div v-if="!active && recents.length" class="recents">
-          <span class="recents-label">Recentes</span>
-          <button
-            v-for="item in recents"
-            :key="`${item.activity}|${item.categoryId}`"
-            type="button"
-            class="recent-chip"
-            @click="useRecent(item)"
-          >
-            <CategoryDot :color="item.categoryId ? (timer.categoryById.value.get(item.categoryId)?.color ?? null) : null" :size="7" />
-            {{ item.activity }}
-          </button>
+          <div class="controls">
+            <template v-if="!active">
+              <button type="button" class="btn btn-primary btn-lg start" data-action="timer-start" @click="timer.start()">
+                <AppIcon name="play" :size="17" /> Iniciar
+              </button>
+            </template>
+            <template v-else>
+              <button v-if="waitingLabel" type="button" class="btn btn-primary btn-lg" data-action="timer-resume" @click="timer.togglePause()">
+                <AppIcon name="play" :size="17" /> {{ waitingLabel }}
+              </button>
+              <button
+                v-else-if="active.runningSince !== null"
+                type="button"
+                class="btn btn-lg"
+                data-action="timer-pause"
+                @click="timer.togglePause()"
+              >
+                <AppIcon name="pause" :size="17" /> Pausar
+              </button>
+              <button v-else type="button" class="btn btn-primary btn-lg" data-action="timer-resume" @click="timer.togglePause()">
+                <AppIcon name="play" :size="17" /> Retomar
+              </button>
+              <button v-if="onBreak" type="button" class="btn btn-lg" data-action="timer-skip" @click="timer.skipPause()">
+                <AppIcon name="skip" :size="16" /> Pular pausa
+              </button>
+              <button
+                type="button"
+                class="btn btn-lg finish"
+                :class="{ 'btn-primary': active.runningSince !== null && !waitingLabel }"
+                data-action="timer-finish"
+                @click="timer.finishActive()"
+              >
+                <AppIcon name="stop" :size="15" /> Finalizar
+              </button>
+              <button type="button" class="btn btn-ghost cancel" data-action="timer-cancel" @click="timer.cancelActive()">Cancelar</button>
+            </template>
+          </div>
+
+          <!-- Duração do temporizador -->
+          <div v-if="!active && mode === 'countdown'" class="options durations" aria-label="Duração">
+            <button
+              v-for="minutes in PRESETS"
+              :key="minutes"
+              type="button"
+              class="opt-chip"
+              :class="{ active: presetActive(minutes) }"
+              @click="timer.setCountdown(minutes * 60_000)"
+            >
+              {{ minutes < 60 ? `${minutes} min` : `${minutes / 60} h` }}
+            </button>
+            <form v-if="customOpen" class="custom" @submit.prevent="applyCustom">
+              <input
+                v-model="customText"
+                class="input"
+                :class="{ invalid: customError }"
+                placeholder="Ex.: 40, 1:30, 2h"
+                aria-label="Outra duração"
+                autofocus
+                @keydown.esc.stop.prevent="customOpen = false"
+              />
+              <button type="submit" class="btn btn-sm btn-primary">Usar</button>
+            </form>
+            <button v-else type="button" class="opt-chip" :class="{ active: customActive }" @click="openCustom">
+              {{ customActive ? formatDuration(settings.countdown) : 'Outro…' }}
+            </button>
+          </div>
+
+          <!-- Ciclos do Pomodoro -->
+          <div v-if="!active && mode === 'pomodoro'" class="options">
+            <button type="button" class="opt-chip" data-action="pomodoro-config" @click="pomodoroOpen = true">
+              <AppIcon name="sliders" :size="14" /> Ajustar ciclos
+            </button>
+            <span v-if="settings.pomodoro.autoStart" class="auto-note"><AppIcon name="repeat" :size="13" /> as etapas começam sozinhas</span>
+          </div>
+        </div>
+
+        <div class="fields">
+          <label class="field-label" for="timer-activity">Atividade <span class="optional">(opcional)</span></label>
+          <input
+            id="timer-activity"
+            ref="activityInput"
+            v-model="activity"
+            class="input"
+            list="timer-activities"
+            maxlength="200"
+            placeholder="No que você vai trabalhar? Ex.: Estudando Godot"
+            autocomplete="off"
+            data-field="timer-activity"
+            @change="onActivityChange"
+            @keydown.enter="($event.target as HTMLInputElement).blur()"
+          />
+          <datalist id="timer-activities">
+            <option v-for="item in suggestions" :key="`${item.activity}|${item.categoryId}`" :value="item.activity" />
+          </datalist>
+          <span class="field-label cat-label">Categoria</span>
+          <TimerCategoryPicker v-model="categoryId" />
+          <div v-if="!active && recents.length" class="recents">
+            <span class="recents-label">Recentes</span>
+            <button
+              v-for="item in recents"
+              :key="`${item.activity}|${item.categoryId}`"
+              type="button"
+              class="recent-chip"
+              @click="useRecent(item)"
+            >
+              <CategoryDot :color="item.categoryId ? (timer.categoryById.value.get(item.categoryId)?.color ?? null) : null" :size="7" />
+              {{ item.activity }}
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -373,19 +377,40 @@ defineExpose({
 <style scoped>
 .session-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  /* Proporcional: a sessão e o resumo de hoje crescem com a janela (1.6.3) */
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
   gap: 24px;
   align-items: start;
 }
 .session-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
+  container-type: inline-size;
   padding: 22px 24px 26px;
   border-radius: var(--r-xl);
   border: 1px solid var(--border);
   background: var(--surface-2);
+}
+.session-body,
+.session-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.session-main {
+  width: 100%;
+}
+/* Cartão largo: o relógio e os controles de um lado, a atividade e a categoria do outro */
+@container (min-width: 760px) {
+  .session-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 20px 40px;
+  }
+  .session-body .fields {
+    width: 100%;
+    margin-top: 0;
+  }
 }
 .mode-row {
   display: flex;

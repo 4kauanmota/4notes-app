@@ -63,7 +63,9 @@ const mentions: MentionHost = {
  */
 function newNote(category: string | null = null, titlePrefix?: string) {
   if (titlePrefix) {
-    notes.createNote(`# ${titlePrefix} `, category, { template: true, autoCategory: true })
+    // Com "Título na primeira linha" desligado, o começo do título entra como texto comum
+    const heading = notes.state.settings.titleFirstLine ? '# ' : ''
+    notes.createNote(`${heading}${titlePrefix} `, category, { template: true, autoCategory: true })
     void nextTick(() => editor.value?.focusEnd())
     return
   }
@@ -108,8 +110,8 @@ useShortcuts({
           :model-value="notes.activeNote.value.content"
           :asset-base="notes.activeNote.value.dir"
           :mentions="mentions"
-          title-first-line
-          placeholder="Título da nota"
+          :title-first-line="notes.state.settings.titleFirstLine"
+          :placeholder="notes.state.settings.titleFirstLine ? 'Título da nota' : 'Comece a escrever…'"
           autofocus
           @update:model-value="(value) => notes.updateContent(notes.activeNote.value!.id, value)"
           @cursor="(info) => (cursor = info)"

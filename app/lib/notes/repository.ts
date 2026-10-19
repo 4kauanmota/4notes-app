@@ -18,9 +18,15 @@ export interface NotesSettings {
   /** Nota nova sem categoria vai para a categoria que já tem notas com o mesmo começo de título. */
   autoCategory: boolean
   folderCase: FolderCase
+  /**
+   * Nota nova começa com a primeira linha como título (# ), o comportamento de sempre
+   * (1.6.3: desligável). Desligado, a primeira linha é texto comum — e continua sendo o
+   * nome da nota.
+   */
+  titleFirstLine: boolean
 }
 
-export const DEFAULT_NOTES_SETTINGS: NotesSettings = { autoCategory: false, folderCase: 'typed' }
+export const DEFAULT_NOTES_SETTINGS: NotesSettings = { autoCategory: false, folderCase: 'typed', titleFirstLine: true }
 
 /** Como as Notas estavam na tela deste aparelho (lib/storage/device-state.ts). */
 export interface NotesViewState {
@@ -44,6 +50,7 @@ export function normalizeNotesSettings(raw: unknown): NotesSettings {
   return {
     autoCategory: settings.autoCategory === true,
     folderCase: settings.folderCase === 'upper' ? 'upper' : 'typed',
+    titleFirstLine: settings.titleFirstLine !== false,
   }
 }
 

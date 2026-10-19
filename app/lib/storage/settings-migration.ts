@@ -11,6 +11,10 @@
  *  - as posições dos nós do mapa mental continuam em .4notes/mindmap.json.
  *
  * Os arquivos antigos vão para .4notes/backups/1.5.0/ (nada é apagado).
+ *
+ * Workspace novo (sem nenhum arquivo da 1.4.3): começa com as configurações padrão —
+ * nada vem do workspace aberto antes neste aparelho (1.6.3; até a 1.6.2 o tema dele
+ * vinha junto).
  */
 import type { ThemePreference } from '#shared/ipc'
 import { joinPath } from '../files/filename'
@@ -44,8 +48,12 @@ export interface SettingsMigration {
   retire(): Promise<void>
 }
 
-/** Monta o settings.json a partir dos arquivos da 1.4.3 (ou do zero, num workspace novo). */
-export async function migrateLegacySettings(theme: ThemePreference): Promise<SettingsMigration> {
+/**
+ * Monta o settings.json a partir dos arquivos da 1.4.3 (ou do zero, num workspace novo).
+ * `deviceTheme`: o tema que a 1.4.3 guardava no aparelho — só vale para um workspace
+ * que veio dela; um workspace novo começa com o tema padrão ("system").
+ */
+export async function migrateLegacySettings(deviceTheme: ThemePreference): Promise<SettingsMigration> {
   const [notes, mindmap, links, app] = await Promise.all([
     readObject(DATA_PATHS.notesUiState),
     readObject(DATA_PATHS.mindmapUiState),
@@ -53,7 +61,8 @@ export async function migrateLegacySettings(theme: ThemePreference): Promise<Set
     readObject(DATA_PATHS.appUiState),
   ])
 
-  const settings: Json = { theme }
+  const legacy = notes.exists || mindmap.exists || links.exists || app.exists
+  const settings: Json = { theme: legacy ? deviceTheme : 'system' }
   if (isObject(app.data.modules)) settings.modules = app.data.modules
   if (isObject(notes.data.settings)) settings.notes = notes.data.settings
   if (isObject(mindmap.data.settings)) settings.mindmap = { settingsVersion: mindmap.data.settingsVersion, ...mindmap.data.settings }

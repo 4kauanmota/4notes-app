@@ -67,7 +67,7 @@ function shift(delta: number): boolean | void {
 <template>
   <div class="timer-page">
     <div class="timer-scroll">
-      <div class="timer-content">
+      <div class="timer-content module-content">
         <header class="timer-header">
           <div class="title-block">
             <h1>Timer</h1>
@@ -122,10 +122,6 @@ function shift(delta: number): boolean | void {
 .timer-scroll {
   height: 100%;
   overflow-y: auto;
-}
-.timer-content {
-  width: min(1080px, 100%);
-  padding: 24px 28px 80px;
 }
 .timer-header {
   display: flex;
@@ -207,14 +203,6 @@ function shift(delta: number): boolean | void {
   display: flex;
   gap: 8px;
   margin-top: 6px;
-}
-@media (max-width: 980px) {
-  .timer-content {
-    padding: 20px 18px 80px;
-  }
-}
-html[data-layout='compact'] .timer-content {
-  padding: 14px 14px 72px;
 }
 html[data-layout='compact'] .timer-header {
   margin-bottom: 14px;
