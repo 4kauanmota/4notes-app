@@ -9,6 +9,11 @@
  *
  * Nos dois, Ctrl+D seleciona a próxima ocorrência (várias seleções editadas juntas),
  * como no editor do bloco na nota.
+ *
+ * "Quebrar linhas" (1.6.4, botão no cabeçalho ou Alt+Z): as linhas longas continuam
+ * embaixo, na largura da janela, sem rolar para o lado. Só na tela — o conteúdo não
+ * ganha quebras de verdade (lib/editor/line-wrap.ts). A escolha fica guardada no
+ * workspace, uma para código (padrão: desligada) e outra para texto (padrão: ligada).
  */
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
@@ -19,8 +24,10 @@ import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutt
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { CodeEditRequest } from '~/lib/editor/host'
 import { findLanguage, isTextBlockInfo, languageLabel } from '~/lib/editor/languages'
+import { lineWrap } from '~/lib/editor/line-wrap'
 import { plainMultipleSelections } from '~/lib/editor/multi-select'
 import { codeEditorTheme, codeHighlight, textEditorTheme } from '~/lib/editor/theme'
+import { useNotesStore } from '~/stores/notes'
 
 const props = defineProps<{ request: CodeEditRequest }>()
 const emit = defineEmits<{ close: [] }>()
@@ -30,7 +37,30 @@ const copied = ref(false)
 const isText = isTextBlockInfo(props.request.info)
 const label = computed(() => (isText ? 'Bloco de texto' : languageLabel(props.request.info)))
 const language = new Compartment()
+const wrapping = new Compartment()
 let view: EditorView | null = null
+
+// ── Quebrar linhas ──────────────────────────────────────────────────────────
+
+const notes = useNotesStore()
+const wrap = ref(isText ? notes.state.settings.wrapText : notes.state.settings.wrapCode)
+
+function toggleWrap(): boolean {
+  wrap.value = !wrap.value
+  if (view) {
+    // O cursor continua à vista (as linhas mudam de altura ao quebrar ou juntar)
+    const head = view.state.selection.main.head
+    view.dispatch({ effects: [wrapping.reconfigure(lineWrap(wrap.value, !isText)), EditorView.scrollIntoView(head, { y: 'nearest' })] })
+  }
+  notes.updateSettings(isText ? { wrapText: wrap.value } : { wrapCode: wrap.value })
+  return true
+}
+
+/** Pelo botão: troca e devolve o foco ao texto (para continuar digitando, Esc fechar…). */
+function onWrapClick(): void {
+  toggleWrap()
+  view?.focus()
+}
 
 function close(): boolean {
   emit('close')
@@ -54,8 +84,9 @@ function codeExtensions(): Extension[] {
     closeBrackets(),
     highlightSelectionMatches(),
     search({ top: true }),
-    // Esc fecha a busca (se aberta) e, depois, a tela cheia
-    keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab, { key: 'Escape', run: close }]),
+    // Esc fecha a busca (se aberta) e, depois, a tela cheia; Alt+Z quebra as linhas
+    keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab, { key: 'Escape', run: close }, { key: 'Alt-z', run: toggleWrap }]),
+    wrapping.of(lineWrap(wrap.value, true)),
     language.of([]),
     syntaxHighlighting(codeHighlight),
     codeEditorTheme,
@@ -72,8 +103,8 @@ function textExtensions(): Extension[] {
     plainMultipleSelections,
     highlightSelectionMatches(),
     search({ top: true }),
-    keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab, { key: 'Escape', run: close }]),
-    EditorView.lineWrapping,
+    keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab, { key: 'Escape', run: close }, { key: 'Alt-z', run: toggleWrap }]),
+    wrapping.of(lineWrap(wrap.value, false)),
     textEditorTheme,
     EditorView.contentAttributes.of({ 'aria-label': 'Bloco de texto', spellcheck: 'true' }),
     applyChanges,
@@ -117,6 +148,17 @@ function copy(): void {
         <AppIcon :name="isText ? 'text-block' : 'code'" :size="16" />
         <span class="cf-lang">{{ label }}</span>
         <span class="cf-hint">As alterações vão direto para a nota</span>
+        <button
+          class="btn btn-ghost btn-sm cf-wrap"
+          type="button"
+          data-wrap-toggle
+          :aria-pressed="wrap"
+          aria-label="Quebrar linhas"
+          :data-tip="wrap ? 'Quebrar linhas: ligado (Alt+Z)' : 'Quebrar linhas: desligado (Alt+Z)'"
+          @click="onWrapClick"
+        >
+          <AppIcon name="wrap" :size="15" /><span class="cf-label"> Quebrar linhas</span>
+        </button>
         <button class="btn btn-ghost btn-sm" type="button" :aria-label="copied ? 'Copiado' : 'Copiar'" @click="copy">
           <AppIcon :name="copied ? 'check' : 'copy'" :size="15" /><span class="cf-label"> {{ copied ? 'Copiado' : 'Copiar' }}</span>
         </button>
@@ -160,6 +202,12 @@ function copy(): void {
   flex: 1;
   font-size: 12.5px;
   color: var(--text-3);
+}
+/* Quebrar linhas ligado: o botão fica marcado (como os botões ativos do app) */
+.cf-wrap[aria-pressed='true'],
+.cf-wrap[aria-pressed='true']:hover {
+  background: var(--active);
+  color: var(--primary-text);
 }
 .cf-editor {
   flex: 1;

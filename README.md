@@ -6,7 +6,7 @@
 
 **Notes, tasks, mind maps, links and a timer in a single app — 100% local, on your computer and on your phone.**
 
-![Version](https://img.shields.io/badge/version-1.6.3-7c5cf0?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.6.4-7c5cf0?style=flat-square)
 ![Windows](https://img.shields.io/badge/Windows-Electron_44-7c5cf0?style=flat-square&logo=electron&logoColor=white)
 ![Android](https://img.shields.io/badge/Android_7+-Capacitor_8-fdcf3f?style=flat-square&logo=android&logoColor=black)
 ![Nuxt](https://img.shields.io/badge/Nuxt_4-Vue_3-00dc82?style=flat-square&logo=nuxt.js&logoColor=white)
@@ -62,14 +62,15 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 
 <br>
 
-- **Compact tabs** with horizontal scrolling; the active tab takes the color of the note's category.
+- **Compact tabs** with horizontal scrolling (the thin bar at the top only shows up when the tabs don't fit); the active tab takes the color of the note's category.
 - **Automatic title**: the first line is the title, and the file name follows the title (`Game ideas.md`). By default, the first line of a new note already starts as a heading; **Título na primeira linha** (_Title on the first line_, in Settings › Modules › Notes) turns that off, and the first line starts as regular text — it still names the note.
 - **Autosave** 0.6 s after the last keystroke, with atomic writes — also when closing the tab, with `Ctrl+S` and when closing the app.
 - **Categories** are folders inside `notes/`, with a color, a built-in icon or a photo from the image library. Move notes through the context menu or by dragging.
-- **Newest on top**: the list shows the most recently changed notes first, also inside the folders (a folder counts by its newest note).
+- **Newest on top**: the list shows the most recently changed notes first, also inside the folders (a folder counts by its newest note). **Pastas sempre no topo** (_Folders always on top_, in Settings › Modules › Notes, off by default) puts the folders before the notes at every level, whatever their date; the notes keep the newest-first order. Saved per workspace.
 - **Folders by title** (only in the list; the files don't change): `4notes 1.1.1` and `4notes 1.2.0` show up as **4notes › 1.1.1, 1.2.0**. A folder's **+** creates a note that already starts with the folder's title, and its **clock** (or **Abrir a mais recente** — _Open the newest_ — in its context menu) opens the folder's newest note without having to look for it.
 - **Automatic category by title** (optional, off by default): a new note goes on its own to the category that already has notes starting with the same title.
 - **Versions**: in a note such as `4notes 1.4.1`, discreet buttons open the previous version (**‹ 1.4.0**) and the next one (**1.4.2 ›**), when they exist.
+- **Full screen for blocks**: a text or code block opens in full screen from its card. **Quebrar linhas** (_Wrap lines_, button in the header or `Alt+Z`) fits long lines to the window width instead of scrolling sideways — only on screen: the block's content gets no real line breaks. In code, a wrapped line continues at its own indentation. Off by default for code and on for text (as before); the choice is remembered per workspace.
 - **Export** from the context menu: **TXT** (text only, no formatting) or **PDF** (as it looks on screen, with images and highlighted code).
 - Notes **without a category** ask, when you close the tab, whether you want to keep or delete them; notes in a category close right away, already saved.
 
@@ -323,7 +324,7 @@ The installer goes to `release/<version>/4notes-Setup-<version>.exe`. It install
 The [`scripts/android.mjs`](scripts/android.mjs) script finds on its own a Java version compatible with Gradle (17 to 24) and the Android SDK — or uses `JAVA_HOME` and `ANDROID_HOME`.
 
 - **Signing**: with `android/keystore.properties` (outside Git), the APK uses your key; without it, the computer's Android Studio debug key. Android only updates an app with an APK signed by the **same key**.
-- **Version**: `1.6.3` becomes `versionCode` 10603.
+- **Version**: `1.6.4` becomes `versionCode` 10604.
 
 ### 🍎 iOS
 
@@ -466,6 +467,7 @@ Each module's shortcuts are also in its tutorial (`F1`). On macOS, `Ctrl` become
 | `Ctrl+\` | Show/hide the notes list |
 | `Ctrl+F` | Find in the note |
 | `Ctrl+D` | Also select the next occurrence (edits them all together) |
+| `Alt+Z` | Wrap lines (block in full screen) |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | Bold / italic / underline |
 | `Ctrl+Shift+X` / `Ctrl+Shift+H` | Strikethrough / highlight |
 | `Ctrl+E` | Inline code |
@@ -510,7 +512,7 @@ npm test             # unit tests (Vitest)
 npm run typecheck    # strict TypeScript in the interface and in Electron
 ```
 
-The tests live in [`tests/`](tests/) (24 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order), note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones) and updates.
+The tests live in [`tests/`](tests/) (25 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order and folders on top), line wrapping in full screen, note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones) and updates.
 
 ---
 
@@ -606,6 +608,7 @@ The site was down or blocked access. Use **Atualizar título e ícone** (_Update
 - **Coming from 1.0.0**: on the first launch of 1.0.1, the Mind Map notes go to the `Principal` map and the `[[links]]` become connections in `mapa.json`. A copy of the original notes stays in `.4notes/backups/mindmap-1.0.0-<date>/`.
 - **Coming from 1.4.3**: on the first launch of 1.5.0, the settings move to `.4notes/settings.json` and the screen state starts living on each device. The old files go to `.4notes/backups/1.5.0/`. Update every device that uses the workspace.
 - **1.6.3**: a new workspace starts with the default settings (until 1.6.2, it inherited the theme of the workspace opened before it). Existing workspaces keep their settings.
+- **1.6.4**: new note settings in `settings.json` (`foldersFirst`, `wrapCode`, `wrapText`). Workspaces without them keep the previous behavior (folders mixed with notes by date, code without wrapping, text with wrapping).
 
 </details>
 

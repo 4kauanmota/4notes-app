@@ -18,6 +18,9 @@
  * - Ordem (1.6.3): as mais recentes no topo — pela data da última alteração da nota;
  *   uma pasta vale pela nota mais recente dela. Pastas e notas se misturam nessa
  *   ordem (até a 1.6.2: pastas primeiro, em ordem alfabética).
+ * - "Pastas sempre no topo" (1.6.4, `foldersFirst`): em cada nível, as pastas vêm antes
+ *   das notas, seja qual for a data; entre as pastas e entre as notas, continua a ordem
+ *   pela mais recente.
  */
 
 export interface TitleItem {
@@ -57,6 +60,11 @@ export interface TitleFolder {
 
 export type TitleTreeNode = TitleNote | TitleFolder
 
+export interface TitleTreeOptions {
+  /** Pastas antes das notas em cada nível, seja qual for a data (Configurações › Módulos › Notas). */
+  foldersFirst?: boolean
+}
+
 /** Pastas vão até o segundo nível (primeira e segunda palavra). */
 const MAX_DEPTH = 2
 
@@ -83,9 +91,11 @@ function countNotes(nodes: TitleTreeNode[]): number {
 /**
  * As mais recentes primeiro (uma pasta vale pela nota mais recente dela); empate
  * (mesma data): pastas antes, depois em ordem alfabética ("1.10" depois de "1.9").
+ * Com `foldersFirst`, as pastas vêm antes das notas em qualquer data.
  */
-function sortNodes(nodes: TitleTreeNode[]): TitleTreeNode[] {
+function sortNodes(nodes: TitleTreeNode[], foldersFirst = false): TitleTreeNode[] {
   return nodes.sort((a, b) => {
+    if (foldersFirst && a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1
     if (a.latest !== b.latest) return b.latest - a.latest
     if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1
     return collator.compare(a.label, b.label) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
@@ -107,7 +117,7 @@ function folderLabel(bucket: Entry[], own: Entry | undefined, depth: number): st
   return best
 }
 
-function group(entries: Entry[], depth: number, parentKey: string, untitled: string, parentPath = ''): TitleTreeNode[] {
+function group(entries: Entry[], depth: number, parentKey: string, untitled: string, options: TitleTreeOptions, parentPath = ''): TitleTreeNode[] {
   const nodes: TitleTreeNode[] = []
   const buckets = new Map<string, Entry[]>()
   for (const entry of entries) {
@@ -133,10 +143,10 @@ function group(entries: Entry[], depth: number, parentKey: string, untitled: str
     const key = parentKey ? `${parentKey}\u001f${word}` : word
     const label = folderLabel(bucket, own[0], depth)
     const titlePath = parentPath ? `${parentPath} ${label}` : label
-    const children = group(deeper, depth + 1, key, untitled, titlePath)
+    const children = group(deeper, depth + 1, key, untitled, options, titlePath)
     // Títulos repetidos iguais ao da pasta ficam como notas dentro dela
     for (const extra of own.slice(1)) children.push(leaf(extra, depth, untitled))
-    sortNodes(children)
+    sortNodes(children, options.foldersFirst)
     const latest = newest(bucket)
     nodes.push({
       kind: 'folder',
@@ -150,15 +160,15 @@ function group(entries: Entry[], depth: number, parentKey: string, untitled: str
       latest: timeOf(latest.item),
     })
   }
-  return sortNodes(nodes)
+  return sortNodes(nodes, options.foldersFirst)
 }
 
 /** Monta as pastas de um grupo de notas (uma categoria ou as notas sem categoria). */
-export function buildTitleTree(items: TitleItem[], untitled = 'Sem título'): TitleTreeNode[] {
+export function buildTitleTree(items: TitleItem[], untitled = 'Sem título', options: TitleTreeOptions = {}): TitleTreeNode[] {
   const entries = [...items]
     .sort((a, b) => collator.compare(a.title, b.title) || (a.id < b.id ? -1 : 1))
     .map((item) => ({ item, words: titleWords(item.title) }))
-  return group(entries, 0, '', untitled)
+  return group(entries, 0, '', untitled, options)
 }
 
 /** Chaves das pastas que levam até a nota `id` (para abrir o caminho até ela). */

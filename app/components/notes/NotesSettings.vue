@@ -14,6 +14,10 @@ const titleFirstLine = computed({
   get: () => notes.state.settings.titleFirstLine,
   set: (value: boolean) => notes.updateSettings({ titleFirstLine: value }),
 })
+const foldersFirst = computed({
+  get: () => notes.state.settings.foldersFirst,
+  set: (value: boolean) => notes.updateSettings({ foldersFirst: value }),
+})
 const folderCase = computed({
   get: () => notes.state.settings.folderCase,
   set: (value: FolderCase) => notes.updateSettings({ folderCase: value }),
@@ -31,6 +35,9 @@ const FOLDER_CASES: { value: FolderCase; label: string }[] = [
   </SettingRow>
   <SettingRow label="Categoria automática pelo título" help="Nota nova sem categoria vai para a categoria que já tem notas com o mesmo começo de título.">
     <UiSwitch v-model="autoCategory" label="Categoria automática pelo título" />
+  </SettingRow>
+  <SettingRow label="Pastas sempre no topo" help="Pastas antes das notas na lista, em qualquer data. As notas seguem das mais recentes para as mais antigas.">
+    <UiSwitch v-model="foldersFirst" label="Pastas sempre no topo" />
   </SettingRow>
   <SettingRow label="Exibição das pastas pelo título" help="Muda só como o nome das pastas aparece na lista; o título das notas continua igual.">
     <UiSegmented v-model="folderCase" size="sm" :options="FOLDER_CASES" aria-label="Exibição das pastas pelo título" />

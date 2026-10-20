@@ -24,9 +24,25 @@ export interface NotesSettings {
    * nome da nota.
    */
   titleFirstLine: boolean
+  /** Pastas pelo título antes das notas na lista lateral, em qualquer data (1.6.4; padrão desligado). */
+  foldersFirst: boolean
+  /**
+   * Quebra de linhas na tela cheia dos blocos (1.6.4), escolhida no botão "Quebrar linhas"
+   * da própria tela cheia e lembrada para a próxima vez. Código: desligada por padrão (as
+   * linhas passam da borda, como sempre); texto: ligada por padrão (como sempre).
+   */
+  wrapCode: boolean
+  wrapText: boolean
 }
 
-export const DEFAULT_NOTES_SETTINGS: NotesSettings = { autoCategory: false, folderCase: 'typed', titleFirstLine: true }
+export const DEFAULT_NOTES_SETTINGS: NotesSettings = {
+  autoCategory: false,
+  folderCase: 'typed',
+  titleFirstLine: true,
+  foldersFirst: false,
+  wrapCode: false,
+  wrapText: true,
+}
 
 /** Como as Notas estavam na tela deste aparelho (lib/storage/device-state.ts). */
 export interface NotesViewState {
@@ -51,6 +67,9 @@ export function normalizeNotesSettings(raw: unknown): NotesSettings {
     autoCategory: settings.autoCategory === true,
     folderCase: settings.folderCase === 'upper' ? 'upper' : 'typed',
     titleFirstLine: settings.titleFirstLine !== false,
+    foldersFirst: settings.foldersFirst === true,
+    wrapCode: settings.wrapCode === true,
+    wrapText: settings.wrapText !== false,
   }
 }
 

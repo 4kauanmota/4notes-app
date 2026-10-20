@@ -144,6 +144,51 @@ describe('as mais recentes no topo (1.6.3)', () => {
   })
 })
 
+describe('pastas sempre no topo (1.6.4)', () => {
+  const items = [
+    { id: 'a', title: 'Recados', time: 900 },
+    { id: 'b', title: '4notes 1.6.0', time: 100 },
+    { id: 'c', title: '4notes 1.6.1', time: 200 },
+    { id: 'd', title: 'Lista de compras', time: 950 },
+    { id: 'e', title: 'Godot sinais', time: 300 },
+    { id: 'f', title: 'Godot shaders', time: 50 },
+    { id: 'g', title: '4notes 1.6.1 bugs', time: 120 },
+    { id: 'h', title: '4notes 1.6.1 ideias', time: 80 },
+    { id: 'i', title: '4notes revisão', time: 990 },
+  ]
+  const labels = (nodes: TitleTreeNode[]): unknown[] => nodes.map((node) => (node.kind === 'folder' ? [node.label, labels(node.children)] : node.label))
+
+  it('ligada: as pastas antes das notas em qualquer data; pastas e notas continuam pela mais recente', () => {
+    expect(labels(buildTitleTree(items, undefined, { foldersFirst: true }))).toEqual([
+      // 4notes (mais recente: "revisão", 990) antes de Godot (300); as notas soltas depois, mesmo sendo mais novas
+      ['4notes', [['1.6.1', ['bugs', 'ideias']], 'revisão', '1.6.0']],
+      ['Godot', ['sinais', 'shaders']],
+      'Lista de compras',
+      'Recados',
+    ])
+  })
+
+  it('desligada (padrão): igual à 1.6.3 — pastas e notas misturadas pela data', () => {
+    const mixed = [
+      ['4notes', ['revisão', ['1.6.1', ['bugs', 'ideias']], '1.6.0']],
+      'Lista de compras',
+      'Recados',
+      ['Godot', ['sinais', 'shaders']],
+    ]
+    expect(labels(buildTitleTree(items))).toEqual(mixed)
+    expect(labels(buildTitleTree(items, undefined, { foldersFirst: false }))).toEqual(mixed)
+  })
+
+  it('não muda a nota mais recente de cada pasta nem as linhas da lista', () => {
+    const nodes = buildTitleTree(items, undefined, { foldersFirst: true })
+    expect(nodes[0]).toMatchObject({ kind: 'folder', label: '4notes', latestId: 'i', count: 5 })
+    const rows = flattenTree(nodes, new Map(items.map((item) => [item.id, item])), () => true)
+    expect(rows.map((row) => `${row.depth}:${row.label}`)).toEqual([
+      '0:4notes', '1:1.6.1', '2:bugs', '2:ideias', '1:revisão', '1:1.6.0', '0:Godot', '1:sinais', '1:shaders', '0:Lista de compras', '0:Recados',
+    ])
+  })
+})
+
 describe('linhas da lista lateral', () => {
   it('entra só nas pastas abertas e guarda a nota da pasta', () => {
     const nodes = tree('4notes 1.2.0', '4notes 1.2.0 bugs', '4notes 1.1.1', 'Outra')

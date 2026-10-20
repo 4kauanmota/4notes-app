@@ -9,7 +9,8 @@
  *     "version": 1,
  *     "theme": "system",
  *     "modules": { "disabled": [], "order": ["notes", …], "navStyle": "icon-label" },
- *     "notes": { "autoCategory": false, "folderCase": "typed", "titleFirstLine": true },
+ *     "notes": { "autoCategory": false, "folderCase": "typed", "titleFirstLine": true, "foldersFirst": false,
+ *                "wrapCode": false, "wrapText": true },
  *     "mindmap": { "settingsVersion": 2, "showOrphans": true, "nodeStyle": "card", "labels": "selected" },
  *     "links": { "sort": "recent" },
  *     "timer": { "sound": true, "notify": true, "weekStart": 1, "countdown": 25, "pomodoro": { … } }

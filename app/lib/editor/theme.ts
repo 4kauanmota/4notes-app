@@ -420,6 +420,8 @@ export const codeEditorTheme = EditorView.theme({
   '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.65' },
   '.cm-content': { padding: '14px 0 40vh', caretColor: 'var(--primary)' },
   '.cm-line': { padding: '0 20px 0 12px' },
+  // Quebra de linhas (line-wrap.ts): a continuação de uma linha quebrada começa no recuo dela
+  '.cm-lineWrapping .cm-wrapIndent': { paddingLeft: 'calc(12px + var(--wrap-indent))', textIndent: 'calc(-1 * var(--wrap-indent))' },
   '.cm-gutters': { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: 'none', borderRight: '1px solid var(--border)' },
   '.cm-activeLineGutter': { backgroundColor: 'var(--hover)', color: 'var(--text-2)' },
   '.cm-activeLine': { backgroundColor: 'var(--hover)' },
@@ -436,13 +438,17 @@ export const codeEditorTheme = EditorView.theme({
   '.cm-button': { backgroundImage: 'none', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text)' },
 })
 
-/** Bloco de texto em tela cheia (CodeFullscreen.vue): a fonte do texto e linhas que quebram. */
+/**
+ * Bloco de texto em tela cheia (CodeFullscreen.vue): a fonte do texto e linhas que quebram
+ * (desde a 1.6.4, desligável no botão "Quebrar linhas": aí as linhas passam da borda).
+ */
 export const textEditorTheme = EditorView.theme({
   '&': { height: '100%', fontSize: 'var(--editor-font-size, 15px)', color: 'var(--text)', backgroundColor: 'var(--surface)' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: 'var(--font-ui)', lineHeight: '1.72' },
+  '.cm-content': { padding: '20px 0 40vh', caretColor: 'var(--primary)' },
   // A largura toda, com a mesma margem lateral do editor de notas (sem colunas vazias dos lados)
-  '.cm-content': { width: '100%', padding: '20px 0 40vh', caretColor: 'var(--primary)' },
+  '.cm-content.cm-lineWrapping': { width: '100%' },
   '.cm-line': { padding: '0 var(--editor-padding-x, 28px)' },
   '.cm-cursor': { borderLeftColor: 'var(--primary)', borderLeftWidth: '2px' },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {

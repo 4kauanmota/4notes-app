@@ -60,8 +60,10 @@ const notesBySection = computed(() => {
 const trees = computed(() => {
   const map = new Map<string, TitleTreeNode[]>()
   for (const [key, group] of notesBySection.value) {
-    // As mais recentes no topo (pela data da última alteração), também dentro das pastas
-    map.set(key, buildTitleTree(group.map((note) => ({ id: note.id, title: deriveTitle(note.content), time: note.mtimeMs }))))
+    // As mais recentes no topo (pela data da última alteração), também dentro das pastas;
+    // com "Pastas sempre no topo", as pastas antes das notas
+    const items = group.map((note) => ({ id: note.id, title: deriveTitle(note.content), time: note.mtimeMs }))
+    map.set(key, buildTitleTree(items, undefined, { foldersFirst: notes.state.settings.foldersFirst }))
   }
   return map
 })

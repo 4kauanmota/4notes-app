@@ -107,10 +107,10 @@ describe('cada workspace com as suas configurações (1.6.3)', () => {
       return { settings, notes, modules }
     }
 
-    // Pessoal: tema escuro, sem título na primeira linha, menu só com ícones
+    // Pessoal: tema escuro, sem título na primeira linha, pastas no topo, menu só com ícones
     let ws = await open('pessoal')
     ws.settings.updateSettingsSection('theme', 'dark')
-    ws.notes.updateSettings({ titleFirstLine: false })
+    ws.notes.updateSettings({ titleFirstLine: false, foldersFirst: true, wrapCode: true })
     ws.modules.setNavStyle('icon')
     await ws.settings.flushSettings()
     // O aparelho guarda uma cópia do tema do último workspace aberto
@@ -119,7 +119,7 @@ describe('cada workspace com as suas configurações (1.6.3)', () => {
     // Trabalho (novo): tudo no padrão — nada vem do Pessoal
     ws = await open('trabalho')
     expect(ws.settings.settingsSection('theme')).toBe('system')
-    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: true })
+    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: true, foldersFirst: false, wrapCode: false, wrapText: true })
     expect(ws.modules.state.prefs.navStyle).toBe('icon-label')
     ws.notes.updateSettings({ folderCase: 'upper' })
     await ws.settings.flushSettings()
@@ -127,10 +127,10 @@ describe('cada workspace com as suas configurações (1.6.3)', () => {
     // De volta ao Pessoal: as configurações dele, intactas
     ws = await open('pessoal')
     expect(ws.settings.settingsSection('theme')).toBe('dark')
-    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: false })
+    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: false, foldersFirst: true, wrapCode: true, wrapText: true })
     expect(ws.modules.state.prefs.navStyle).toBe('icon')
     // E o Trabalho continua com as dele
-    expect(JSON.parse(disks.trabalho.get('.4notes/settings.json')!)).toMatchObject({ theme: 'system', notes: { folderCase: 'upper', titleFirstLine: true } })
+    expect(JSON.parse(disks.trabalho.get('.4notes/settings.json')!)).toMatchObject({ theme: 'system', notes: { folderCase: 'upper', titleFirstLine: true, foldersFirst: false, wrapCode: false } })
 
     files = new Map()
     api.bootstrap.dataDir.path = 'C:\\Users\\Kauan\\Pessoal'
@@ -184,17 +184,17 @@ describe('os módulos leem e gravam a parte deles', () => {
     const links = (await import('~/stores/links')).useLinksStore()
     const modules = (await import('~/stores/modules')).useModulesStore()
     await Promise.all([notes.load(), links.load(), modules.load()])
-    expect(notes.state.settings).toEqual({ autoCategory: true, folderCase: 'typed', titleFirstLine: true })
+    expect(notes.state.settings).toEqual({ autoCategory: true, folderCase: 'typed', titleFirstLine: true, foldersFirst: false, wrapCode: false, wrapText: true })
     expect(links.state.sort).toBe('name')
     expect(modules.isEnabled('links')).toBe(false)
     expect(modules.state.prefs.navStyle).toBe('icon')
 
-    notes.updateSettings({ folderCase: 'upper', titleFirstLine: false })
+    notes.updateSettings({ folderCase: 'upper', titleFirstLine: false, foldersFirst: true })
     links.setSort('url')
     modules.setNavStyle('icon-label')
     await settings.flushSettings()
     expect(read('.4notes/settings.json')).toMatchObject({
-      notes: { autoCategory: true, folderCase: 'upper', titleFirstLine: false },
+      notes: { autoCategory: true, folderCase: 'upper', titleFirstLine: false, foldersFirst: true },
       links: { sort: 'url' },
       modules: { disabled: ['links'], navStyle: 'icon-label' },
     })

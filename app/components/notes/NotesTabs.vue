@@ -34,17 +34,26 @@ const next = computed(() => (notes.activeNote.value ? notes.nextVersionOf(notes.
 
 const bar = reactive({ overflow: false, atStart: true, atEnd: true, thumbLeft: 0, thumbWidth: 0 })
 
+/**
+ * Largura das abas pelo layout (a faixa `.tabs`), e não pelo `scrollWidth`. Ao fechar uma
+ * aba, as da direita deslizam para o lugar dela com `transform` e a aba que sai fica
+ * solta (absoluta) por um instante: o `scrollWidth` conta esse deslocamento como se fosse
+ * excesso. Até a 1.6.3 a barra fina aparecia nessa hora e ficava, porque nada media de
+ * novo quando o deslizar terminava (transform não dispara o ResizeObserver).
+ */
 function measure() {
   const el = scroller.value
   if (!el) return
-  const { scrollWidth, clientWidth, scrollLeft } = el
-  const max = scrollWidth - clientWidth
+  const strip = el.firstElementChild as HTMLElement | null
+  const contentWidth = strip ? strip.offsetWidth : el.scrollWidth
+  const { clientWidth, scrollLeft } = el
+  const max = contentWidth - clientWidth
   bar.overflow = max > 1
   bar.atStart = scrollLeft <= 1
   bar.atEnd = scrollLeft >= max - 1
   if (!bar.overflow) return
-  bar.thumbWidth = Math.max(36, (clientWidth / scrollWidth) * clientWidth)
-  bar.thumbLeft = (scrollLeft / max) * (clientWidth - bar.thumbWidth)
+  bar.thumbWidth = Math.max(36, (clientWidth / contentWidth) * clientWidth)
+  bar.thumbLeft = (Math.min(scrollLeft, max) / max) * (clientWidth - bar.thumbWidth)
 }
 
 let resizeObserver: ResizeObserver | null = null
