@@ -9,6 +9,7 @@
  *   { "kind": "task", "id": "t_k3j9x0", "title": "Estudar Godot" }
  *   { "kind": "timer", "id": "s_k3j9x0", "title": "Estudando Godot" }                ← registro do Timer
  *   { "kind": "link", "id": "l_x1", "url": "https://nuxt.com", "title": "Nuxt" }
+ *   { "kind": "expense", "id": "e_k3j9x0", "title": "Feira" }                         ← gasto das Finanças (1.7.0)
  *
  * Até a 1.6.0 só existiam "note" e "map" — continuam iguais.
  * Dentro do app, toda menção também tem um "caminho de menção" (refPath), o mesmo
@@ -25,6 +26,7 @@ export type MentionRef =
   | { kind: 'mindmap'; map: string; title: string }
   | { kind: 'task'; id: string; title: string }
   | { kind: 'timer'; id: string; title: string }
+  | { kind: 'expense'; id: string; title: string }
   | { kind: 'link'; id: string; url: string; title: string }
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -47,7 +49,7 @@ export function normalizeRef(raw: unknown): MentionRef | null {
     const map = text(raw.map)
     return map ? { kind: 'mindmap', map, title: text(raw.title) || map } : null
   }
-  if (raw.kind === 'task' || raw.kind === 'timer') {
+  if (raw.kind === 'task' || raw.kind === 'timer' || raw.kind === 'expense') {
     const id = text(raw.id)
     return id ? { kind: raw.kind, id, title: text(raw.title) } : null
   }

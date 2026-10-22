@@ -38,6 +38,7 @@ import { DATA_PATHS } from '~/lib/storage/paths'
 import { createId, debounce, SerialQueue, type Debounced } from '~/lib/utils/async'
 import { onSettingsChange, settingsSection, updateSettingsSection } from './settings'
 import { trashPlace } from '~/lib/platform'
+import { registerCategoryModule, useCategoriesStore, type MemberRef, type SharedCategory } from './categories'
 
 export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error'
 
@@ -75,6 +76,13 @@ const state = reactive({
   notes: [] as QuickNote[],
   openIds: [] as string[],
   activeId: null as string | null,
+  /**
+   * A aba temporária (1.7.0), como nos editores de código: o clique simples numa nota
+   * da lista abre nela, trocando a nota que estava ali em vez de criar outra aba. Vira
+   * fixa com o duplo clique (na lista ou na aba), ao editar a nota ou pelo menu da aba.
+   * No máximo uma; null = todas as abas são fixas.
+   */
+  previewId: null as string | null,
   sidebarOpen: true,
   search: '',
   /** Categorias, na ordem do categorias.json (as pastas criadas fora do app vêm no fim). */
@@ -167,6 +175,7 @@ const persistUi = debounce(() => {
   writeDeviceState('notes', {
     openTabs: state.openIds.map(pathOf).filter((path): path is string => !!path),
     activeTab: pathOf(state.activeId),
+    previewTab: pathOf(state.previewId),
     sidebarOpen: state.sidebarOpen,
     collapsedCategories: state.collapsedCategories,
     openFolders: state.openFolders,
@@ -245,6 +254,8 @@ async function load(): Promise<void> {
   }
   state.openIds = ids
   state.activeId = (ui.activeTab ? findByPath(ui.activeTab)?.id : undefined) ?? ids[0] ?? null
+  const preview = ui.previewTab ? findByPath(ui.previewTab)?.id : undefined
+  state.previewId = preview && ids.includes(preview) ? preview : null
   state.loaded = true
 }
 
@@ -258,12 +269,58 @@ export function onNoteOpened(listener: (id: string) => void): () => void {
   return () => openListeners.delete(listener)
 }
 
-function openNote(id: string): void {
+export interface OpenNoteOptions {
+  /**
+   * true = abre na aba temporária (o clique simples na lista): se já houver uma, a nota
+   * que estava nela sai (salva antes) e esta entra no mesmo lugar. Uma nota que já está
+   * aberta só é selecionada, temporária ou fixa.
+   * false (padrão) = aba fixa; se a nota já estiver na aba temporária, ela vira fixa.
+   */
+  preview?: boolean
+}
+
+function openNote(id: string, options: OpenNoteOptions = {}): void {
   if (!findNote(id)) return
-  if (!state.openIds.includes(id)) state.openIds.push(id)
+  if (state.openIds.includes(id)) {
+    if (!options.preview && state.previewId === id) state.previewId = null
+  } else if (options.preview && state.previewId && state.openIds.includes(state.previewId)) {
+    // Troca a nota da aba temporária (no mesmo lugar da faixa)
+    const replaced = state.previewId
+    state.openIds.splice(state.openIds.indexOf(replaced), 1, id)
+    state.previewId = id
+    void retireTab(replaced)
+  } else {
+    state.openIds.push(id)
+    state.previewId = options.preview ? id : state.previewId
+  }
   state.activeId = id
   persistUi()
   for (const listener of openListeners) listener(id)
+}
+
+/** A aba temporária vira fixa: não é mais trocada pelo clique simples em outra nota. */
+function pinTab(id: string): void {
+  if (state.previewId !== id) return
+  state.previewId = null
+  persistUi()
+}
+
+/**
+ * Uma nota que saiu das abas (fechada ou trocada na aba temporária): grava o que
+ * estiver pendente; uma nota nova que ficou vazia é descartada, as outras podem ser
+ * reabertas (Ctrl+Shift+T).
+ */
+async function retireTab(id: string): Promise<void> {
+  await flushNote(id)
+  const note = findNote(id)
+  if (!note || state.openIds.includes(id)) return
+  if (isBlankNote(note)) {
+    removeFromState(id) // aba vazia (ou só com o texto inicial) que nunca foi salva: simplesmente descarta
+  } else {
+    closedTabs.push(id)
+    if (closedTabs.length > 30) closedTabs.shift()
+    void considerAutoCategory(id, true)
+  }
 }
 
 /**
@@ -300,6 +357,7 @@ function removeFromState(id: string): void {
     state.openIds.splice(index, 1)
     if (state.activeId === id) state.activeId = state.openIds[Math.min(index, state.openIds.length - 1)] ?? null
   }
+  if (state.previewId === id) state.previewId = null
   const position = state.notes.findIndex((note) => note.id === id)
   if (position >= 0) state.notes.splice(position, 1)
   timers.get(id)?.cancel()
@@ -312,17 +370,9 @@ async function closeTab(id: string): Promise<void> {
   if (index < 0) return
   state.openIds.splice(index, 1)
   if (state.activeId === id) state.activeId = state.openIds[Math.min(index, state.openIds.length - 1)] ?? null
+  if (state.previewId === id) state.previewId = null
   persistUi()
-  await flushNote(id)
-  const note = findNote(id)
-  if (!note) return
-  if (isBlankNote(note)) {
-    removeFromState(id) // aba vazia (ou só com o texto inicial) que nunca foi salva: simplesmente descarta
-  } else {
-    closedTabs.push(id)
-    if (closedTabs.length > 30) closedTabs.shift()
-    void considerAutoCategory(id, true)
-  }
+  await retireTab(id)
 }
 
 function closeOtherTabs(id: string): void {
@@ -720,11 +770,19 @@ export interface CategoryInput {
   image?: string | null
 }
 
-/** Problema no nome de uma categoria (ou null). `except` = categoria sendo editada. */
+const shared = useCategoriesStore()
+
+/**
+ * Problema no nome de uma categoria (ou null). `except` = categoria sendo editada.
+ * Os nomes valem para o app inteiro (categorias compartilhadas) e viram nomes de pasta.
+ */
 function categoryProblem(name: string, except?: string): string | null {
-  return categoryNameProblem(
-    name,
-    state.categories.filter((category) => !except || nameKey(category.name) !== nameKey(except)).map((category) => category.name),
+  const editing = except ? findCategory(except) : undefined
+  return (
+    categoryNameProblem(
+      name,
+      state.categories.filter((category) => !except || nameKey(category.name) !== nameKey(except)).map((category) => category.name),
+    ) ?? shared.nameProblem(name, editing?.id ?? null)
   )
 }
 
@@ -759,32 +817,84 @@ async function writeCategoryImage(category: NoteCategory, image: string | null):
   state.imageVersion++
 }
 
+/**
+ * Categoria nova: entra no app inteiro (stores/categories.ts) e vira uma pasta nas
+ * Notas. Com um nome que já existe no app (em outro módulo), usa aquela categoria.
+ */
 async function createCategory(input: CategoryInput): Promise<NoteCategory | null> {
   const name = input.name.trim()
+  const existing = shared.findByName(name)
+  if (existing) return attachShared(existing)
   const problem = categoryProblem(name)
   if (problem) {
     notifyError(problem)
     return null
   }
+  const category = shared.createCategory({ name, color: input.color, icon: input.icon ?? null, image: input.image ?? null })
+  return category ? attachShared(category) : null
+}
+
+/** A categoria do app nas Notas (pelo id; uma pasta ainda sem id vale pelo nome). */
+function memberOf(ref: MemberRef): NoteCategory | undefined {
+  return (ref.id ? state.categories.find((category) => category.id === ref.id) : undefined) ?? state.categories.find((category) => !category.id && nameKey(category.name) === nameKey(ref.name))
+}
+
+/** Copia a foto da categoria do app para a pasta dela (ou tira a foto). Quem chama já está na fila das categorias. */
+async function syncImage(category: NoteCategory, image: string | null): Promise<boolean> {
+  if ((category.source ?? null) === image && (!!category.image === !!image)) return false
+  await ensureFolder(category)
+  await writeCategoryImage(category, image)
+  category.source = image
+  return true
+}
+
+/**
+ * Uma categoria do app passa a aparecer nas Notas: a pasta notes/<nome>/ é criada
+ * (se preciso) e entra no categorias.json com o id. null = o nome não serve para pasta.
+ */
+function attachShared(source: SharedCategory): Promise<NoteCategory | null> {
   return structural(async () => {
+    const known = memberOf({ id: source.id, name: source.name })
+    if (known) {
+      if (!known.id) {
+        known.id = source.id
+        await persistCategories()
+      }
+      return known
+    }
+    const problem = categoryNameProblem(
+      source.name,
+      state.categories.map((category) => category.name),
+    )
+    if (problem) {
+      notifyError(`“${source.name}” não pode virar uma pasta nas Notas: ${problem} Renomeie a categoria em Ver categorias.`)
+      return null
+    }
     try {
-      await repo.mkdir(categoryDir(name))
+      await repo.mkdir(categoryDir(source.name))
     } catch (error) {
       notifyError(`Não foi possível criar a categoria: ${errorMessage(error)}`, error)
       return null
     }
-    state.categories.push({ name, color: input.color, image: null, icon: input.icon ?? null })
+    state.categories.push({ name: source.name, color: source.color, image: null, icon: source.image ? null : source.icon, id: source.id, source: null })
     const category = state.categories.at(-1)!
-    if (input.image) {
+    if (source.image) {
       try {
-        await writeCategoryImage(category, input.image)
+        await syncImage(category, source.image)
       } catch (error) {
-        notifyError(`A categoria foi criada, mas não foi possível salvar a imagem: ${errorMessage(error)}`, error)
+        notifyError(`A categoria foi criada, mas não foi possível copiar a imagem: ${errorMessage(error)}`, error)
       }
     }
     await persistCategories()
+    shared.touch()
     return category
   })
+}
+
+/** "Usar categoria existente": uma categoria do app passa a aparecer nas Notas. */
+async function attachCategory(id: string): Promise<NoteCategory | null> {
+  const category = shared.findCategory(id)
+  return category ? attachShared(category) : null
 }
 
 /** Renomeia a pasta da categoria (e a imagem dela); as notas vão junto. */
@@ -833,36 +943,120 @@ async function renameCategoryFolder(category: NoteCategory, name: string): Promi
   )
 }
 
-/** Muda nome, cor, ícone e/ou imagem de uma categoria. */
+/**
+ * Muda nome, cor, ícone e/ou imagem de uma categoria, no app inteiro (stores/categories.ts);
+ * a pasta e a foto daqui acompanham pelo `sync` abaixo.
+ */
 async function updateCategory(currentName: string, input: CategoryInput): Promise<boolean> {
-  const category = findCategory(currentName)
+  let category = findCategory(currentName)
   if (!category) return false
-  const name = input.name.trim()
-  const problem = categoryProblem(name, category.name)
+  if (!category.id) {
+    await shared.reconcile()
+    category = findCategory(currentName)
+  }
+  if (!category?.id) return false
+  const problem = categoryProblem(input.name, category.name)
   if (problem) {
     notifyError(problem)
     return false
   }
+  return shared.updateCategory(category.id, { name: input.name, color: input.color, icon: input.icon, image: input.image })
+}
+
+/** Nome, cor, ícone e foto da categoria do app (repassados pelo stores/categories.ts). */
+function syncFromShared(source: SharedCategory): Promise<boolean> {
   return structural(async () => {
-    if (name !== category.name && !(await renameCategoryFolder(category, name))) return false
-    category.color = input.color
-    if (input.icon !== undefined) category.icon = input.icon
-    if (input.image !== undefined) {
-      try {
-        await ensureFolder(category)
-        await writeCategoryImage(category, input.image)
-      } catch (error) {
-        notifyError(`Não foi possível salvar a imagem: ${errorMessage(error)}`, error)
-      }
+    const category = state.categories.find((item) => item.id === source.id)
+    if (!category) return true
+    let changed = false
+    if (category.name !== source.name) {
+      if (!(await renameCategoryFolder(category, source.name))) return false
+      changed = true
     }
-    await persistCategories()
+    const icon = source.image ? null : source.icon
+    if (category.color !== source.color || category.icon !== icon) {
+      category.color = source.color
+      category.icon = icon
+      changed = true
+    }
+    try {
+      if (await syncImage(category, source.image)) changed = true
+    } catch (error) {
+      notifyError(`Não foi possível copiar a imagem da categoria “${category.name}”: ${errorMessage(error)}`, error)
+    }
+    if (changed) await persistCategories()
     return true
   })
 }
 
 /**
- * Exclui a categoria: as notas dela voltam a ficar sem categoria (nenhuma nota é
- * apagada) e a pasta vai para a Lixeira — só se não sobrar nenhum outro arquivo nela.
+ * Os registros de `from` passam para `to` (juntar, excluir transferindo): se `to` ainda
+ * não está nas Notas, a pasta de `from` vira a de `to` (renomeada); se já está, as notas
+ * vão para a pasta dela (com os links refeitos) e a pasta de `from` sai.
+ */
+function remapCategory(from: MemberRef, to: SharedCategory): Promise<boolean> {
+  const source = memberOf(from)
+  if (!source) return Promise.resolve(true)
+  const target = state.categories.find((category) => category !== source && (category.id === to.id || (!category.id && nameKey(category.name) === nameKey(to.name))))
+  if (!target) {
+    return structural(async () => {
+      if (source.name !== to.name && !(await renameCategoryFolder(source, to.name))) return false
+      source.id = to.id
+      await persistCategories()
+      return true
+    }).then(async (ok) => ok && (await syncFromShared(to)))
+  }
+  return mergeFolders(source, target)
+}
+
+/** As notas de `source` vão para `target`; a pasta de `source` sai (vai para a Lixeira se ficar vazia). */
+function mergeFolders(source: NoteCategory, target: NoteCategory): Promise<boolean> {
+  return structural(async () => {
+    const fromDir = categoryDir(source.name)
+    const toDir = categoryDir(target.name)
+    await ensureFolder(target)
+    const members = state.notes.filter((note) => sameDir(note.dir, fromDir))
+    const moved = await withNotesLocked(
+      members.map((note) => note.id),
+      async () => {
+        let ok = true
+        for (const note of members) ok = (await relocate(note, toDir)) && ok
+        return ok
+      },
+    )
+    if (!moved) return false
+    await removeCategoryFolder(source)
+    state.categories = state.categories.filter((item) => item !== source)
+    forgetCategoryUi(source.name)
+    await persistCategories()
+    return true
+  })
+}
+
+/** A pasta da categoria vai para a Lixeira, se não sobrar nenhum outro arquivo nela (a foto fica na biblioteca). */
+async function removeCategoryFolder(category: NoteCategory): Promise<void> {
+  const dir = categoryDir(category.name)
+  await keepInLibrary(categoryImagePath(category))
+  try {
+    const leftovers = (await repo.listAll(dir)).filter((file) => !category.image || nameKey(file.name) !== nameKey(category.image))
+    if (!leftovers.length) await repo.trash(dir)
+    else showToast({ message: `A pasta “${category.name}” foi mantida porque tem outros arquivos.`, icon: 'folder' })
+  } catch (error) {
+    console.warn('[4notes] Não foi possível remover a pasta da categoria:', error)
+  }
+}
+
+function forgetCategoryUi(name: string): void {
+  state.collapsedCategories = state.collapsedCategories.filter((key) => key !== nameKey(name))
+  state.openFolders = state.openFolders.filter((key) => !key.startsWith(`${nameKey(name)}|`))
+  persistUi()
+}
+
+/**
+ * Tira a categoria das Notas: as notas dela voltam a ficar sem categoria (nenhuma nota
+ * é apagada) e a pasta vai para a Lixeira — só se não sobrar nenhum outro arquivo nela.
+ * (Excluir a categoria do app, com a escolha do destino das notas, fica no
+ * stores/categories.ts, que chama isto.)
  */
 async function deleteCategory(name: string): Promise<boolean> {
   const category = findCategory(name)
@@ -879,28 +1073,50 @@ async function deleteCategory(name: string): Promise<boolean> {
       },
     )
     if (!moved) return false
-    await keepInLibrary(categoryImagePath(category))
-    try {
-      const leftovers = (await repo.listAll(dir)).filter((file) => !category.image || nameKey(file.name) !== nameKey(category.image))
-      if (!leftovers.length) await repo.trash(dir)
-      else showToast({ message: `A pasta “${category.name}” foi mantida porque tem outros arquivos.`, icon: 'folder' })
-    } catch (error) {
-      console.warn('[4notes] Não foi possível remover a pasta da categoria:', error)
-    }
+    await removeCategoryFolder(category)
     state.categories = state.categories.filter((item) => item !== category)
-    state.collapsedCategories = state.collapsedCategories.filter((key) => key !== nameKey(category.name))
-    state.openFolders = state.openFolders.filter((key) => !key.startsWith(`${nameKey(category.name)}|`))
-    persistUi()
+    forgetCategoryUi(category.name)
     await persistCategories()
-    showToast({
-      message: members.length
-        ? `Categoria “${category.name}” excluída — ${members.length === 1 ? 'a nota dela ficou' : 'as notas dela ficaram'} sem categoria`
-        : `Categoria “${category.name}” excluída`,
-      icon: 'trash',
-    })
     return true
   })
 }
+
+registerCategoryModule({
+  id: 'notes',
+  ready: () => state.loaded,
+  members: () =>
+    state.categories.map((category) => ({
+      id: category.id ?? null,
+      name: category.name,
+      color: category.color,
+      icon: category.icon,
+      image: category.source ?? categoryImagePath(category),
+    })),
+  records: (id) => {
+    const category = state.categories.find((item) => item.id === id)
+    if (!category) return []
+    const dir = categoryDir(category.name)
+    return visibleNotes.value
+      .filter((note) => note.path && sameDir(note.dir, dir))
+      .map((note) => ({ id: note.id, title: noteTitle(note), detail: new Date(note.mtimeMs).toLocaleDateString('pt-BR'), path: note.path! }))
+  },
+  sync: (category) => syncFromShared(category),
+  attach: async (category) => !!(await attachShared(category)),
+  remap: (from, to) => remapCategory(from, to),
+  detach: async (from) => {
+    const category = memberOf(from)
+    return category ? deleteCategory(category.name) : true
+  },
+  acceptProblem: (from, to) => {
+    const source = memberOf(from)
+    if (!source || state.categories.some((category) => category !== source && category.id === to.id)) return null
+    const problem = categoryNameProblem(
+      to.name,
+      state.categories.filter((category) => category !== source).map((category) => category.name),
+    )
+    return problem ? `“${to.name}” não pode virar uma pasta nas Notas: ${problem}` : null
+  },
+})
 
 function revealCategory(name: string): void {
   const category = findCategory(name)
@@ -976,6 +1192,7 @@ export function useNotesStore() {
     load,
     createNote,
     openNote,
+    pinTab,
     closeTab,
     closeOtherTabs,
     reopenClosedTab,
@@ -997,6 +1214,7 @@ export function useNotesStore() {
     moveToCategory,
     categoryProblem,
     createCategory,
+    attachCategory,
     updateCategory,
     deleteCategory,
     revealCategory,

@@ -10,7 +10,7 @@
  */
 import { computed, ref } from 'vue'
 import { useElementWidth } from '~/composables/useElementWidth'
-import { formatDuration, formatShortDuration } from '~/lib/timer/format'
+import { TIME_FORMAT, type ChartFormat } from '~/lib/chart-format'
 import type { EvolutionPoint } from '~/lib/timer/stats'
 
 const props = withDefaults(
@@ -21,9 +21,13 @@ const props = withDefaults(
     currentLabel?: string
     previousLabel?: string
     height?: number
+    /** Como escrever os valores (padrão: tempo; as Finanças usam dinheiro). Os valores vêm em `point.ms`. */
+    format?: ChartFormat
   }>(),
-  { previous: null, currentLabel: 'Este período', previousLabel: 'Anterior', height: 170 },
+  { previous: null, currentLabel: 'Este período', previousLabel: 'Anterior', height: 170, format: () => TIME_FORMAT },
 )
+const formatDuration = (value: number, _options?: unknown) => props.format.full(value)
+const formatShortDuration = (value: number) => props.format.short(value)
 
 const root = ref<HTMLElement>()
 const width = useElementWidth(root)
@@ -31,8 +35,7 @@ const width = useElementWidth(root)
 const AXIS_W = 46
 const TOP = 20
 const LABELS_H = 22
-const MIN = 60_000
-const STEPS = [1, 2, 5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 480, 720, 1440, 2880, 4320, 7200, 14400].map((m) => m * MIN)
+const STEPS = computed(() => props.format.steps)
 
 const comparing = computed(() => !!props.previous && props.previous.length === props.points.length)
 const plotW = computed(() => Math.max(60, width.value - AXIS_W - 6))
@@ -44,7 +47,7 @@ const scale = computed(() => {
   const values = props.points.map((point) => point.ms)
   if (comparing.value) values.push(...props.previous!)
   const max = Math.max(0, ...values)
-  const step = STEPS.find((candidate) => Math.ceil(max / candidate) <= 4) ?? STEPS.at(-1)!
+  const step = STEPS.value.find((candidate) => Math.ceil(max / candidate) <= 4) ?? STEPS.value.at(-1)!
   const top = Math.max(step, Math.ceil(max / step) * step)
   const ticks: number[] = []
   for (let value = 0; value <= top + 1; value += step) ticks.push(value)

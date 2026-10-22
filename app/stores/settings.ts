@@ -33,8 +33,8 @@ import { DATA_PATHS } from '~/lib/storage/paths'
 import { migrateLegacySettings } from '~/lib/storage/settings-migration'
 import { debounce, SerialQueue } from '~/lib/utils/async'
 
-export type SettingsSection = 'theme' | 'modules' | 'notes' | 'mindmap' | 'links' | 'timer'
-export const SETTINGS_SECTIONS: readonly SettingsSection[] = ['theme', 'modules', 'notes', 'mindmap', 'links', 'timer']
+export type SettingsSection = 'theme' | 'modules' | 'notes' | 'mindmap' | 'links' | 'timer' | 'finance'
+export const SETTINGS_SECTIONS: readonly SettingsSection[] = ['theme', 'modules', 'notes', 'mindmap', 'links', 'timer', 'finance']
 export const SETTINGS_VERSION = 1
 
 type Json = Record<string, unknown>

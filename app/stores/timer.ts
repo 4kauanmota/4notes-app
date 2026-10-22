@@ -36,7 +36,6 @@ import {
 } from '~/lib/timer/engine'
 import { formatDuration, formatTimeOfDay } from '~/lib/timer/format'
 import {
-  categoryIdFor,
   MODE_LABELS,
   PHASE_LABELS,
   serializeTimer,
@@ -59,7 +58,10 @@ import {
   type TimerSettings,
 } from '~/lib/timer/settings'
 import { playTimerSound, primeAudio } from '~/lib/sounds'
+import { DATA_PATHS } from '~/lib/storage/paths'
 import { debounce, SerialQueue } from '~/lib/utils/async'
+import { requestCategoryRemoval } from '~/composables/useCategoryActions'
+import { registerCategoryModule, useCategoriesStore, type SharedCategory } from './categories'
 import { onSettingsChange, settingsSection, updateSettingsSection } from './settings'
 
 /** As áreas do módulo. */
@@ -524,47 +526,107 @@ function deleteSession(id: string): void {
 }
 
 // ── Categorias ──────────────────────────────────────────────────────────────
+//
+// As categorias são as compartilhadas do app (stores/categories.ts): a lista do
+// timer.json diz quais aparecem aqui (e em que ordem), com uma cópia do nome e da cor.
 
-function addCategory(name: string, color?: PaletteColor): TimerCategory {
-  const category: TimerCategory = {
-    id: categoryIdFor(name, (id) => categoryById.value.has(id)),
-    name: name.trim(),
-    color: color ?? suggestColor(state.categories.map((item) => item.color)),
-    createdAt: new Date().toISOString(),
-  }
-  state.categories.push(category)
+const shared = useCategoriesStore()
+
+/** Põe uma categoria do app na lista do Timer (se ainda não estiver). */
+function attachShared(category: SharedCategory): TimerCategory {
+  const existing = categoryById.value.get(category.id)
+  if (existing) return existing
+  state.categories.push({ id: category.id, name: category.name, color: category.color, createdAt: new Date().toISOString() })
   saveNow()
-  return category
+  shared.touch()
+  return state.categories.at(-1)!
 }
 
-function updateCategory(id: string, patch: Partial<Pick<TimerCategory, 'name' | 'color'>>): void {
-  const category = categoryById.value.get(id)
-  if (!category) return
-  if (patch.name?.trim()) category.name = patch.name.trim()
-  if (patch.color) category.color = patch.color
-  scheduleSave()
+/** Categoria nova (no app inteiro) já na lista do Timer; com um nome que já existe no app, usa aquela. */
+function addCategory(name: string, color?: PaletteColor): TimerCategory | null {
+  const category = shared.findByName(name) ?? shared.createCategory({ name, color: color ?? suggestColor(shared.state.categories.map((item) => item.color)) })
+  return category ? attachShared(category) : null
 }
 
-/** Exclui a categoria (com confirmação). O histórico fica: as sessões dela ficam sem categoria. */
-async function requestDeleteCategory(id: string): Promise<boolean> {
-  const category = categoryById.value.get(id)
-  if (!category) return false
-  const used = state.sessions.filter((session) => session.categoryId === id).length
-  const ok = await confirmDialog({
-    title: `Excluir a categoria “${category.name}”?`,
-    message: used
-      ? `${used} ${used === 1 ? 'sessão do histórico ficará' : 'sessões do histórico ficarão'} sem categoria. Nenhum registro de tempo será apagado.`
-      : 'Nenhuma sessão usa esta categoria.',
-    confirmLabel: 'Excluir categoria',
-    danger: true,
-  })
-  if (!ok) return false
-  const next = withoutCategory({ categories: state.categories, sessions: state.sessions, active: state.active }, id)
-  adopt(next)
+/** "Usar categoria existente": uma categoria do app passa a aparecer no Timer. */
+function attachCategory(id: string): TimerCategory | null {
+  const category = shared.findCategory(id)
+  return category ? attachShared(category) : null
+}
+
+/** Nome e cor mudam no app inteiro (a cópia daqui é atualizada pelo stores/categories.ts). */
+function updateCategory(id: string, patch: Partial<Pick<TimerCategory, 'name' | 'color'>>): Promise<boolean> {
+  return shared.updateCategory(id, patch)
+}
+
+/** Tira a categoria do Timer: o histórico fica, as sessões dela ficam sem categoria. */
+function detachCategory(id: string): void {
+  adopt(withoutCategory({ categories: state.categories, sessions: state.sessions, active: state.active }, id))
   if (state.draft.categoryId === id) state.draft.categoryId = null
   saveNow()
-  return true
 }
+
+/** As sessões (e o lugar na lista) de `fromId` passam para `to`. */
+function remapCategory(fromId: string, to: SharedCategory): void {
+  let used = false
+  state.sessions = state.sessions.map((session) => {
+    if (session.categoryId !== fromId) return session
+    used = true
+    return { ...session, categoryId: to.id }
+  })
+  if (state.active?.categoryId === fromId) {
+    state.active = { ...state.active, categoryId: to.id }
+    used = true
+  }
+  if (state.draft.categoryId === fromId) state.draft.categoryId = to.id
+  const index = state.categories.findIndex((category) => category.id === fromId)
+  if (index >= 0) {
+    if (state.categories.some((category) => category.id === to.id)) state.categories.splice(index, 1)
+    else state.categories.splice(index, 1, { id: to.id, name: to.name, color: to.color, createdAt: state.categories[index]!.createdAt })
+  } else if (used) {
+    attachShared(to)
+  }
+  saveNow()
+}
+
+/** Pede o que fazer com as sessões e exclui a categoria (do Timer ou do app). Nenhum registro de tempo é apagado. */
+function requestDeleteCategory(id: string): Promise<boolean> {
+  return requestCategoryRemoval(id, 'timer')
+}
+
+registerCategoryModule({
+  id: 'timer',
+  ready: () => state.loaded && !state.error,
+  members: () => state.categories.map((category) => ({ id: category.id, name: category.name, color: category.color })),
+  records: (id) =>
+    state.sessions
+      .filter((session) => session.categoryId === id)
+      .sort((a, b) => b.start - a.start)
+      .map((session) => ({
+        id: session.id,
+        title: session.activity || MODE_LABELS[session.mode],
+        detail: `${new Date(session.start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${formatDuration(session.duration * 1000, { seconds: false })}`,
+        path: `${DATA_PATHS.timerFile}#${session.id}`,
+      })),
+  sync: (category) => {
+    const mine = categoryById.value.get(category.id)
+    if (mine && (mine.name !== category.name || mine.color !== category.color)) {
+      mine.name = category.name
+      mine.color = category.color
+      scheduleSave()
+    }
+    return true
+  },
+  attach: (category) => !!attachShared(category),
+  remap: (from, to) => {
+    if (from.id) remapCategory(from.id, to)
+    return true
+  },
+  detach: (from) => {
+    if (from.id) detachCategory(from.id)
+    return true
+  },
+})
 
 /** Sobe (−1) ou desce (+1) uma categoria na lista. */
 function moveCategory(id: string, delta: number): void {
@@ -589,7 +651,9 @@ const categorySource: CategorySource = {
   get categories() {
     return state.categories
   },
+  module: 'timer',
   add: (name, color) => addCategory(name, color),
+  attach: (id) => attachCategory(id),
   update: (id, patch) => updateCategory(id, patch),
   requestDelete: (id) => requestDeleteCategory(id),
 }
@@ -624,6 +688,7 @@ export function useTimerStore() {
     updateSession,
     deleteSession,
     addCategory,
+    attachCategory,
     updateCategory,
     requestDeleteCategory,
     moveCategory,

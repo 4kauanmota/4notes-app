@@ -8,7 +8,8 @@
  *   (notes/<Categoria>/<Categoria>.png); as de antes da biblioteca aparecem nela do
  *   mesmo jeito. Imagens iguais (mesmo conteúdo) aparecem uma vez só.
  * - "Em uso" = citada numa nota (.md em notes/ ou mindmap/), na descrição de uma
- *   tarefa (tasks/tasks.json) ou foto de uma categoria (Notas ou Links). Só imagens
+ *   tarefa (tasks/tasks.json) ou foto de uma categoria (Notas, Links ou a lista de
+ *   categorias do app, categories/categories.json). Só imagens
  *   sem uso podem ser excluídas.
  */
 import { ATTACHMENTS_DIR, IMAGE_FILE, libraryName, MAX_IMAGE_BYTES } from './files'
@@ -41,6 +42,8 @@ export class LibraryError extends Error {
 
 const NOTES_CATEGORIES_FILE = 'notes/categorias.json'
 const LINKS_FILE = 'links/links.json'
+/** Categorias compartilhadas por todos os módulos (1.7.0): a foto de cada uma. */
+const SHARED_CATEGORIES_FILE = 'categories/categories.json'
 /** As descrições das tarefas (Markdown, como as notas) também podem ter imagens. */
 const TASKS_FILE = 'tasks/tasks.json'
 /** Pastas com notas (.md) que podem citar imagens. */
@@ -87,6 +90,11 @@ async function categoryImages(io: LibraryIo): Promise<CategoryImage[]> {
   for (const item of isObject(links) && Array.isArray(links.folders) ? links.folders : []) {
     if (!isObject(item) || typeof item.name !== 'string' || typeof item.image !== 'string') continue
     if (inLibrary(item.image) && IMAGE_FILE.test(item.image)) images.push({ path: item.image, label: `Categoria “${item.name.trim()}” (Links)` })
+  }
+  const shared = await io.readJson(SHARED_CATEGORIES_FILE)
+  for (const item of isObject(shared) && Array.isArray(shared.categories) ? shared.categories : []) {
+    if (!isObject(item) || typeof item.name !== 'string' || typeof item.image !== 'string') continue
+    if (inLibrary(item.image) && IMAGE_FILE.test(item.image)) images.push({ path: item.image, label: `Categoria “${item.name.trim()}”` })
   }
   return images
 }

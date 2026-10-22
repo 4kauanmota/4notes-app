@@ -8,7 +8,7 @@
  */
 
 /** Pastas que todo workspace tem (e que mostram que uma pasta já tem dados do 4notes). */
-export const DATA_FOLDERS = ['notes', 'tasks', 'mindmap', 'links', 'timer', 'attachments', '.4notes'] as const
+export const DATA_FOLDERS = ['notes', 'tasks', 'mindmap', 'links', 'timer', 'finance', 'categories', 'attachments', '.4notes'] as const
 
 /** Pasta das imagens do workspace (a biblioteca de imagens). */
 export const ATTACHMENTS_DIR = 'attachments'

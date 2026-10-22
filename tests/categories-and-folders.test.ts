@@ -249,10 +249,11 @@ describe('categorias das notas', () => {
     }
     const list = normalizeCategories(raw)
     expect(list.map((c) => c.name)).toEqual(['Trabalho', 'Estudos', 'Dev'])
-    expect(list[0]).toEqual({ name: 'Trabalho', color: 'blue', image: 'Trabalho.png', icon: null })
+    // id e source (1.7.0): ainda sem categoria compartilhada (null)
+    expect(list[0]).toEqual({ name: 'Trabalho', color: 'blue', image: 'Trabalho.png', icon: null, id: null, source: null })
     expect(list[1]!.image).toBeNull()
     expect(list[1]!.icon).toBeNull() // ícone desconhecido: volta para a inicial
-    expect(list[2]).toEqual({ name: 'Dev', color: 'purple', image: null, icon: 'code' })
+    expect(list[2]).toEqual({ name: 'Dev', color: 'purple', image: null, icon: 'code', id: null, source: null })
     expect(JSON.parse(serializeCategories(list)).categories[2]).toEqual({ name: 'Dev', color: 'purple', icon: 'code', image: null })
     expect(normalizeCategories(JSON.parse(serializeCategories(list)))).toEqual(list)
     expect(normalizeCategories(null)).toEqual([])

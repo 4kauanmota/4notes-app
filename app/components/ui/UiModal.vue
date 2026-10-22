@@ -76,6 +76,8 @@ onBeforeUnmount(() => setOpen(false))
   inset: 0;
   z-index: 900;
   display: grid;
+  /* A coluna tem a largura da tela: um cartão mais largo que ela encolhe (max-width) em vez de vazar */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: 24px;
 }

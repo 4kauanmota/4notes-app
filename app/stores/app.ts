@@ -1,7 +1,7 @@
 /**
  * Estado geral do aplicativo: inicialização, pasta de dados e coordenação dos módulos.
  *
- * Esta parte conhece os cinco módulos ao mesmo tempo só para tarefas de
+ * Esta parte conhece os seis módulos ao mesmo tempo só para tarefas de
  * infraestrutura (carregar, salvar tudo antes de fechar, sincronizar ao voltar para
  * a janela). A única ligação entre os módulos são as menções (stores/mentions.ts).
  * Quais módulos estão ativos (e o último aberto) fica em stores/modules.ts: todos
@@ -14,6 +14,8 @@ import { applyWorkspaceTheme } from '~/composables/useTheme'
 import { notifyError, showToast } from '~/composables/useToasts'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 import type { ModuleId } from '~/lib/modules'
+import { useCategoriesStore } from './categories'
+import { useFinanceStore } from './finance'
 import { useLinksStore } from './links'
 import { flushMentionUpdates, installMentionTracking } from './mentions'
 import { useMindmapStore } from './mindmap'
@@ -51,7 +53,9 @@ const tasks = useTasksStore()
 const mindmap = useMindmapStore()
 const links = useLinksStore()
 const timer = useTimerStore()
+const finance = useFinanceStore()
 const modules = useModulesStore()
+const categories = useCategoriesStore()
 
 async function loadModules(): Promise<void> {
   installMentionTracking()
@@ -59,9 +63,12 @@ async function loadModules(): Promise<void> {
   await loadSettings()
   applyWorkspaceTheme(settingsSection('theme'))
   // Todos os módulos carregam (ativos ou não): desativar só tira o módulo do menu
-  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), timer.load(), modules.load()])
+  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), timer.load(), finance.load(), modules.load()])
   const failure = results.find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined
   if (failure) throw failure.reason
+  // Depois dos módulos: as categorias compartilhadas são conciliadas com as listas deles
+  // (na primeira vez, é a passagem da 1.6: ver stores/categories.ts)
+  await categories.load()
 }
 
 /** Guarda o último módulo aberto (só depois de carregar o workspace). */
@@ -73,7 +80,7 @@ export function rememberModule(module: ModuleId): void {
 export async function flushEverything(): Promise<void> {
   // Primeiro as menções que ainda estavam para ser corrigidas (elas mexem nas notas)
   await flushMentionUpdates().catch((error) => console.warn('[4notes] Falha ao atualizar menções:', error))
-  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), timer.flush(), flushSettings()])
+  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), timer.flush(), finance.flush(), categories.flush(), flushSettings()])
 }
 
 let focusTimer: ReturnType<typeof setTimeout> | null = null
@@ -85,11 +92,11 @@ function refreshWorkspace(): void {
   if (focusTimer) clearTimeout(focusTimer)
   focusTimer = setTimeout(() => {
     void refreshSettings()
-    void notes.refreshFromDisk()
-    void tasks.refreshFromDisk()
     void mindmap.refreshFromDisk()
-    void links.refreshFromDisk()
-    void timer.refreshFromDisk()
+    // As categorias por último: elas conciliam com o que os módulos acabaram de reler
+    void Promise.allSettled([notes.refreshFromDisk(), tasks.refreshFromDisk(), links.refreshFromDisk(), timer.refreshFromDisk(), finance.refreshFromDisk()]).then(() =>
+      categories.refreshFromDisk(),
+    )
   }, 200)
 }
 
@@ -187,7 +194,7 @@ export async function applyDataFolder(path: string, initial: boolean): Promise<b
     if (!info.hasData) {
       const choice = await choiceDialog({
         title: 'Pasta ainda sem dados do 4notes',
-        message: `O workspace “${workspaceName(info.path)}” vai começar vazio. Se preferir, copie para ele as notas, tarefas, mapas, links e o histórico do Timer do workspace atual (nada é apagado do atual).`,
+        message: `O workspace “${workspaceName(info.path)}” vai começar vazio. Se preferir, copie para ele as notas, tarefas, mapas, links, o histórico do Timer e os gastos do workspace atual (nada é apagado do atual).`,
         icon: 'folder',
         buttons: [
           { id: 'cancel', label: 'Cancelar', variant: 'ghost' },

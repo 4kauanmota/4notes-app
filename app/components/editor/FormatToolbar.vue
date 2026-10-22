@@ -27,6 +27,8 @@ const props = defineProps<{
   linkInitial: string
   /** A seleção pode virar um bloco de texto ou de código (fora de blocos de código/texto). */
   textBlock: boolean
+  /** A seleção tem formatação removível: só então o "Limpar formatação" aparece (1.7.0). */
+  clearable?: boolean
   /** Fixa embaixo da nota (toque). */
   docked?: boolean
   /** Largura máxima: num editor estreito, os botões quebram em duas fileiras. */
@@ -245,7 +247,7 @@ function pickColor(color: PaletteColor | null) {
       <button v-if="docked" class="fmt-btn" data-format="image" aria-label="Inserir imagem" @click="emit('image')">
         <AppIcon name="image" :size="16" :stroke="1.9" />
       </button>
-      <button class="fmt-btn" data-format="clear" data-tip="Limpar formatação" data-tip-pos="top" aria-label="Limpar formatação" @click="emit('clear')">
+      <button v-if="clearable" class="fmt-btn" data-format="clear" data-tip="Limpar formatação" data-tip-pos="top" aria-label="Limpar formatação" @click="emit('clear')">
         <AppIcon name="clear-format" :size="16" :stroke="1.9" />
       </button>
     </div>

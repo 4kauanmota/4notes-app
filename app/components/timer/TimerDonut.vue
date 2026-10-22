@@ -6,7 +6,7 @@
  * lista, e vice-versa.
  */
 import { computed, ref } from 'vue'
-import { formatDuration } from '~/lib/timer/format'
+import { TIME_FORMAT, type ChartFormat } from '~/lib/chart-format'
 
 interface DonutItem {
   key: string
@@ -16,7 +16,20 @@ interface DonutItem {
   ms: number
 }
 
-const props = defineProps<{ items: DonutItem[]; total: number }>()
+const props = withDefaults(
+  defineProps<{
+    items: DonutItem[]
+    total: number
+    /** Como escrever os valores (padrão: tempo; as Finanças usam dinheiro). Os valores vêm em `ms`. */
+    format?: ChartFormat
+    /** Rótulo do centro e do resumo. */
+    totalLabel?: string
+    /** Descrição para leitores de tela. */
+    ariaLabel?: string
+  }>(),
+  { format: () => TIME_FORMAT, totalLabel: 'no total', ariaLabel: 'Distribuição por categoria' },
+)
+const formatDuration = (value: number, _options?: unknown) => props.format.full(value)
 
 const MAX_SLICES = 6
 const SIZE = 148
@@ -61,7 +74,7 @@ const pct = (share: number) => (share >= 0.995 ? '100%' : share < 0.01 ? '< 1%' 
       :viewBox="`0 0 ${SIZE} ${SIZE}`"
       class="donut"
       role="img"
-      :aria-label="`Distribuição por categoria: ${formatDuration(total, { seconds: false })} no total`"
+      :aria-label="`${ariaLabel}: ${formatDuration(total, { seconds: false })} ${totalLabel}`"
     >
       <circle :cx="SIZE / 2" :cy="SIZE / 2" :r="R" class="track" :stroke-width="STROKE" />
       <circle
@@ -81,7 +94,7 @@ const pct = (share: number) => (share >= 0.995 ? '100%' : share < 0.01 ? '< 1%' 
         @pointerleave="hover = null"
       />
       <text :x="SIZE / 2" :y="SIZE / 2 - 2" text-anchor="middle" class="center-value">{{ formatDuration(total, { seconds: false }) }}</text>
-      <text :x="SIZE / 2" :y="SIZE / 2 + 15" text-anchor="middle" class="center-label">no total</text>
+      <text :x="SIZE / 2" :y="SIZE / 2 + 15" text-anchor="middle" class="center-label">{{ totalLabel }}</text>
     </svg>
     <ul class="donut-legend">
       <li

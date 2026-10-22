@@ -1,18 +1,22 @@
 <script setup lang="ts">
 /**
  * Criar ou editar uma categoria das Notas: nome (= nome da pasta), cor (marca as
- * abas das notas dela) e aparência — a inicial do nome, um ícone pronto ou uma
+ * abas das notas dela) e aparência: a inicial do nome, um ícone pronto ou uma
  * imagem da biblioteca (uma cópia fica na pasta da categoria, com o nome dela).
  * Escolher um ícone tira a imagem, e escolher uma imagem tira o ícone.
+ * As categorias são as do app inteiro (1.7.0): ao criar, dá para usar uma que já
+ * existe (de outro módulo); ao editar, a mudança vale em todos os módulos.
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { pickLibraryImage } from '~/composables/useImageLibrary'
 import { requestDeleteCategory, useCategoryDialog } from '~/composables/useNoteCategories'
 import type { PaletteColor } from '~/lib/colors'
 import { categoryImagePath, MAX_CATEGORY_NAME, suggestCategoryColor } from '~/lib/notes/categories'
+import { useCategoriesStore } from '~/stores/categories'
 import { useNotesStore } from '~/stores/notes'
 
 const notes = useNotesStore()
+const shared = useCategoriesStore()
 const { dialog, close } = useCategoryDialog()
 
 const name = ref('')
@@ -26,6 +30,13 @@ const saving = ref(false)
 const input = ref<HTMLInputElement>()
 
 const editing = computed(() => (dialog.category ? (notes.findCategory(dialog.category) ?? null) : null))
+
+/** Nome digitado igual ao de uma categoria do app que ainda não está nas Notas: ela é usada. */
+const sameAsExisting = computed(() => {
+  if (editing.value) return null
+  const found = shared.findByName(name.value)
+  return found && !notes.state.categories.some((category) => category.id === found.id) ? found : null
+})
 
 /** O que aparece no quadrinho da prévia (caminho da imagem no workspace). */
 const shownImage = computed(() => {
@@ -53,8 +64,10 @@ watch(
 /** Escolhe a imagem na biblioteca (dá para enviar uma nova por lá). */
 async function chooseImage() {
   const picked = await pickLibraryImage({ title: 'Imagem da categoria', confirmLabel: 'Usar imagem' })
-  if (!picked || !dialog.open) return
-  image.value = picked
+  // A foto da categoria do app é sempre uma imagem da biblioteca (attachments/)
+  const path = picked ? await shared.libraryImage(picked) : null
+  if (!path || !dialog.open) return
+  image.value = path
   icon.value = null
 }
 
@@ -69,6 +82,7 @@ function chooseIcon(value: string | null) {
 }
 
 async function save() {
+  if (sameAsExisting.value) return useExisting(sameAsExisting.value.id)
   const problem = notes.categoryProblem(name.value, editing.value?.name)
   if (problem) {
     error.value = problem
@@ -86,6 +100,16 @@ async function save() {
   saving.value = false
   if (!created) return
   if (dialog.assignNote) await notes.moveToCategory(dialog.assignNote, created.name, { undo: false })
+  close()
+}
+
+/** "Usar uma categoria que já existe": ela vira uma pasta nas Notas. */
+async function useExisting(id: string) {
+  saving.value = true
+  const category = await notes.attachCategory(id)
+  saving.value = false
+  if (!category) return
+  if (dialog.assignNote) await notes.moveToCategory(dialog.assignNote, category.name, { undo: false })
   close()
 }
 
@@ -127,6 +151,9 @@ function remove() {
         </div>
       </div>
       <Transition name="fade"><p v-if="error" class="error">{{ error }}</p></Transition>
+      <p v-if="sameAsExisting" class="same-hint">
+        <AppIcon name="tag" :size="13" /> “{{ sameAsExisting.name }}” já existe no app: ao confirmar, ela é usada aqui (com a cor e a foto dela).
+      </p>
 
       <span class="field-label section-gap">Ícone</span>
       <IconPicker :model-value="shownImage ? '' : icon" :color="color" :name="name" label="Ícone da categoria" @update:model-value="chooseIcon" />
@@ -139,12 +166,15 @@ function remove() {
         <span>A categoria é a pasta <code>notes/{{ name.trim() || '…' }}</code>; a imagem (da biblioteca) fica dentro dela, com o nome da categoria.</span>
       </p>
 
+      <ExistingCategories v-if="!editing" module="notes" :query="name" @pick="useExisting" />
+      <CategoryShareInfo v-else-if="editing.id" :id="editing.id" module="notes" @leave="close" />
+
       <div class="actions">
         <button v-if="editing" type="button" class="btn btn-danger-ghost delete-btn" @click="remove">
           <AppIcon name="trash" :size="15" /> Excluir
         </button>
         <button type="button" class="btn btn-ghost" @click="close">Cancelar</button>
-        <button type="submit" class="btn btn-primary" :disabled="saving">{{ editing ? 'Salvar' : 'Criar categoria' }}</button>
+        <button type="submit" class="btn btn-primary" :disabled="saving">{{ editing ? 'Salvar' : sameAsExisting ? 'Usar esta categoria' : 'Criar categoria' }}</button>
       </div>
     </form>
   </UiModal>
@@ -185,6 +215,14 @@ h2 {
 }
 .section-gap {
   margin-top: 18px;
+}
+.same-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--primary-text);
 }
 .hint {
   display: flex;

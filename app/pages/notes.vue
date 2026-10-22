@@ -73,6 +73,14 @@ function newNote(category: string | null = null, titlePrefix?: string) {
   void nextTick(() => editor.value?.focus())
 }
 
+/** Você editou a nota: a aba dela fica fixa (a aba temporária não é trocada com alterações suas). */
+function onEdit(value: string) {
+  const note = notes.activeNote.value
+  if (!note) return
+  notes.updateContent(note.id, value)
+  notes.pinTab(note.id)
+}
+
 function closeActive() {
   if (notes.state.activeId) void notes.closeTab(notes.state.activeId)
 }
@@ -113,7 +121,7 @@ useShortcuts({
           :title-first-line="notes.state.settings.titleFirstLine"
           :placeholder="notes.state.settings.titleFirstLine ? 'Título da nota' : 'Comece a escrever…'"
           autofocus
-          @update:model-value="(value) => notes.updateContent(notes.activeNote.value!.id, value)"
+          @update:model-value="onEdit"
           @cursor="(info) => (cursor = info)"
         />
         <NotesEmptyState v-else @new="newNote" />

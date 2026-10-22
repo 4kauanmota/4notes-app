@@ -3,11 +3,11 @@
  * pela página das Notas) e o submenu "Categoria" usado na aba e na lista lateral.
  */
 import { reactive } from 'vue'
+import { requestCategoryRemoval } from '~/composables/useCategoryActions'
 import { separator, type MenuItemSpec } from '~/composables/useContextMenu'
-import { confirmDialog } from '~/composables/useDialog'
 import { paletteVar } from '~/lib/colors'
+import { useCategoriesStore } from '~/stores/categories'
 import { useNotesStore, type QuickNote } from '~/stores/notes'
-import { trashPlace } from '~/lib/platform'
 
 /** Arrastar uma nota (aba ou item da lista) leva o id dela neste tipo. */
 export const NOTE_DRAG_TYPE = 'application/x-4notes-note'
@@ -29,9 +29,14 @@ export function useCategoryDialog() {
   }
 }
 
-/** Submenu "Categoria" de uma nota: escolher, tirar ou criar uma categoria nova. */
+/**
+ * Submenu "Categoria" de uma nota: escolher, tirar ou criar uma categoria nova. As
+ * categorias do app que ainda não estão nas Notas ficam em "Outras categorias" (escolher
+ * uma cria a pasta dela aqui).
+ */
 export function categorySubmenu(note: QuickNote): MenuItemSpec {
   const notes = useNotesStore()
+  const others = useCategoriesStore().availableFor('notes')
   const current = notes.categoryOf(note)
   return {
     label: 'Categoria',
@@ -44,6 +49,15 @@ export function categorySubmenu(note: QuickNote): MenuItemSpec {
         checked: current === category,
         swatch: paletteVar(category.color),
       })),
+      ...(others.length
+        ? [
+            separator,
+            {
+              label: 'Outras categorias',
+              submenu: others.map((category) => ({ id: `category-attach:${category.id}`, label: category.name, swatch: paletteVar(category.color) })),
+            },
+          ]
+        : []),
       separator,
       { id: 'category-new', label: 'Nova categoria…' },
     ],
@@ -56,27 +70,27 @@ export function handleCategoryChoice(choice: string | null, note: QuickNote): bo
     useCategoryDialog().openCreate(note.id)
     return true
   }
+  if (choice?.startsWith('category-attach:')) {
+    const notes = useNotesStore()
+    void notes.attachCategory(choice.slice('category-attach:'.length)).then((category) => {
+      if (category) void notes.moveToCategory(note.id, category.name)
+    })
+    return true
+  }
   if (!choice?.startsWith('category:')) return false
   const name = choice.slice('category:'.length)
   void useNotesStore().moveToCategory(note.id, name || null)
   return true
 }
 
-/** Pede confirmação e exclui a categoria (as notas dela ficam sem categoria). */
+/**
+ * Excluir uma categoria das Notas: pergunta o que fazer com as notas (outra categoria
+ * ou sem categoria) e se é só das Notas ou do app inteiro (components/categories/).
+ */
 export async function requestDeleteCategory(name: string): Promise<boolean> {
-  const notes = useNotesStore()
-  const category = notes.findCategory(name)
-  if (!category) return false
-  const count = notes.state.notes.filter((note) => notes.categoryOf(note) === category && !notes.isBlank(note)).length
-  const ok = await confirmDialog({
-    title: `Excluir a categoria “${category.name}”?`,
-    message: count
-      ? `${count} ${count === 1 ? 'nota volta' : 'notas voltam'} para Notas, sem categoria. Nenhuma nota é apagada; a pasta da categoria vai para ${trashPlace()}.`
-      : `A pasta da categoria vai para ${trashPlace()}.`,
-    confirmLabel: 'Excluir categoria',
-    danger: true,
-  })
-  return ok ? notes.deleteCategory(category.name) : false
+  const category = useNotesStore().findCategory(name)
+  if (!category?.id) return false
+  return requestCategoryRemoval(category.id, 'notes')
 }
 
 /** Começa a arrastar uma nota (para soltar numa categoria da lista lateral). */

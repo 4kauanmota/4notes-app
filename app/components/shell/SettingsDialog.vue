@@ -14,6 +14,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { errorMessage, type LaunchAtLogin, type ThemePreference } from '#shared/ipc'
 import { useRoute } from 'vue-router'
 import { openImageLibrary } from '~/composables/useImageLibrary'
+import { openCategoriesPanel } from '~/composables/useCategoryActions'
 import { useSortableList } from '~/composables/useSortableList'
 import { notifyError } from '~/composables/useToasts'
 import { useLayoutSize } from '~/composables/useLayoutSize'
@@ -106,7 +107,7 @@ async function runWorkspace(action: () => Promise<boolean>) {
 // ── Módulos ─────────────────────────────────────────────────────────────────
 
 /** Módulos que têm configurações aqui (os outros mostram o aviso). */
-const WITH_SETTINGS = new Set<ModuleId>(['notes', 'mindmap', 'timer'])
+const WITH_SETTINGS = new Set<ModuleId>(['notes', 'mindmap', 'timer', 'finance'])
 
 /** Configurações de cada módulo: só dos ativos (as dos desativados continuam guardadas). */
 const moduleSections = computed(() => modules.enabled.value)
@@ -210,6 +211,16 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
             </SettingRow>
           </section>
 
+          <section>
+            <h3 class="section-label">Categorias</h3>
+            <SettingRow
+              label="Categorias do app"
+              help="As mesmas categorias em todos os módulos: veja onde cada uma é usada, edite, junte duas e exclua."
+            >
+              <button class="btn btn-sm" data-action="open-categories" @click="openCategoriesPanel()"><AppIcon name="tag" :size="14" /> Ver categorias…</button>
+            </SettingRow>
+          </section>
+
           <UpdateSettings v-if="updatesAvailable" />
 
           <section v-if="launchAvailable">
@@ -249,6 +260,8 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
               <li><code>mindmap/</code> mapas mentais — uma pasta por mapa, com as notas (.md) e o mapa.json (conexões e cores)</li>
               <li><code>links/links.json</code> links salvos e categorias (ícones dos sites em <code>links/icons/</code>)</li>
               <li><code>timer/timer.json</code> categorias e histórico do Timer (e a sessão em andamento)</li>
+              <li><code>finance/finance.json</code> gastos das Finanças</li>
+              <li><code>categories/categories.json</code> categorias do app (nome, cor, ícone e foto), usadas por todos os módulos</li>
               <li><code>attachments/</code> biblioteca de imagens (coladas nas notas, enviadas, fotos das categorias)</li>
               <li><code>.4notes/</code> configurações (settings.json — as mesmas no computador e no celular), posições do mapa e backups diários das tarefas, dos links e do Timer</li>
             </ul>
@@ -323,6 +336,7 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
                 <NotesSettings v-if="section.id === 'notes'" />
                 <GraphSettings v-else-if="section.id === 'mindmap'" />
                 <TimerSettings v-else-if="section.id === 'timer'" />
+                <FinanceSettings v-else-if="section.id === 'finance'" />
               </div>
               <p v-else class="no-settings">Sem nenhuma configuração disponível no momento.</p>
             </section>

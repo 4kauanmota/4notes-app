@@ -1,18 +1,22 @@
 <script setup lang="ts">
 /**
- * Criar ou editar uma categoria de links: nome, cor e aparência — a inicial do
+ * Criar ou editar uma categoria de links: nome, cor e aparência: a inicial do
  * nome, um ícone pronto ou uma foto da biblioteca de imagens. Escolher um ícone
  * tira a foto, e escolher uma foto tira o ícone.
+ * As categorias são as do app inteiro (1.7.0): ao criar, dá para usar uma que já
+ * existe (de outro módulo); ao editar, a mudança vale em todos os módulos.
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { pickLibraryImage } from '~/composables/useImageLibrary'
 import type { PaletteColor } from '~/lib/colors'
 import { MAX_FOLDER_NAME, suggestFolderColor } from '~/lib/links/model'
+import { useCategoriesStore } from '~/stores/categories'
 import { useLinksStore } from '~/stores/links'
 
 const props = defineProps<{ open: boolean; folderId: string | null }>()
 const emit = defineEmits<{ close: []; saved: [id: string] }>()
 const links = useLinksStore()
+const shared = useCategoriesStore()
 
 const name = ref('')
 const color = ref<PaletteColor>('purple')
@@ -25,6 +29,13 @@ const input = ref<HTMLInputElement>()
 
 const editing = computed(() => (props.folderId ? (links.folderById.value.get(props.folderId) ?? null) : null))
 const count = computed(() => (editing.value ? (links.countByFolder.value.get(editing.value.id) ?? 0) : 0))
+
+/** Nome digitado igual ao de uma categoria do app que ainda não está nos Links: ela é usada. */
+const sameAsExisting = computed(() => {
+  if (editing.value) return null
+  const found = shared.findByName(name.value)
+  return found && !links.folderById.value.has(found.id) ? found : null
+})
 
 watch(
   () => props.open,
@@ -56,21 +67,31 @@ function chooseIcon(value: string | null) {
   image.value = null
 }
 
-function save() {
+async function save() {
+  if (sameAsExisting.value) return useExisting(sameAsExisting.value.id)
   const problem = links.folderProblem(name.value, editing.value?.id)
   if (problem) {
     error.value = problem
     return
   }
-  const values = { name: name.value, color: color.value, icon: icon.value, image: image.value }
+  const values = { name: name.value.trim(), color: color.value, icon: icon.value, image: image.value }
   if (editing.value) {
-    if (!links.updateFolder(editing.value.id, values)) return
-    emit('saved', editing.value.id)
-  } else {
-    const folder = links.addFolder(values.name, values.color, values.icon, values.image)
-    if (!folder) return
-    emit('saved', folder.id)
+    const id = editing.value.id
+    emit('close')
+    if (await links.updateFolder(id, values)) emit('saved', id)
+    return
   }
+  const folder = links.addFolder(values.name, values.color, values.icon, values.image)
+  if (!folder) return
+  emit('saved', folder.id)
+  emit('close')
+}
+
+/** "Usar uma categoria que já existe": ela passa a aparecer nos Links. */
+function useExisting(id: string) {
+  const folder = links.attachFolder(id)
+  if (!folder) return
+  emit('saved', folder.id)
   emit('close')
 }
 
@@ -112,6 +133,9 @@ function remove() {
         </div>
       </div>
       <Transition name="fade"><p v-if="error" class="error">{{ error }}</p></Transition>
+      <p v-if="sameAsExisting" class="same-hint">
+        <AppIcon name="tag" :size="13" /> “{{ sameAsExisting.name }}” já existe no app: ao confirmar, ela é usada aqui (com a cor e a foto dela).
+      </p>
 
       <span class="field-label section-gap">Ícone</span>
       <IconPicker :model-value="image ? '' : icon" :color="color" :name="name" label="Ícone da categoria" @update:model-value="chooseIcon" />
@@ -124,12 +148,15 @@ function remove() {
         {{ count ? `${count} ${count === 1 ? 'link nesta categoria' : 'links nesta categoria'}` : 'Categoria vazia' }}
       </p>
 
+      <ExistingCategories v-if="!editing" module="links" :query="name" @pick="useExisting" />
+      <CategoryShareInfo v-else :id="editing.id" module="links" @leave="emit('close')" />
+
       <div class="actions">
         <button v-if="editing" type="button" class="btn btn-danger-ghost delete-btn" @click="remove">
           <AppIcon name="trash" :size="15" /> Excluir
         </button>
         <button type="button" class="btn btn-ghost" @click="emit('close')">Cancelar</button>
-        <button type="submit" class="btn btn-primary">{{ editing ? 'Salvar' : 'Criar categoria' }}</button>
+        <button type="submit" class="btn btn-primary">{{ editing ? 'Salvar' : sameAsExisting ? 'Usar esta categoria' : 'Criar categoria' }}</button>
       </div>
     </form>
   </UiModal>
@@ -167,6 +194,14 @@ h2 {
   margin-top: 8px;
   font-size: 12.5px;
   color: var(--danger);
+}
+.same-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--primary-text);
 }
 .section-gap {
   margin-top: 18px;

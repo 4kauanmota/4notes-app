@@ -8,12 +8,11 @@
  */
 import { computed, reactive } from 'vue'
 import { errorMessage } from '#shared/ipc'
-import { confirmDialog } from '~/composables/useDialog'
+import { requestCategoryRemoval } from '~/composables/useCategoryActions'
 import { useToday } from '~/composables/useToday'
 import { notifyError, showToast } from '~/composables/useToasts'
 import { formatShortDate, type ISODate } from '~/lib/dates'
 import {
-  categoryIdFor,
   compareTasks,
   completedEntries,
   completeTask,
@@ -34,7 +33,9 @@ import { refKey, renamedRef, type MentionRef } from '~/lib/mentions/refs'
 import type { NoteChange } from '~/lib/note-events'
 import { clampInterval, type Recurrence } from '~/lib/tasks/recurrence'
 import { tasksRepository as repo } from '~/lib/tasks/repository'
+import { DATA_PATHS } from '~/lib/storage/paths'
 import { debounce, SerialQueue } from '~/lib/utils/async'
+import { registerCategoryModule, useCategoriesStore, type SharedCategory } from './categories'
 
 export type TaskSelection = 'pending' | 'scheduled' | 'done' | `cat:${string}`
 
@@ -326,27 +327,40 @@ function clearCompleted(): void {
 }
 
 // ── Ações: categorias ───────────────────────────────────────────────────────
+//
+// As categorias são as compartilhadas do app (stores/categories.ts): a lista do
+// tasks.json diz quais aparecem aqui (e em que ordem), com uma cópia do nome e da cor.
 
-function addCategory(name: string, color: CategoryColor): Category {
-  const category: Category = {
-    id: categoryIdFor(name, (id) => categoryById.value.has(id)),
-    name: name.trim(),
-    color,
-    createdAt: new Date().toISOString(),
-  }
-  state.categories.push(category)
+const shared = useCategoriesStore()
+
+/** Põe uma categoria do app na lista das Tarefas (se ainda não estiver). */
+function attachShared(category: SharedCategory): Category {
+  const existing = categoryById.value.get(category.id)
+  if (existing) return existing
+  state.categories.push({ id: category.id, name: category.name, color: category.color, createdAt: new Date().toISOString() })
   scheduleSave()
-  return category
+  shared.touch()
+  return state.categories.at(-1)!
 }
 
-function updateCategory(id: string, patch: Partial<Pick<Category, 'name' | 'color'>>): void {
-  const category = categoryById.value.get(id)
-  if (!category) return
-  if (patch.name?.trim()) category.name = patch.name.trim()
-  if (patch.color) category.color = patch.color
-  scheduleSave()
+/** Categoria nova (no app inteiro) já na lista das Tarefas; com um nome que já existe no app, usa aquela. null = nome com problema. */
+function addCategory(name: string, color: CategoryColor): Category | null {
+  const category = shared.findByName(name) ?? shared.createCategory({ name, color })
+  return category ? attachShared(category) : null
 }
 
+/** "Usar categoria existente": uma categoria do app passa a aparecer nas Tarefas. */
+function attachCategory(id: string): Category | null {
+  const category = shared.findCategory(id)
+  return category ? attachShared(category) : null
+}
+
+/** Nome e cor mudam no app inteiro (a cópia daqui é atualizada pelo stores/categories.ts). */
+function updateCategory(id: string, patch: Partial<Pick<Category, 'name' | 'color'>>): Promise<boolean> {
+  return shared.updateCategory(id, patch)
+}
+
+/** Tira a categoria das Tarefas: as tarefas dela ficam sem categoria. */
 function deleteCategory(id: string): void {
   for (const task of state.tasks) if (task.categoryId === id) task.categoryId = null
   state.categories = state.categories.filter((category) => category.id !== id)
@@ -354,22 +368,64 @@ function deleteCategory(id: string): void {
   scheduleSave()
 }
 
-/** Pede confirmação e exclui a categoria (as tarefas dela ficam sem categoria). */
-async function requestDeleteCategory(id: string): Promise<boolean> {
-  const category = categoryById.value.get(id)
-  if (!category) return false
-  const count = state.tasks.filter((task) => task.categoryId === id).length
-  const ok = await confirmDialog({
-    title: `Excluir a categoria “${category.name}”?`,
-    message: count
-      ? `${count} ${count === 1 ? 'tarefa ficará' : 'tarefas ficarão'} sem categoria. Nenhuma tarefa será apagada.`
-      : 'Nenhuma tarefa usa esta categoria.',
-    confirmLabel: 'Excluir categoria',
-    danger: true,
-  })
-  if (ok) deleteCategory(id)
-  return ok
+/** Os registros (e o lugar na lista) de `fromId` passam para `to` (juntar, excluir transferindo). */
+function remapCategory(fromId: string, to: SharedCategory): void {
+  let used = false
+  for (const task of state.tasks) {
+    if (task.categoryId !== fromId) continue
+    task.categoryId = to.id
+    used = true
+  }
+  const index = state.categories.findIndex((category) => category.id === fromId)
+  if (index >= 0) {
+    if (state.categories.some((category) => category.id === to.id)) state.categories.splice(index, 1)
+    else state.categories.splice(index, 1, { id: to.id, name: to.name, color: to.color, createdAt: state.categories[index]!.createdAt })
+  } else if (used) {
+    attachShared(to)
+  }
+  if (state.selection === `cat:${fromId}`) state.selection = `cat:${to.id}`
+  if (state.drawer?.mode === 'create' && state.drawer.prefill.categoryId === fromId) state.drawer.prefill.categoryId = to.id
+  scheduleSave()
 }
+
+/** Pede o que fazer com as tarefas e exclui a categoria (das Tarefas ou do app). */
+function requestDeleteCategory(id: string): Promise<boolean> {
+  return requestCategoryRemoval(id, 'tasks')
+}
+
+registerCategoryModule({
+  id: 'tasks',
+  ready: () => state.loaded && !state.error,
+  members: () => state.categories.map((category) => ({ id: category.id, name: category.name, color: category.color })),
+  records: (id) =>
+    state.tasks
+      .filter((task) => task.categoryId === id)
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        detail: task.done && !task.recurrence ? 'Concluída' : task.date ? formatShortDate(task.date, today.value) : task.recurrence ? 'Recorrente' : 'Sem data',
+        path: `${DATA_PATHS.tasksFile}#${task.id}`,
+        done: task.done && !task.recurrence,
+      })),
+  sync: (category) => {
+    const mine = categoryById.value.get(category.id)
+    if (mine && (mine.name !== category.name || mine.color !== category.color)) {
+      mine.name = category.name
+      mine.color = category.color
+      scheduleSave()
+    }
+    return true
+  },
+  attach: (category) => !!attachShared(category),
+  remap: (from, to) => {
+    if (from.id) remapCategory(from.id, to)
+    return true
+  },
+  detach: (from) => {
+    if (from.id) deleteCategory(from.id)
+    return true
+  },
+})
 
 function moveCategory(from: number, to: number): void {
   if (from === to || from < 0 || to < 0 || from >= state.categories.length || to >= state.categories.length) return
@@ -430,6 +486,7 @@ export function useTasksStore() {
     deleteTask,
     clearCompleted,
     addCategory,
+    attachCategory,
     updateCategory,
     deleteCategory,
     requestDeleteCategory,

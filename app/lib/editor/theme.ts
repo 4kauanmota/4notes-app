@@ -309,8 +309,8 @@ export const editorTheme = EditorView.theme({
   '.cm-mention-title': { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   '.cm-mention.missing': { backgroundColor: 'var(--surface-3)', color: 'var(--text-3)', textDecoration: 'line-through' },
   // Tarefas e registros do Timer mencionados: amarelo; tarefa concluída = riscada
-  '.cm-mention.task:not(.missing), .cm-mention.timer:not(.missing)': { backgroundColor: 'var(--accent-soft)', color: 'var(--accent-text)' },
-  '.cm-mention.task:not(.missing):hover, .cm-mention.timer:not(.missing):hover': {
+  '.cm-mention.task:not(.missing), .cm-mention.timer:not(.missing), .cm-mention.expense:not(.missing)': { backgroundColor: 'var(--accent-soft)', color: 'var(--accent-text)' },
+  '.cm-mention.task:not(.missing):hover, .cm-mention.timer:not(.missing):hover, .cm-mention.expense:not(.missing):hover': {
     backgroundColor: 'color-mix(in srgb, var(--accent) 34%, transparent)',
   },
   '.cm-mention.task.done .cm-mention-title': { textDecoration: 'line-through', opacity: '0.75' },

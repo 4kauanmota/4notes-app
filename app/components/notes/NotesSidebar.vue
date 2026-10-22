@@ -107,17 +107,23 @@ watch(
 
 // ── Ações ────────────────────────────────────────────────────────────────────
 
+/** Clique simples: a nota abre na aba temporária (troca a nota que estava nela). */
 function onRowClick(row: Row, category: NoteCategory | null) {
   if (row.kind === 'note') {
-    if (row.note) notes.openNote(row.note.id)
+    if (row.note) notes.openNote(row.note.id, { preview: true })
     return
   }
   if (row.note) {
-    notes.openNote(row.note.id)
+    notes.openNote(row.note.id, { preview: true })
     if (!row.open) notes.setFolderOpen(category?.name ?? null, row.folderKey!, true)
     return
   }
   toggleFolder(row, category)
+}
+
+/** Duplo clique: a nota fica numa aba fixa (a aba temporária dela vira fixa). */
+function onRowPin(row: Row) {
+  if (row.note) notes.openNote(row.note.id)
 }
 
 function toggleFolder(row: Row, category: NoteCategory | null) {
@@ -136,7 +142,7 @@ function newNoteIn(category: NoteCategory | null) {
 /** A nota mais recente da pasta (pela data da última alteração), sem precisar abrir a pasta e procurar. */
 function openLatestInFolder(row: Row) {
   // As pastas até ela abrem sozinhas (activePlace), e a lista rola até a nota
-  if (row.latest) notes.openNote(row.latest.id)
+  if (row.latest) notes.openNote(row.latest.id, { preview: true })
 }
 
 /** + de uma pasta pelo título: a nota nova começa com o título da pasta ("4notes …") e fica junto das outras. */
@@ -149,6 +155,7 @@ function newNoteInFolder(row: Row, category: NoteCategory | null) {
 function noteMenuItems(note: QuickNote): MenuItemSpec[] {
   return [
     { id: 'open', label: 'Abrir' },
+    { id: 'open-pinned', label: 'Abrir em aba fixa' },
     categorySubmenu(note),
     { id: 'duplicate', label: 'Duplicar' },
     exportSubmenu(note),
@@ -161,7 +168,8 @@ function noteMenuItems(note: QuickNote): MenuItemSpec[] {
 
 function runNoteChoice(choice: string | null, note: QuickNote) {
   if (handleCategoryChoice(choice, note) || handleExportChoice(choice, note)) return
-  if (choice === 'open') notes.openNote(note.id)
+  if (choice === 'open') notes.openNote(note.id, { preview: true })
+  if (choice === 'open-pinned') notes.openNote(note.id)
   if (choice === 'duplicate') notes.duplicateNote(note.id)
   if (choice === 'reveal') notes.revealNote(note.id)
   if (choice === 'delete') void notes.deleteNote(note.id)
@@ -311,6 +319,7 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
               :key="row.key"
               :row="row"
               @activate="onRowClick(row, section.category)"
+              @pin="onRowPin(row)"
               @toggle="toggleFolder(row, section.category)"
               @menu="rowMenu(row, section.category)"
               @new="newNoteInFolder(row, section.category)"
@@ -337,6 +346,7 @@ onBeforeUnmount(() => window.removeEventListener('dragend', clearDrop, true))
             :key="row.key"
             :row="row"
             @activate="onRowClick(row, null)"
+            @pin="onRowPin(row)"
             @toggle="toggleFolder(row, null)"
             @menu="rowMenu(row, null)"
             @new="newNoteInFolder(row, null)"

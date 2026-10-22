@@ -126,6 +126,9 @@ function reload() {
     <ImageLibraryDialog v-if="app.state.phase === 'ready'" />
     <TutorialPanel v-if="app.state.phase === 'ready'" />
     <MentionsDialog v-if="app.state.phase === 'ready'" />
+    <CategoriesPanel v-if="app.state.phase === 'ready'" />
+    <CategoryRemovalDialog v-if="app.state.phase === 'ready'" />
+    <CategoryMergeDialog v-if="app.state.phase === 'ready'" />
     <FolderPickerDialog />
     <DialogHost />
     <ToastHost />

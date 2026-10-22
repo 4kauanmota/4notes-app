@@ -1,17 +1,17 @@
 /**
  * Os módulos do 4notes num lugar só: nome, ícone, rota, atalho e o tutorial.
  *
- * O menu lateral, as Configurações (módulos ativos), os atalhos Ctrl+1…5 e os
+ * O menu lateral, as Configurações (módulos ativos), os atalhos Ctrl+1…6 e os
  * Tutoriais leem esta lista. Para criar um módulo novo, basta acrescentá-lo aqui
  * (o tutorial é obrigatório) — ele aparece em todos esses lugares.
  *
  * Também ficam aqui as regras puras das preferências dos módulos (quais estão
  * ativos, em que ordem e como aparecem no menu), guardadas em .4notes/app.json
  * (stores/modules.ts). A ordem de MODULES é a ordem padrão do menu; os atalhos
- * Ctrl+1…5 continuam presos a cada módulo, qualquer que seja a ordem.
+ * Ctrl+1…6 continuam presos a cada módulo, qualquer que seja a ordem.
  */
 
-export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links' | 'timer'
+export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links' | 'timer' | 'finance'
 
 /** Um atalho mostrado no tutorial. "Mod" vira Ctrl (Windows/Linux) ou ⌘ (macOS). */
 export interface TutorialShortcut {
@@ -62,6 +62,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     tutorial: {
       purpose: 'Anotações rápidas em abas, como um Bloco de Notas organizado. Cada nota é um arquivo .md no seu workspace.',
       features: [
+        'Clique numa nota: abre na aba temporária (em itálico). Duplo clique: aba fixa.',
         'Selecione um texto para formatar: negrito, listas, link, bloco de texto ou de código…',
         'Cole prints e código: viram imagem e bloco de código.',
         'Blocos de código e de texto: copiar, remover e tela cheia (com “Quebrar linhas”).',
@@ -73,7 +74,8 @@ export const MODULES: readonly ModuleDefinition[] = [
       ],
       contextMenu: [
         'Nota ou aba: categoria, duplicar, exportar TXT/PDF, Explorador, excluir.',
-        'Aba: fechar a aba ou as outras.',
+        'Aba: fechar a aba ou as outras; na aba temporária, “Fixar aba”.',
+        'Nota na lista: “Abrir em aba fixa”.',
         'Categoria: nova nota nela, editar, recolher, excluir.',
         'Pasta: abrir a nota mais recente dela ou criar uma nota já dentro dela.',
         'Texto: inserir imagem, corretor, abrir/editar/remover link.',
@@ -86,6 +88,9 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Títulos que começam igual viram pastas na lista (“4notes 1.4.0”, “4notes 1.4.1”).',
         'Versão no título (“4notes 1.4.1”)? ‹ e › no fim das abas abrem a anterior e a próxima.',
         'Tudo salva sozinho; fechar a aba não apaga a nota.',
+        'Editar a nota da aba temporária deixa a aba fixa: nada se perde ao clicar em outra.',
+        '“Limpar formatação” aparece na barra quando o trecho selecionado tem formatação.',
+        'As categorias são as do app: a mesma pode ser usada nas Tarefas, no Timer, nas Finanças…',
         'A lista do @ diz de onde é cada item e também busca por categoria e data: “@estudo 12/10”.',
         'Menção riscada: o item foi excluído (a nota continua funcionando).',
         'Excluir manda o arquivo para a Lixeira (no celular, para .4notes/trash).',
@@ -107,7 +112,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         { keys: ['Mod', 'Clique'], label: 'Abrir o link no navegador' },
       ],
       touch: [
-        'Toque numa nota para abrir; ‹ (ou o “voltar” do Android) volta para a lista.',
+        'Toque numa nota para abrir (aba temporária); ‹ ou o “voltar” volta para a lista.',
         'A barra de formatação fica acima do teclado: B, I, títulos, listas, imagem, link…',
         'Num link, toque nele e depois em ↗ na barra para abrir no navegador.',
         'Toque prolongado numa nota, aba ou categoria abre o menu (categoria, exportar…).',
@@ -140,6 +145,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Na descrição valem os atalhos das notas: Ctrl+B, listas com “- ”, “[ ]”…',
         'As menções ficam em “Menções”: clique para abrir, × para tirar. “Mencionar” busca sem digitar @.',
         'Concluídas e agendadas ficam nos links discretos no fim da lista.',
+        'Categorias de outros módulos aparecem tracejadas na tarefa: um clique e ela vale aqui.',
         '“Pular” avança uma recorrente sem marcar como feita.',
         'O que venceu com o app fechado aparece ao abrir.',
       ],
@@ -233,6 +239,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       tips: [
         'Arrastar um link do navegador para a lista também salva.',
         'Arraste as categorias para mudar a ordem.',
+        '“Nova categoria” também oferece as categorias que já existem no app.',
         'O ⋯ do link abre o mesmo menu do botão direito.',
         'Links salvos podem ser mencionados nas notas e nas tarefas com @.',
         '“Ver menções” (no menu do link ou em Editar) lista onde ele foi mencionado e leva até lá.',
@@ -280,7 +287,8 @@ export const MODULES: readonly ModuleDefinition[] = [
       tips: [
         'A contagem segue pelo relógio: troque de módulo ou feche o app à vontade.',
         'Finalizar salva a sessão; Cancelar não conta o tempo (fica como cancelada).',
-        'Excluir uma categoria não apaga o histórico: as sessões ficam sem categoria.',
+        'Excluir uma categoria não apaga o histórico: escolha outra categoria ou deixe sem.',
+        'Categorias de outros módulos aparecem tracejadas: um clique e ela vale no Timer.',
         'Na comparação, o período atual vale até agora contra o mesmo trecho do anterior.',
         'O ponto no ícone do Timer avisa que há uma sessão contando.',
         'Abrir a menção a um registro traz o Histórico até ele, destacado.',
@@ -298,6 +306,46 @@ export const MODULES: readonly ModuleDefinition[] = [
       ],
     },
   },
+  {
+    id: 'finance',
+    label: 'Finanças',
+    name: 'Finanças',
+    icon: 'wallet',
+    route: '/finance',
+    key: '6',
+    description: 'Controle de gastos, com histórico, categorias e gráficos.',
+    tutorial: {
+      purpose: 'Registre seus gastos e veja para onde vai o seu dinheiro.',
+      features: [
+        'Valor, descrição e Enter: o gasto entra com a data de hoje.',
+        'Data, categoria e observações no próprio formulário (todos opcionais).',
+        'Histórico por dia, com período, categoria, busca e ordem por data ou valor.',
+        'Clique num gasto para ver, editar, repetir hoje ou excluir.',
+        'Painel: evolução, por categoria, dias e maiores gastos, e a comparação.',
+        'Gastos podem ser mencionados com @ nas notas e nas tarefas; “Ver menções” mostra onde.',
+      ],
+      contextMenu: ['Gasto: abrir, repetir hoje, mudar a categoria, ver menções, excluir.', 'Categoria: editar, mover para a esquerda/direita ou excluir.'],
+      tips: [
+        'O valor aceita “52,30”, “52.30” ou “1.234,56”.',
+        'As categorias são as do app: use a mesma das Notas, Tarefas ou Timer.',
+        'O total aparece no topo do histórico, com os filtros escolhidos.',
+        'Excluir pede confirmação, e o aviso ainda tem Desfazer.',
+        'Na comparação, o período atual vale até hoje contra o mesmo trecho do anterior.',
+        'Abrir a menção a um gasto leva até ele no histórico, destacado.',
+      ],
+      shortcuts: [
+        { keys: ['Mod', 'N'], label: 'Novo gasto (vai para o valor)' },
+        { keys: ['Enter'], label: 'Registrar o gasto' },
+        { keys: ['Mod', 'F'], label: 'Buscar no histórico' },
+        { keys: ['← / →'], label: 'Período anterior / próximo' },
+      ],
+      touch: [
+        'As áreas Gastos e Painel ficam no topo.',
+        'Toque num gasto para abrir; toque prolongado: repetir, categoria, excluir.',
+        'No celular, o teclado numérico abre no campo do valor.',
+      ],
+    },
+  },
 ]
 
 /** O 4notes em geral (tutorial "Geral": workspace, módulos e atalhos de qualquer lugar). */
@@ -309,14 +357,18 @@ export const GENERAL_TUTORIAL: ModuleTutorial = {
     'Ative, desative e ajuste módulos em Configurações › Módulos.',
     'Tema claro ou escuro pelo sol/lua do menu lateral.',
     'Biblioteca de imagens e “Iniciar com o computador” em Configurações › Geral.',
+    'Ver categorias (etiqueta no menu lateral): as mesmas categorias em todos os módulos.',
+    'Em Ver categorias: onde cada uma é usada, editar, juntar duas e excluir.',
   ],
   contextMenu: [
     'Módulo no menu lateral: mover para cima/baixo ou desativar.',
-    'Menu lateral: ligar/desligar módulos e mostrar os nomes.',
+    'Menu lateral: ligar/desligar módulos, mostrar os nomes e ver categorias.',
     'Texto: desfazer, copiar, colar e sugestões do corretor.',
   ],
   tips: [
     'Desativar um módulo só o esconde: os dados continuam guardados.',
+    'Renomear uma categoria vale em todos os módulos (nas Notas, a pasta acompanha).',
+    'Excluir uma categoria em uso pede o destino dos registros: outra categoria ou nenhuma.',
     'Backup: basta copiar a pasta do workspace.',
     'Mudou algo em outro programa ou aparelho? O 4notes relê ao voltar e a cada minuto.',
     'Versão nova? O 4notes pergunta ao abrir; “Agora não” deixa ela em Configurações › Geral.',
@@ -331,6 +383,7 @@ export const GENERAL_TUTORIAL: ModuleTutorial = {
   ],
   touch: [
     'Módulos na barra de baixo (com o celular aberto, ao lado); o resto fica em “Mais”.',
+    'Categorias do app: em “Mais” › Categorias.',
     'Toque prolongado = clique direito: abre o menu do que estiver embaixo do dedo.',
     'O “voltar” do Android fecha menus e painéis e volta para a tela anterior.',
     'Com a pasta sincronizada (Google Drive…), o workspace é o mesmo nos dois aparelhos.',

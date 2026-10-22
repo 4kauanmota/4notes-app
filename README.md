@@ -4,9 +4,9 @@
 
 # 4notes
 
-**Notes, tasks, mind maps, links and a timer in a single app — 100% local, on your computer and on your phone.**
+**Notes, tasks, mind maps, links, a timer and expenses in a single app — 100% local, on your computer and on your phone.**
 
-![Version](https://img.shields.io/badge/version-1.6.4-7c5cf0?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.7.0-7c5cf0?style=flat-square)
 ![Windows](https://img.shields.io/badge/Windows-Electron_44-7c5cf0?style=flat-square&logo=electron&logoColor=white)
 ![Android](https://img.shields.io/badge/Android_7+-Capacitor_8-fdcf3f?style=flat-square&logo=android&logoColor=black)
 ![Nuxt](https://img.shields.io/badge/Nuxt_4-Vue_3-00dc82?style=flat-square&logo=nuxt.js&logoColor=white)
@@ -27,14 +27,14 @@
 
 ## 💡 About
 
-4notes is a personal organization app inspired by Windows Notepad, Obsidian, Capacities and Notion. It brings together, in a single interface, the things that usually end up scattered across several apps: quick notes, recurring tasks, idea maps, saved links and a log of the time spent on each activity.
+4notes is a personal organization app inspired by Windows Notepad, Obsidian, Capacities and Notion. It brings together, in a single interface, the things that usually end up scattered across several apps: quick notes, recurring tasks, idea maps, saved links, a log of the time spent on each activity and your expenses.
 
 What sets it apart:
 
 - **Your data are your own files.** No login, no server, no database. Everything lives in a **workspace** — a folder you create and name — as **Markdown** (`.md`) and **JSON**. Backing up means copying the folder; the files open in VS Code, Obsidian or Notepad.
 - **An editor that hides the Markdown.** You only see the formatted text — headings, lists, checklists, colors, highlighted code blocks, images — and never the `**`, `#` or ` ``` ` fences. The file is still plain Markdown.
 - **The same interface on Windows and Android.** There is a single interface codebase; only the layer that talks to the operating system changes. With the folder synced (Google Drive, for example), notes, tasks, maps and settings are the same on both devices.
-- **Modules connected only where it makes sense.** Each module is independent; the only link between them is **mentions** (`@`), which work across all of them.
+- **Modules connected only where it makes sense.** Each module is independent; what links them is **mentions** (`@`), which work across all of them, and **shared categories**: the same "Study" category can organize notes, links, tasks, Timer sessions and expenses.
 
 > [!NOTE]
 > The app's interface is in Brazilian Portuguese. Menu items, buttons and settings are written below exactly as they appear in the app, with an English translation in parentheses where it helps.
@@ -45,7 +45,7 @@ What sets it apart:
 
 ## ✨ Features
 
-### The five modules
+### The six modules
 
 | | Module | In short |
 | :-: | --- | --- |
@@ -54,6 +54,7 @@ What sets it apart:
 | 🧠 | **Mind Map** (_Mapa Mental_) | Multiple maps; each node is a permanent note. Connections by dragging, multi-note selection and a "Reorganize" (_Reorganizar_) that avoids crossings. |
 | 🔗 | **Links** | Paste an address and the site's title and icon arrive on their own. Categories, search and import of browser bookmarks. |
 | ⏱️ | **Timer** | Stopwatch, countdown timer and Pomodoro, with a filterable history and statistics with charts and period comparison. |
+| 💰 | **Finances** (_Finanças_) | Expenses with amount, description, date, category and notes; a history with filters and totals, and a dashboard with charts and period comparison. |
 
 Modules can be **enabled, disabled and reordered** (by dragging in the side menu). Disabling only removes the module from the menu: no data is deleted.
 
@@ -63,9 +64,10 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 <br>
 
 - **Compact tabs** with horizontal scrolling (the thin bar at the top only shows up when the tabs don't fit); the active tab takes the color of the note's category.
+- **Temporary and fixed tabs**: a single click in the list opens the note in a **temporary tab** (title in italics), which the next single click reuses for another note. A double click (in the list or on the tab), **Abrir em aba fixa** (_Open in a fixed tab_) in the context menu, or simply editing the note turns it into a **fixed tab**, which is never replaced. A note that is already open is only selected, and pending changes are saved before a temporary tab changes notes.
 - **Automatic title**: the first line is the title, and the file name follows the title (`Game ideas.md`). By default, the first line of a new note already starts as a heading; **Título na primeira linha** (_Title on the first line_, in Settings › Modules › Notes) turns that off, and the first line starts as regular text — it still names the note.
 - **Autosave** 0.6 s after the last keystroke, with atomic writes — also when closing the tab, with `Ctrl+S` and when closing the app.
-- **Categories** are folders inside `notes/`, with a color, a built-in icon or a photo from the image library. Move notes through the context menu or by dragging.
+- **Categories** are folders inside `notes/`, with a color, a built-in icon or a photo from the image library. Move notes through the context menu or by dragging. They are the app's **shared categories** (see below), so a category created in Tasks or Finances can become a notes folder too.
 - **Newest on top**: the list shows the most recently changed notes first, also inside the folders (a folder counts by its newest note). **Pastas sempre no topo** (_Folders always on top_, in Settings › Modules › Notes, off by default) puts the folders before the notes at every level, whatever their date; the notes keep the newest-first order. Saved per workspace.
 - **Folders by title** (only in the list; the files don't change): `4notes 1.1.1` and `4notes 1.2.0` show up as **4notes › 1.1.1, 1.2.0**. A folder's **+** creates a note that already starts with the folder's title, and its **clock** (or **Abrir a mais recente** — _Open the newest_ — in its context menu) opens the folder's newest note without having to look for it.
 - **Automatic category by title** (optional, off by default): a new note goes on its own to the category that already has notes starting with the same title.
@@ -131,12 +133,28 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 
 </details>
 
+<details>
+<summary><b>💰 Finances: details</b></summary>
+
+<br>
+
+- **Quick entry**: type the amount and the description and press `Enter`; the date starts as today. Category and notes (_Observações_) are optional, in the same form. The amount accepts `52,30`, `52.30` or `1.234,56`, and is shown in Brazilian reais (`R$ 1.234,56`).
+- **Categories** are the app's shared categories: pick one used in another module, or create a new one without leaving the form.
+- **History** (_Gastos_) grouped by day, with period (day, week, month, year, range or everything), category, search by description and sorting by date or amount. The total, count and average of what is shown appear on top. Clicking an expense opens it to edit, repeat today, see its mentions or delete it (with a confirmation and **Undo**).
+- **Dashboard** (_Painel_) built only from your expenses: spending per day, week or month, by category (donut), the days with the most spending, the biggest expenses, and a **comparison with the previous period** (for the current period, the same stretch of both, e.g. October 1 to 22 against September 1 to 22). Every number follows the period and category filters, and empty periods show a short explanation instead of a chart.
+- **Mentions**: expenses can be mentioned with `@` in notes and tasks. The mention stores only the expense's id, so it always shows the current description and amount, and opening it shows the expense in the history.
+- Amounts are stored in **cents** (whole numbers), so totals never have rounding errors.
+
+</details>
+
 ### App-wide features
 
 | | Feature | Description |
 | :-: | --- | --- |
 | ✍️ | **Visual Markdown editor** | Formatting toolbar when you select text; lists that renumber themselves; clickable checklists; text blocks and code blocks from the toolbar (the block's name switches between text and code and picks the language, with syntax highlighting); language detected when pasting code; pasted images; `Ctrl+D` to edit several occurrences. |
-| 🔁 | **Mentions (`@`)** | Notes and tasks mention notes, maps, tasks, saved links and Timer records. One click opens the item in its module; renaming in the app fixes the mentions. |
+| 🔁 | **Mentions (`@`)** | Notes and tasks mention notes, maps, tasks, saved links, Timer records and expenses. One click opens the item in its module; renaming in the app fixes the mentions. |
+| 🏷️ | **Shared categories** | One list of categories for the whole app. Create a category in any module and reuse it in the others; **Ver categorias** (_View categories_, the tag in the side menu) shows where each one is used, opens its records, edits the name, color, icon or photo everywhere at once, merges two categories and deletes one, moving its records to another category or leaving them without one. Nothing is lost. |
+| 🧹 | **Clear formatting** | **Limpar formatação** (_Clear formatting_) shows up in the formatting toolbar only when the selection has formatting to remove, and removes it only inside the selection. |
 | 🖼️ | **Image library** | Every uploaded image goes to `attachments/` to be reused in notes, tasks and categories, with no duplicate copies. |
 | 🗂️ | **Workspaces** | Create as many as you want, each with its own data and settings (a new workspace starts with the default settings). The workspace name appears in the top-left corner. |
 | 🖥️ | **Full-width screens** | Tasks, Links and the Timer use the whole width of the window, at any size. |
@@ -173,7 +191,7 @@ The interface (`app/`) doesn't know which platform it is running on. It talks to
 flowchart TB
     subgraph UI["app/ — Nuxt + Vue interface (the same on both platforms)"]
         direction LR
-        P["pages/<br/>Notes · Tasks · Map · Links · Timer"] --> S["stores/<br/>state of each module"]
+        P["pages/<br/>Notes · Tasks · Map · Links · Timer · Finances"] --> S["stores/<br/>state of each module"]
         S --> L["lib/<br/>pure rules + repositories"]
     end
 
@@ -193,7 +211,7 @@ Principles that guide the code:
 - **The interface never accesses the disk directly.** On desktop, `contextIsolation` and `sandbox` are on; every path is relative to the workspace and validated (no `../`).
 - **Atomic writes**: content goes to a temporary file and only then replaces the original — a power outage doesn't corrupt anything.
 - **Deleting sends to the Recycle Bin** on Windows (on Android, to `.4notes/trash/`), always with **Undo**.
-- **Independent modules**: each one has its own store, repository and folder. The mentions bridge (`app/stores/mentions.ts`) is the only link between them.
+- **Independent modules**: each one has its own store, repository and folder. The mentions bridge (`app/stores/mentions.ts`) and the shared categories (`app/stores/categories.ts`, where each module registers itself) are the only links between them.
 - **Settings in the workspace, screen state on the device**: theme, modules and module settings live in `.4notes/settings.json` (the same on every device, and each workspace with its own); open tabs and the last module stay on each device.
 
 > 📘 The full explanation — the `app://` and `workspace://` protocols, recurrence, mentions, map layout, Timer, Android and updates — is in **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)** (in Portuguese).
@@ -219,6 +237,8 @@ Personal/                     ← the workspace
 │   ├── links.json            links and categories
 │   └── icons/                site icons
 ├── timer/timer.json          categories, history and the running session
+├── finance/finance.json      expenses and the categories used in Finances
+├── categories/categories.json  the shared categories (name, color, icon, photo)
 ├── attachments/              image library
 └── .4notes/                  settings.json, node positions and backups
 ```
@@ -227,11 +247,11 @@ Personal/                     ← the workspace
 | --- | --- | --- |
 | Notes and map nodes | Markdown (`.md`) | Plain text, compatible with Obsidian and VS Code. |
 | Note categories | Folders + `categorias.json` | The category looks the same in File Explorer. |
-| Tasks, links, Timer, map connections | JSON | Structured data, still editable by hand. |
+| Tasks, links, Timer, expenses, shared categories, map connections | JSON | Structured data, still editable by hand. |
 | Images | Files in `attachments/` + relative path | They go along with the backup and show up in other editors. |
 | Settings | `.4notes/settings.json` | They apply to the workspace, on every device. |
 
-Tasks, links and the Timer get **one copy per day of the week** in `.4notes/backups/`. If one of these files is edited by hand and becomes invalid, the app warns you and **overwrites nothing**.
+Tasks, links, the Timer and Finances get **one copy per day of the week** in `.4notes/backups/`. Each module file keeps a copy of the name and color of the categories it uses, so an older version of the app (on another device, for example) can still read it; when 1.7.0 first opens a workspace, it saves a copy of those files in `.4notes/backups/1.7.0/` before joining same-name categories. If one of these files is edited by hand and becomes invalid, the app warns you and **overwrites nothing**.
 
 Formatting is still plain Markdown: `# heading`, `- list`, `- [ ] task`, `**bold**`, `==highlight==`, ` ```language `, ` ```text ` (text block). Underline and color use simple HTML (`<u>…</u>`, `<span style="color: red">…</span>`), which Obsidian also understands.
 
@@ -446,7 +466,7 @@ Each module's shortcuts are also in its tutorial (`F1`). On macOS, `Ctrl` become
 
 | Shortcut | Action |
 | --- | --- |
-| `Ctrl+1` … `Ctrl+5` | Notes / Tasks / Mind Map / Links / Timer |
+| `Ctrl+1` … `Ctrl+6` | Notes / Tasks / Mind Map / Links / Timer / Finances |
 | `Ctrl+N` | New item in the current module |
 | `Ctrl+,` | Settings |
 | `F1` | Tutorial of the current module |
@@ -474,14 +494,14 @@ Each module's shortcuts are also in its tutorial (`F1`). On macOS, `Ctrl` become
 | `Ctrl+K` | Link on the selected text |
 | `Ctrl+Shift+V` | Paste without formatting (code doesn't become a block) |
 | `Ctrl+click` | Open the link in the browser |
-| `@` | Mention a note, map, task, link or Timer record |
+| `@` | Mention a note, map, task, link, Timer record or expense |
 
 Markdown shortcuts work at the start of a line: `# `, `- `, `1. `, `- [ ] `, `> ` and ` ``` ` + `Enter`.
 
 </details>
 
 <details>
-<summary><b>Tasks, Mind Map, Links and Timer</b></summary>
+<summary><b>Tasks, Mind Map, Links, Timer and Finances</b></summary>
 
 <br>
 
@@ -500,6 +520,10 @@ Markdown shortcuts work at the start of a line: `# `, `- `, `1. `, `- [ ] `, `> 
 | Timer | `Space` | Start, pause or resume |
 | Timer | `Ctrl+Enter` | Finish the session |
 | Timer | `←` / `→` | Previous / next period |
+| Finances | `Ctrl+N` | New expense (goes to the amount) |
+| Finances | `Enter` | Register the expense |
+| Finances | `Ctrl+F` | Search the history |
+| Finances | `←` / `→` | Previous / next period |
 
 </details>
 
@@ -512,7 +536,7 @@ npm test             # unit tests (Vitest)
 npm run typecheck    # strict TypeScript in the interface and in Electron
 ```
 
-The tests live in [`tests/`](tests/) (25 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order and folders on top), line wrapping in full screen, note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones) and updates.
+The tests live in [`tests/`](tests/) (29 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order and folders on top), line wrapping in full screen, note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones), Finances (amounts, history, dashboard numbers and comparison), shared categories (the 1.6 migration, renaming, merging and deleting across all modules, files from an older version), temporary and fixed tabs, and updates.
 
 ---
 
@@ -521,9 +545,9 @@ The tests live in [`tests/`](tests/) (25 files) and cover the pure rules, withou
 ```text
 4notes/
 ├── app/                    Interface (Nuxt 4 + Vue 3) — the same on Windows and Android
-│   ├── pages/              One file per module: notes, tasks, mindmap, links, timer
-│   ├── components/         editor/, notes/, tasks/, mindmap/, links/, timer/, shell/, ui/
-│   ├── stores/             State of each module + mentions.ts (the bridge between modules)
+│   ├── pages/              One file per module: notes, tasks, mindmap, links, timer, finance
+│   ├── components/         editor/, notes/, tasks/, mindmap/, links/, timer/, finance/, categories/, shell/, ui/
+│   ├── stores/             State of each module + mentions.ts and categories.ts (what modules share)
 │   ├── lib/                Pure rules and persistence; lib/mobile/ is the Android layer
 │   ├── composables/        Theme, shortcuts, layout by screen size, dialogs…
 │   ├── plugins/            Theme, platform and click animation on icons

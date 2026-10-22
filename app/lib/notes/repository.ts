@@ -48,6 +48,8 @@ export const DEFAULT_NOTES_SETTINGS: NotesSettings = {
 export interface NotesViewState {
   openTabs: string[]
   activeTab: string | null
+  /** A aba temporária (1.7.0; null = nenhuma). */
+  previewTab: string | null
   sidebarOpen: boolean
   /** Categorias recolhidas na lista lateral. */
   collapsedCategories: string[]
@@ -79,6 +81,7 @@ export function normalizeNotesView(raw: unknown): NotesViewState {
   return {
     openTabs: strings(data.openTabs),
     activeTab: typeof data.activeTab === 'string' ? data.activeTab : null,
+    previewTab: typeof data.previewTab === 'string' ? data.previewTab : null,
     sidebarOpen: data.sidebarOpen !== false,
     collapsedCategories: strings(data.collapsedCategories),
     openFolders: strings(data.openFolders),

@@ -395,7 +395,7 @@ hr { margin: 0.8em 0; border: none; border-top: 1.5px solid var(--border-strong)
 code { font-family: var(--font-mono); font-size: 0.88em; background: var(--surface-3); border-radius: 4px; padding: 0.05em 0.25em; }
 a, .link { color: var(--primary-text); text-decoration: underline; text-decoration-color: rgba(124, 92, 252, 0.35); text-underline-offset: 3px; }
 .mention { padding: 0 6px; border-radius: 6px; background: var(--primary-soft); color: var(--primary-text); font-weight: 600; }
-.mention.task, .mention.timer { background: var(--accent-soft); color: var(--accent-text); }
+.mention.task, .mention.timer, .mention.expense { background: var(--accent-soft); color: var(--accent-text); }
 .image { padding: 6px 0; line-height: 0; break-inside: avoid; }
 .img { display: block; max-width: 100%; max-height: 230mm; border: 1px solid var(--border); border-radius: 8px; }
 .img-inline { max-width: 100%; max-height: 120mm; vertical-align: middle; border-radius: 6px; }

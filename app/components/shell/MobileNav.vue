@@ -2,11 +2,12 @@
 /**
  * Navegação do celular (layout compact — celular, tela externa do Fold): os módulos
  * ativos na barra de baixo, ao alcance do polegar, na ordem escolhida por você; e
- * "Mais": workspace, tema, tutorial e configurações (o que fica no menu lateral do
+ * "Mais": workspace, tema, categorias, tutorial e configurações (o que fica no menu lateral do
  * desktop). Toque prolongado num módulo: mover ou desativar.
  */
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { openCategoriesPanel } from '~/composables/useCategoryActions'
 import { showContextMenu } from '~/composables/useContextMenu'
 import { useTheme } from '~/composables/useTheme'
 import { openTutorial } from '~/composables/useTutorial'
@@ -132,6 +133,10 @@ function run(action: () => unknown) {
       </div>
 
       <div class="more-group">
+        <button type="button" class="more-row" data-action="categories" @click="run(() => openCategoriesPanel())">
+          <AppIcon name="tag" :size="19" />
+          <span>Categorias</span>
+        </button>
         <button type="button" class="more-row" data-action="tutorial" @click="run(() => openTutorial(current?.id ?? 'general'))">
           <AppIcon name="help" :size="19" />
           <span>Tutorial{{ current ? ` de ${current.name}` : '' }}</span>

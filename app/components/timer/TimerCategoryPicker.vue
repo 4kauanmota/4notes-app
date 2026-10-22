@@ -60,6 +60,7 @@ async function categoryMenu(category: ColorCategory) {
     >
       <CategoryDot :color="category.color" :size="8" /> {{ category.name }}
     </button>
+    <OtherCategoryChips module="timer" @pick="(id) => (model = timer.attachCategory(id)?.id ?? model)" />
     <button type="button" class="cat-chip add" data-action="new-timer-category" @click="create">
       <AppIcon name="plus" :size="12" /> Nova
     </button>

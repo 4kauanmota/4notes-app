@@ -8,10 +8,12 @@ import { refKey } from '~/lib/mentions/refs'
 import type { Task } from '~/lib/tasks/model'
 import { describeRecurrence } from '~/lib/tasks/recurrence'
 import { descriptionPreview } from '~/lib/tasks/description'
+import { useCategoriesStore } from '~/stores/categories'
 import { useTasksStore } from '~/stores/tasks'
 
 const props = defineProps<{ task: Task; showCategory?: boolean; mode?: 'pending' | 'scheduled' }>()
 const tasks = useTasksStore()
+const shared = useCategoriesStore()
 const completing = ref(false)
 
 const category = computed(() => (props.task.categoryId ? (tasks.categoryById.value.get(props.task.categoryId) ?? null) : null))
@@ -41,6 +43,7 @@ function complete() {
 }
 
 async function openMenu() {
+  const others = shared.availableFor('tasks')
   const moveTo: MenuItemSpec[] = [
     { id: 'cat:', label: 'Sem categoria', type: 'radio', checked: !props.task.categoryId },
     ...tasks.state.categories.map((c) => ({
@@ -50,6 +53,10 @@ async function openMenu() {
       checked: props.task.categoryId === c.id,
       swatch: paletteVar(c.color),
     })),
+    // Categorias do app que ainda não estão nas Tarefas (1.7.0)
+    ...(others.length
+      ? [separator, { label: 'Outras categorias', submenu: others.map((c) => ({ id: `cat-attach:${c.id}`, label: c.name, swatch: paletteVar(c.color) })) }]
+      : []),
   ]
   const choice = await showContextMenu([
     { id: 'edit', label: 'Editar…' },
@@ -65,6 +72,10 @@ async function openMenu() {
   else if (choice === 'skip') tasks.skip(props.task.id)
   else if (choice === 'delete') tasks.deleteTask(props.task.id)
   else if (choice.startsWith('cat:')) tasks.updateTask(props.task.id, { categoryId: choice.slice(4) || null })
+  else if (choice.startsWith('cat-attach:')) {
+    const category = tasks.attachCategory(choice.slice('cat-attach:'.length))
+    if (category) tasks.updateTask(props.task.id, { categoryId: category.id })
+  }
 }
 </script>
 

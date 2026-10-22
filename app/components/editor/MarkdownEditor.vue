@@ -24,6 +24,7 @@ import { notifyError, showToast } from '~/composables/useToasts'
 import type { PaletteColor } from '~/lib/colors'
 import {
   activeFormats,
+  canClearFormatting,
   clearColor,
   clearFormatting,
   normalizeLinkUrl,
@@ -90,6 +91,8 @@ const toolbar = reactive({
   active: { formats: new Set<InlineFormat>(), color: null, link: null } as ActiveFormats,
   /** A seleção pode virar bloco de texto (fora de blocos de código/texto). */
   textBlock: false,
+  /** A seleção tem formatação para o "Limpar formatação" tirar (senão o botão não aparece). */
+  clearable: false,
   /** Editando o endereço de um link: a barra fica aberta mesmo com o foco no campo. */
   linkMode: false,
   linkInitial: '',
@@ -113,6 +116,7 @@ function placeDockedToolbar(): void {
   }
   toolbar.active = activeFormats(view.state)
   toolbar.textBlock = canWrapInTextBlock(view.state)
+  toolbar.clearable = canClearFormatting(view.state)
 }
 
 function placeToolbar(): void {
@@ -156,6 +160,7 @@ function placeToolbar(): void {
   toolbar.y = Math.round(toolbar.below ? Math.min(end.bottom - box.top + 8, lowest) : above)
   toolbar.active = activeFormats(view.state)
   toolbar.textBlock = canWrapInTextBlock(view.state)
+  toolbar.clearable = canClearFormatting(view.state)
   toolbar.visible = true
 }
 
@@ -503,6 +508,7 @@ defineExpose({
       :link-mode="toolbar.linkMode"
       :link-initial="toolbar.linkInitial"
       :text-block="toolbar.textBlock"
+      :clearable="toolbar.clearable"
       :docked="docked"
       @inline="applyInline"
       @color="applyColor"

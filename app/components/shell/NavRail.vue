@@ -22,6 +22,7 @@ import { separator, showContextMenu, type MenuItemSpec } from '~/composables/use
 import { useSortableList } from '~/composables/useSortableList'
 import { useTheme } from '~/composables/useTheme'
 import { toggleTutorial, tutorial } from '~/composables/useTutorial'
+import { openCategoriesPanel, useCategoryUi } from '~/composables/useCategoryActions'
 import { isModuleId, moduleById, moduleForPath, type ModuleDefinition, type ModuleId } from '~/lib/modules'
 import { modKeyLabel } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
@@ -35,6 +36,7 @@ const app = useAppStore()
 const modules = useModulesStore()
 const tasks = useTasksStore()
 const { theme, setTheme } = useTheme()
+const categoryUi = useCategoryUi()
 const mod = modKeyLabel()
 
 const dueCount = computed(() => tasks.progress.value.total - tasks.progress.value.done)
@@ -218,6 +220,7 @@ async function railMenu(event: MouseEvent): Promise<void> {
     separator,
     { id: 'labels', label: 'Mostrar os nomes', type: 'checkbox', checked: labels.value },
     separator,
+    { id: 'categories', label: 'Ver categorias…' },
     { id: 'settings', label: 'Configurações dos módulos…' },
     { id: 'tutorial', label: 'Tutorial', hint: 'F1' },
   ]
@@ -232,6 +235,8 @@ async function railMenu(event: MouseEvent): Promise<void> {
     modules.setEnabled(id, !modules.isEnabled(id))
   } else if (choice === 'labels') {
     modules.setNavStyle(labels.value ? 'icon' : 'icon-label')
+  } else if (choice === 'categories') {
+    openCategoriesPanel()
   } else if (choice === 'settings') {
     app.openSettings('modules')
   } else if (choice === 'tutorial') {
@@ -311,6 +316,18 @@ function toggleTheme(event: MouseEvent) {
     </div>
 
     <div class="rail-bottom">
+      <!-- Categorias do app inteiro (1.7.0): as mesmas em todos os módulos -->
+      <button
+        class="rail-button"
+        :class="{ on: categoryUi.panel.open }"
+        data-action="categories"
+        data-tip="Ver categorias"
+        data-tip-pos="right"
+        aria-label="Ver categorias"
+        @click="openCategoriesPanel()"
+      >
+        <AppIcon name="tag" :size="19" />
+      </button>
       <button
         class="rail-button"
         :data-tip="theme.resolved === 'dark' ? 'Tema claro' : 'Tema escuro'"

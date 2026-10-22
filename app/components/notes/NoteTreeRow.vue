@@ -1,5 +1,8 @@
 <script setup lang="ts">
-/** Uma linha da lista lateral das Notas: uma pasta (pelo título) ou uma nota. */
+/**
+ * Uma linha da lista lateral das Notas: uma pasta (pelo título) ou uma nota.
+ * Clique: abre a nota na aba temporária; duplo clique: abre numa aba fixa (`pin`).
+ */
 import { startNoteDrag } from '~/composables/useNoteCategories'
 import { useNow } from '~/composables/useNow'
 import { relativeTime } from '~/lib/dates'
@@ -7,9 +10,15 @@ import type { TreeRow } from '~/lib/notes/title-tree'
 import { noteTitle, useNotesStore, type QuickNote } from '~/stores/notes'
 
 const props = defineProps<{ row: TreeRow<QuickNote> }>()
-const emit = defineEmits<{ activate: []; toggle: []; menu: []; new: []; latest: [] }>()
+const emit = defineEmits<{ activate: []; pin: []; toggle: []; menu: []; new: []; latest: [] }>()
 const notes = useNotesStore()
 const now = useNow()
+
+/** Duplo clique na linha (não nos botões dela nem na setinha da pasta): fixa a nota. */
+function onDoubleClick(event: MouseEvent) {
+  if (!props.row.note || (event.target as HTMLElement).closest('button, .twisty')) return
+  emit('pin')
+}
 
 function onDragStart(event: DragEvent) {
   if (props.row.note) startNoteDrag(event, props.row.note.id)
@@ -28,6 +37,7 @@ function onDragStart(event: DragEvent) {
     tabindex="0"
     :draggable="!!row.note"
     @click="emit('activate')"
+    @dblclick="onDoubleClick"
     @keydown.enter="emit('activate')"
     @contextmenu.prevent="emit('menu')"
     @dragstart="onDragStart"

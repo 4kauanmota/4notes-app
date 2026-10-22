@@ -16,6 +16,10 @@ export const DATA_PATHS = {
   linkIconsDir: 'links/icons',
   /** Timer: categorias das atividades, histórico de sessões e a sessão em andamento. */
   timerFile: 'timer/timer.json',
+  /** Categorias compartilhadas por todos os módulos (1.7.0): nome, cor, ícone e foto de cada uma. */
+  categoriesFile: 'categories/categories.json',
+  /** Finanças (1.7.0): os gastos (e a lista de categorias usadas nelas). */
+  financeFile: 'finance/finance.json',
 
   metaDir: '.4notes',
   /**

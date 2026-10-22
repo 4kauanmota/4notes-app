@@ -12,6 +12,10 @@
  *
  * O nome da categoria é o nome da pasta. Uma pasta criada fora do app (com notas)
  * também aparece como categoria; uma categoria sem notas existe só no categorias.json.
+ *
+ * Desde a 1.7.0 as categorias são as compartilhadas do app (stores/categories.ts): o
+ * categorias.json guarda também o id da categoria (`id`) e de qual imagem da biblioteca
+ * veio a cópia da foto (`source`). O nome da pasta acompanha o nome da categoria.
  */
 import { isCategoryIcon } from '../category-icons'
 import { PALETTE, isPaletteColor, type PaletteColor } from '../colors'
@@ -25,6 +29,10 @@ export interface NoteCategory {
   image: string | null
   /** Ícone pronto (lib/category-icons.ts), ou null. A imagem, se houver, tem prioridade. */
   icon: string | null
+  /** Id da categoria compartilhada (1.7.0); null = ainda não conciliada (pasta nova, arquivo de uma versão antiga). */
+  id?: string | null
+  /** Imagem da biblioteca (attachments/…) de onde veio a cópia da foto (1.7.0), ou null. */
+  source?: string | null
 }
 
 export const CATEGORIES_FILE = `${DATA_PATHS.notesDir}/categorias.json`
@@ -90,13 +98,26 @@ export function normalizeCategories(raw: unknown): NoteCategory[] {
     if (categoryNameProblem(name, result.map((category) => category.name))) continue
     const image = typeof item.image === 'string' && item.image.trim() && !/[/\\]/.test(item.image) ? item.image.trim() : null
     const icon = isCategoryIcon(item.icon) ? item.icon : null
-    result.push({ name, color: isPaletteColor(item.color) ? item.color : colorForFolder(name), image, icon })
+    const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : null
+    const source = typeof item.source === 'string' && /^attachments\//.test(item.source) && !item.source.split('/').includes('..') ? item.source : null
+    result.push({ name, color: isPaletteColor(item.color) ? item.color : colorForFolder(name), image, icon, id, source: image ? source : null })
   }
   return result
 }
 
 export function serializeCategories(categories: NoteCategory[]): string {
-  const data = { app: '4notes', version: 1, categories: categories.map(({ name, color, icon, image }) => ({ name, color, icon, image })) }
+  const data = {
+    app: '4notes',
+    version: 1,
+    categories: categories.map(({ name, color, icon, image, id, source }) => ({
+      ...(id ? { id } : {}),
+      name,
+      color,
+      icon,
+      image,
+      ...(image && source ? { source } : {}),
+    })),
+  }
   return `${JSON.stringify(data, null, 2)}\n`
 }
 
@@ -114,7 +135,7 @@ export function mergeWithFolders(saved: NoteCategory[], folders: string[]): Note
     .sort((a, b) => a.localeCompare(b, 'pt-BR'))
   for (const folder of extra) {
     known.add(nameKey(folder))
-    result.push({ name: folder, color: colorForFolder(folder), image: null, icon: null })
+    result.push({ name: folder, color: colorForFolder(folder), image: null, icon: null, id: null, source: null })
   }
   return result
 }

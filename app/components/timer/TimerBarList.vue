@@ -5,7 +5,7 @@
  * balões: todo valor já está escrito.
  */
 import { computed, ref } from 'vue'
-import { formatDuration } from '~/lib/timer/format'
+import { TIME_FORMAT, type ChartFormat } from '~/lib/chart-format'
 
 interface BarRow {
   key: string
@@ -17,7 +17,17 @@ interface BarRow {
   ms: number
 }
 
-const props = withDefaults(defineProps<{ rows: BarRow[]; limit?: number; emptyLabel?: string }>(), { limit: 8, emptyLabel: 'Sem dados' })
+const props = withDefaults(
+  defineProps<{
+    rows: BarRow[]
+    limit?: number
+    emptyLabel?: string
+    /** Como escrever os valores (padrão: tempo; as Finanças usam dinheiro). Os valores vêm em `ms`. */
+    format?: ChartFormat
+  }>(),
+  { limit: 8, emptyLabel: 'Sem dados', format: () => TIME_FORMAT },
+)
+const formatDuration = (value: number, _options?: unknown) => props.format.full(value)
 
 const expanded = ref(false)
 const shown = computed(() => (expanded.value ? props.rows : props.rows.slice(0, props.limit)))

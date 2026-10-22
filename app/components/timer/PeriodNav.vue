@@ -24,6 +24,8 @@ const props = defineProps<{
   today: ISODate
   /** Oferece "Tudo" (sem período) — no Histórico. */
   allowAll?: boolean
+  /** O que aparece com "Tudo" escolhido (padrão: as sessões do Timer). */
+  allLabel?: string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: Period | null] }>()
 
@@ -53,7 +55,7 @@ const kind = computed<KindChoice>({
   },
 })
 
-const label = computed(() => (props.modelValue ? periodLabel(props.modelValue, props.today) : 'Todas as sessões'))
+const label = computed(() => (props.modelValue ? periodLabel(props.modelValue, props.today) : (props.allLabel ?? 'Todas as sessões')))
 const isCurrent = computed(() => !props.modelValue || containsDay(props.modelValue, props.today))
 const canGoNext = computed(() => !!props.modelValue && shiftPeriod(props.modelValue, 1, props.weekStart).from <= props.today)
 

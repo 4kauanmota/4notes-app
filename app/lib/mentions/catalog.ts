@@ -63,6 +63,13 @@ export const MENTION_KINDS: Record<MentionKind, MentionKindInfo> = {
     missing: 'Link não encontrado',
     gone: 'O link não foi encontrado no módulo Links (foi excluído).',
   },
+  expense: {
+    icon: 'wallet',
+    noun: 'Gasto',
+    open: 'Abrir o gasto nas Finanças',
+    missing: 'Gasto não encontrado',
+    gone: 'O gasto não foi encontrado nas Finanças (foi excluído).',
+  },
 }
 
 /** Um item da lista do "@", antes de filtrar e ordenar. */
@@ -70,7 +77,7 @@ export interface RankItem {
   title: string
   /** Outros textos que também acham o item (categoria, endereço, data…). */
   keywords?: string
-  /** Fila: 0 = notas e tarefas abertas, 1 = tarefas concluídas, 2 = mapas e links, 3 = registros do Timer. */
+  /** Fila: 0 = notas e tarefas abertas, 1 = tarefas concluídas, 2 = mapas e links, 3 = registros do Timer e gastos. */
   late?: number
   /** Desempate dentro da mesma fila (menor primeiro) — ex.: registros mais recentes antes. */
   order?: number

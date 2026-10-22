@@ -56,7 +56,8 @@ const tip = computed(() => {
   font-weight: 600;
 }
 .mention-chip.mc-task,
-.mention-chip.mc-timer {
+.mention-chip.mc-timer,
+.mention-chip.mc-expense {
   background: var(--accent-soft);
   color: var(--accent-text);
 }

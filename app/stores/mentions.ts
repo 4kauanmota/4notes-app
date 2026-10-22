@@ -2,8 +2,8 @@
  * Menções — a única ligação entre os módulos (pedida para as menções):
  *
  * - Notas (das Notas e do Mapa Mental) e Tarefas mencionam itens de todos os módulos:
- *   notas, notas dos mapas, mapas inteiros, tarefas, links salvos e registros do
- *   histórico do Timer. Nas notas, a menção é um link Markdown
+ *   notas, notas dos mapas, mapas inteiros, tarefas, links salvos, registros do
+ *   histórico do Timer e gastos das Finanças (1.7.0). Nas notas, a menção é um link Markdown
  *   (lib/notes/mention-links.ts); nas tarefas, fica na lista "Menções" (tasks.json,
  *   lib/mentions/refs.ts).
  * - Cada tipo de item tem um provedor (PROVIDERS): lista os itens para o "@", diz como
@@ -14,7 +14,7 @@
  *   caminho, que é corrigido aqui quando muda (abaixo).
  * - Módulo desativado: avisa e oferece "Ativar" (stores/modules.ts) em vez de abrir uma
  *   tela que não está no menu.
- * - "Ver menções" (no Timer e nos Links): procura onde um item foi mencionado — nas
+ * - "Ver menções" (no Timer, nos Links e nas Finanças): procura onde um item foi mencionado — nas
  *   Notas, nas notas de todos os mapas e nas tarefas — e leva até lá.
  * - Quando uma nota, uma categoria ou um mapa muda de nome no app (lib/note-events.ts),
  *   quando uma tarefa ou um registro do Timer muda de título, ou quando um link salvo
@@ -51,10 +51,13 @@ import {
 import { DATA_PATHS } from '~/lib/storage/paths'
 import { DESCRIPTION_DIR } from '~/lib/tasks/description'
 import type { Task } from '~/lib/tasks/model'
+import { formatMoney } from '~/lib/finance/format'
+import type { Expense } from '~/lib/finance/model'
 import { formatDuration } from '~/lib/timer/format'
 import { MODE_LABELS, STATUS_LABELS, type TimerSession } from '~/lib/timer/model'
 import { sessionDay, weekdayName } from '~/lib/timer/stats'
 import { debounce } from '~/lib/utils/async'
+import { useFinanceStore } from './finance'
 import { useLinksStore } from './links'
 import { useModulesStore } from './modules'
 import { useMindmapStore } from './mindmap'
@@ -67,6 +70,7 @@ const mindmap = useMindmapStore()
 const tasks = useTasksStore()
 const links = useLinksStore()
 const timer = useTimerStore()
+const finance = useFinanceStore()
 
 /** Um item da lista do "@" (o que vai para a nota + o que decide a ordem). */
 export type MentionItem = MentionTarget & RankItem
@@ -300,6 +304,38 @@ const linksProvider: MentionProvider = {
   open: (path) => openSavedLink(idOf(path)?.id ?? ''),
 }
 
+// ── Gastos das Finanças (1.7.0) ──────────────────────────────────────────────
+
+/** Título de um gasto: a descrição (ou "Gasto", se ficou sem). */
+const expenseTitle = (expense: Expense) => expense.description || 'Gasto'
+const expenseDetail = (expense: Expense) => join(finance.categoryOf(expense)?.name, shortDay(expense.date), formatMoney(expense.amount))
+
+const financeProvider: MentionProvider = {
+  module: 'finance',
+  items: () =>
+    finance.state.expenses.map((expense) => ({
+      path: idMentionPath('expense', expense.id),
+      title: expenseTitle(expense),
+      where: `Gasto · ${expenseDetail(expense)}`,
+      // Também acha pela categoria, pela data e pelo valor ("@mercado 21/10", "@52,30")
+      keywords: join(finance.categoryOf(expense)?.name, formatDateBR(expense.date), formatMoney(expense.amount)),
+      late: 3,
+      // Os mais recentes primeiro
+      order: -Date.parse(`${expense.date}T12:00:00`),
+    })),
+  describe: (path) => {
+    const expense = finance.findExpense(idOf(path)?.id ?? '')
+    return expense ? { title: expenseTitle(expense), detail: expenseDetail(expense) } : null
+  },
+  open: async (path) => {
+    const id = idOf(path)?.id ?? ''
+    if (!finance.findExpense(id)) return gone('expense')
+    tasks.closeDrawer()
+    await navigateTo('/finance')
+    finance.revealExpense(id)
+  },
+}
+
 const PROVIDERS: Record<MentionKind, MentionProvider> = {
   note: notesProvider,
   map: mapNotesProvider,
@@ -307,6 +343,7 @@ const PROVIDERS: Record<MentionKind, MentionProvider> = {
   task: tasksProvider,
   timer: timerProvider,
   link: linksProvider,
+  expense: financeProvider,
 }
 
 // ── Buscar, descrever e abrir ────────────────────────────────────────────────
@@ -410,6 +447,8 @@ export const mentionRevision = computed(() => {
   parts.push(mindmap.state.maps.map((map) => `${map.name}:${map.notes}`).join('/'))
   for (const session of timer.state.sessions) parts.push(`${session.id}:${session.activity}:${session.categoryId}:${session.duration}`)
   parts.push(timer.state.categories.map((category) => category.name).join('/'))
+  for (const expense of finance.state.expenses) parts.push(`${expense.id}:${expense.description}:${expense.amount}:${expense.categoryId}:${expense.date}`)
+  parts.push(finance.state.categories.map((category) => category.name).join('/'))
   // Ícones dos links salvos (aparecem na frente dos links mencionados)
   let withIcon = 0
   for (const link of links.state.links) if (link.icon) withIcon++
@@ -474,7 +513,7 @@ export async function findMentionPlaces(subject: MentionSubject): Promise<Mentio
 /** O que o diálogo "Ver menções" está mostrando (components/shell/MentionsDialog.vue). */
 export const mentionsDialog = reactive({ subject: null as MentionSubject | null })
 
-/** Abre o "Ver menções" de um item (Timer: registro; Links: link salvo). */
+/** Abre o "Ver menções" de um item (Timer: registro; Links: link salvo; Finanças: gasto). */
 export function showMentionsOf(subject: MentionSubject): void {
   mentionsDialog.subject = { ...subject }
 }
@@ -482,6 +521,11 @@ export function showMentionsOf(subject: MentionSubject): void {
 export const timerSessionSubject = (session: TimerSession): MentionSubject => ({
   path: idMentionPath('timer', session.id),
   title: sessionTitle(session),
+})
+
+export const expenseSubject = (expense: Expense): MentionSubject => ({
+  path: idMentionPath('expense', expense.id),
+  title: expenseTitle(expense),
 })
 
 export const savedLinkSubject = (link: SavedLink): MentionSubject => ({
@@ -568,9 +612,10 @@ export function installMentionTracking(): void {
     rewriteEverywhere((content, dir) => renameMentionLinks(content, dir, change, title))
   })
 
-  // Tarefa ou registro do Timer com título novo: o texto das menções a eles acompanha (em lote)
+  // Tarefa, registro do Timer ou gasto com título novo: o texto das menções a eles acompanha (em lote)
   trackTitles(() => tasks.state.tasks.map((task) => [taskMentionPath(task.id), task.title]))
   trackTitles(() => timer.state.sessions.map((session) => [idMentionPath('timer', session.id), sessionTitle(session)]))
+  trackTitles(() => finance.state.expenses.map((expense) => [idMentionPath('expense', expense.id), expenseTitle(expense)]))
 
   // Link salvo com endereço novo: os links nas notas e as menções nas tarefas acompanham
   let urls = new Map<string, string>()

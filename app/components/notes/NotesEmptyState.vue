@@ -33,7 +33,7 @@ const recent = computed(() => notes.visibleNotes.value.slice(0, 5))
 
       <div v-if="recent.length" class="recent">
         <div class="section-label">Recentes</div>
-        <button v-for="note in recent" :key="note.id" class="recent-item" @click="notes.openNote(note.id)">
+        <button v-for="note in recent" :key="note.id" class="recent-item" @click="notes.openNote(note.id, { preview: true })">
           <AppIcon name="notes" :size="15" />
           <span class="recent-title">{{ noteTitle(note) }}</span>
           <span class="recent-time">{{ relativeTime(note.mtimeMs, now) }}</span>

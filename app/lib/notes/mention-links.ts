@@ -8,6 +8,7 @@
  *   [Principal](../mindmap/Principal/mapa.json)       → o mapa "Principal" inteiro
  *   [Estudar Godot](../tasks/tasks.json#t_k3j9x0)     → tarefa (o id fica depois do "#")
  *   [Estudando Godot](../timer/timer.json#s_k3j9x0)   → registro do histórico do Timer
+ *   [Feira](../finance/finance.json#e_k3j9x0)         → gasto das Finanças (1.7.0)
  *   [Nuxt](https://nuxt.com)                          → link salvo (um link comum)
  *
  * Tarefas, registros do Timer e links salvos são achados pelo id (que não muda);
@@ -28,12 +29,12 @@ export const escapeLinkText = (text: string) => text.replace(/[\\[\]]/g, '\\$&')
 export const unescapeLinkText = (text: string) => text.replace(/\\([\\[\]])/g, '$1')
 
 /** Itens achados pelo id: o arquivo onde ficam (o id vai depois do "#"). */
-const ID_FILES = { task: DATA_PATHS.tasksFile, timer: DATA_PATHS.timerFile, link: DATA_PATHS.linksFile } as const
+const ID_FILES = { task: DATA_PATHS.tasksFile, timer: DATA_PATHS.timerFile, link: DATA_PATHS.linksFile, expense: DATA_PATHS.financeFile } as const
 export type IdKind = keyof typeof ID_FILES
 
 /**
  * O que uma menção pode ser: nota das Notas, nota de um mapa ("map"), um mapa mental
- * inteiro ("mindmap"), tarefa, registro do Timer ou link salvo.
+ * inteiro ("mindmap"), tarefa, registro do Timer, link salvo ou gasto das Finanças.
  */
 export type MentionKind = 'note' | 'map' | 'mindmap' | IdKind
 
@@ -82,7 +83,7 @@ export function mentionMarkdown(noteDir: string, target: string, title: string):
 /**
  * O endereço do link aponta para algo do workspace que pode ser mencionado? Devolve o
  * caminho da menção ("notes/Ideias.md", "mindmap/Principal/mapa.json",
- * "tasks/tasks.json#t_x1", "timer/timer.json#s_x1") ou null. Links salvos são links
+ * "tasks/tasks.json#t_x1", "timer/timer.json#s_x1", "finance/finance.json#e_x1") ou null. Links salvos são links
  * comuns (endereço do site) e não passam por aqui.
  */
 export function mentionTarget(noteDir: string, href: string): string | null {
@@ -92,6 +93,7 @@ export function mentionTarget(noteDir: string, href: string): string | null {
   if (link.fragment) {
     if (nameKey(link.path) === nameKey(ID_FILES.task)) return idMentionPath('task', link.fragment)
     if (nameKey(link.path) === nameKey(ID_FILES.timer)) return idMentionPath('timer', link.fragment)
+    if (nameKey(link.path) === nameKey(ID_FILES.expense)) return idMentionPath('expense', link.fragment)
     return null
   }
   const map = mapOfMentionPath(link.path)

@@ -9,13 +9,11 @@
  */
 import { computed, nextTick, reactive } from 'vue'
 import { errorMessage, type BookmarkFolder } from '#shared/ipc'
-import { confirmDialog } from '~/composables/useDialog'
+import { requestCategoryRemoval } from '~/composables/useCategoryActions'
 import { notifyError, showToast } from '~/composables/useToasts'
 import type { PaletteColor } from '~/lib/colors'
 import { planImport, type ImportCandidate, type ImportMode } from '~/lib/links/import'
 import {
-  folderIdFor,
-  folderNameProblem,
   hostOf,
   normalizeUrl,
   placeholderTitle,
@@ -29,7 +27,9 @@ import {
   type SavedLink,
 } from '~/lib/links/model'
 import { linksRepository as repo, normalizeLinksSort } from '~/lib/links/repository'
+import { DATA_PATHS } from '~/lib/storage/paths'
 import { createId, debounce, SerialQueue } from '~/lib/utils/async'
+import { registerCategoryModule, useCategoriesStore, type SharedCategory } from './categories'
 import { onSettingsChange, settingsSection, updateSettingsSection } from './settings'
 
 export type LinkSelection = 'all' | 'none' | `folder:${string}`
@@ -426,52 +426,52 @@ async function copyLink(id: string): Promise<void> {
 }
 
 // ── Ações: categorias ───────────────────────────────────────────────────────
+//
+// As categorias são as compartilhadas do app (stores/categories.ts): as "folders" do
+// links.json dizem quais aparecem aqui (e em que ordem), com uma cópia do nome, da
+// cor, do ícone e da foto.
 
+const shared = useCategoriesStore()
+
+/** Problema no nome (ou null): os nomes valem para o app inteiro. `exceptId` = a categoria sendo editada. */
 function folderProblem(name: string, exceptId?: string): string | null {
-  return folderNameProblem(
-    name,
-    state.folders.filter((folder) => folder.id !== exceptId).map((folder) => folder.name),
-  )
+  return shared.nameProblem(name, exceptId)
 }
 
-function addFolder(name: string, color: PaletteColor, icon: string | null, image: string | null = null): LinkFolder | null {
-  const problem = folderProblem(name)
-  if (problem) {
-    notifyError(problem)
-    return null
-  }
-  const folder: LinkFolder = {
-    id: folderIdFor(name, (id) => folderById.value.has(id)),
-    name: name.trim(),
-    color,
-    icon: image ? null : icon,
-    image,
-    createdAt: new Date().toISOString(),
-  }
-  state.folders.push(folder)
+const mirrorOf = (category: SharedCategory, createdAt = new Date().toISOString()): LinkFolder => ({
+  id: category.id,
+  name: category.name,
+  color: category.color,
+  icon: category.image ? null : category.icon,
+  image: category.image,
+  createdAt,
+})
+
+/** Põe uma categoria do app na lista dos Links (se ainda não estiver). */
+function attachShared(category: SharedCategory): LinkFolder {
+  const existing = folderById.value.get(category.id)
+  if (existing) return existing
+  state.folders.push(mirrorOf(category))
   scheduleSave()
+  shared.touch()
   return state.folders.at(-1)!
 }
 
-/** Muda nome, cor, ícone e/ou foto (`image`: imagem da biblioteca; null = sem foto). */
-function updateFolder(id: string, patch: { name?: string; color?: PaletteColor; icon?: string | null; image?: string | null }): boolean {
-  const folder = folderById.value.get(id)
-  if (!folder) return false
-  if (patch.name !== undefined) {
-    const problem = folderProblem(patch.name, id)
-    if (problem) {
-      notifyError(problem)
-      return false
-    }
-    folder.name = patch.name.trim()
-  }
-  if (patch.color) folder.color = patch.color
-  if (patch.icon !== undefined) folder.icon = patch.icon
-  if (patch.image !== undefined) folder.image = patch.image
-  // A foto tem prioridade: com foto, o ícone não fica guardado à toa
-  if (folder.image) folder.icon = null
-  scheduleSave()
-  return true
+/** Categoria nova (no app inteiro) já na lista dos Links; com um nome que já existe no app, usa aquela. */
+function addFolder(name: string, color: PaletteColor, icon: string | null, image: string | null = null): LinkFolder | null {
+  const category = shared.findByName(name) ?? shared.createCategory({ name, color, icon, image })
+  return category ? attachShared(category) : null
+}
+
+/** "Usar categoria existente": uma categoria do app passa a aparecer nos Links. */
+function attachFolder(id: string): LinkFolder | null {
+  const category = shared.findCategory(id)
+  return category ? attachShared(category) : null
+}
+
+/** Muda nome, cor, ícone e/ou foto (`image`: imagem da biblioteca; null = sem foto) no app inteiro. */
+function updateFolder(id: string, patch: { name?: string; color?: PaletteColor; icon?: string | null; image?: string | null }): Promise<boolean> {
+  return shared.updateCategory(id, patch)
 }
 
 /**
@@ -487,43 +487,67 @@ async function libraryImage(path: string): Promise<string | null> {
   }
 }
 
-/** Exclui a categoria: os links dela ficam sem categoria (nenhum link é apagado). Com Desfazer. */
+/** Tira a categoria dos Links: os links dela ficam sem categoria (nenhum link é apagado). */
 function deleteFolder(id: string): void {
   const index = state.folders.findIndex((folder) => folder.id === id)
-  if (index < 0) return
-  const [folder] = state.folders.splice(index, 1)
-  const members = state.links.filter((link) => link.folderId === id).map((link) => link.id)
+  if (index >= 0) state.folders.splice(index, 1)
   for (const link of state.links) if (link.folderId === id) link.folderId = null
   if (state.selection === `folder:${id}`) state.selection = 'all'
   scheduleSave()
-  showToast({
-    message: `Categoria “${folder!.name}” excluída`,
-    icon: 'trash',
-    action: {
-      label: 'Desfazer',
-      run: () => {
-        if (folderById.value.has(id)) return
-        state.folders.splice(Math.min(index, state.folders.length), 0, folder!)
-        for (const link of state.links) if (members.includes(link.id) && !link.folderId) link.folderId = id
-        scheduleSave()
-      },
-    },
-  })
 }
 
-async function requestDeleteFolder(id: string): Promise<boolean> {
-  const folder = folderById.value.get(id)
-  if (!folder) return false
-  const count = countByFolder.value.get(id) ?? 0
-  const ok = await confirmDialog({
-    title: `Excluir a categoria “${folder.name}”?`,
-    message: count ? `${count} ${count === 1 ? 'link fica' : 'links ficam'} sem categoria. Nenhum link é apagado.` : 'A categoria está vazia.',
-    confirmLabel: 'Excluir categoria',
-    danger: true,
-  })
-  if (ok) deleteFolder(id)
-  return ok
+/** Os links (e o lugar na lista) de `fromId` passam para `to`. */
+function remapFolder(fromId: string, to: SharedCategory): void {
+  let used = false
+  for (const link of state.links) {
+    if (link.folderId !== fromId) continue
+    link.folderId = to.id
+    used = true
+  }
+  const index = state.folders.findIndex((folder) => folder.id === fromId)
+  if (index >= 0) {
+    if (state.folders.some((folder) => folder.id === to.id)) state.folders.splice(index, 1)
+    else state.folders.splice(index, 1, mirrorOf(to, state.folders[index]!.createdAt))
+  } else if (used) {
+    attachShared(to)
+  }
+  if (state.selection === `folder:${fromId}`) state.selection = `folder:${to.id}`
+  scheduleSave()
 }
+
+/** Pede o que fazer com os links e exclui a categoria (dos Links ou do app). */
+function requestDeleteFolder(id: string): Promise<boolean> {
+  return requestCategoryRemoval(id, 'links')
+}
+
+registerCategoryModule({
+  id: 'links',
+  ready: () => state.loaded && !state.error,
+  members: () => state.folders.map((folder) => ({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon, image: folder.image })),
+  records: (id) =>
+    state.links
+      .filter((link) => link.folderId === id)
+      .map((link) => ({ id: link.id, title: link.title, detail: hostOf(link.url), path: `${DATA_PATHS.linksFile}#${link.id}` })),
+  sync: (category) => {
+    const mine = folderById.value.get(category.id)
+    if (!mine) return true
+    const next = mirrorOf(category, mine.createdAt)
+    if (mine.name !== next.name || mine.color !== next.color || mine.icon !== next.icon || mine.image !== next.image) {
+      Object.assign(mine, next)
+      scheduleSave()
+    }
+    return true
+  },
+  attach: (category) => !!attachShared(category),
+  remap: (from, to) => {
+    if (from.id) remapFolder(from.id, to)
+    return true
+  },
+  detach: (from) => {
+    if (from.id) deleteFolder(from.id)
+    return true
+  },
+})
 
 function moveFolder(from: number, to: number): void {
   if (from === to || from < 0 || to < 0 || from >= state.folders.length || to >= state.folders.length) return
@@ -629,6 +653,7 @@ export function useLinksStore() {
     reveal,
     folderProblem,
     addFolder,
+    attachFolder,
     updateFolder,
     deleteFolder,
     requestDeleteFolder,

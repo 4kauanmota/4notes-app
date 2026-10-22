@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import {
   activeFormats,
   balancedSlice,
+  canClearFormatting,
   breakOutOfTags,
   clearColor,
   clearFormatting,
@@ -188,6 +189,50 @@ describe('formatação inline', () => {
     const e = editor(doc, 0, doc.length)
     clearFormatting(e.view)
     expect(e.text).toBe('a b c d')
+  })
+
+  it('limpa só o trecho selecionado (1.7.0)', () => {
+    // "mundo" selecionado: "olá" continua em negrito
+    const doc = '**olá mundo**'
+    const e = editor(doc, doc.indexOf('mundo'), doc.indexOf('mundo') + 5)
+    clearFormatting(e.view)
+    expect(e.text).toBe('**olá** mundo')
+    expect(e.selected).toBe('mundo')
+
+    // Formatos aninhados e cor: tudo sai do selecionado, o resto fica
+    const nested = '<span style="color: red">ab **cd** ef</span> gh'
+    const n = editor(nested, nested.indexOf('cd'), nested.indexOf('ef') + 2)
+    clearFormatting(n.view)
+    expect(n.text).toBe('<span style="color: red">ab</span> cd ef gh')
+
+    // Seleção que só encosta num formato vizinho não mexe nele
+    const near = '**ab** cd'
+    const m = editor(near, near.indexOf('cd'), near.length)
+    expect(canClearFormatting(m.state)).toBe(false)
+    expect(clearFormatting(m.view)).toBe(false)
+    expect(m.text).toBe(near)
+
+    // Várias linhas e itálico + sublinhado no mesmo trecho
+    const lines = '*a <u>b</u>*\n==c== d'
+    const l = editor(lines, 0, lines.length)
+    clearFormatting(l.view)
+    expect(l.text).toBe('a b\nc d')
+  })
+
+  it('"Limpar formatação" só com formatação removível na seleção (1.7.0)', () => {
+    expect(canClearFormatting(editor('texto comum', 0, 5).state)).toBe(false)
+    expect(canClearFormatting(editor('**negrito**', 4).state)).toBe(false) // sem seleção
+    expect(canClearFormatting(editor('**negrito** e mais', 2, 6).state)).toBe(true)
+    expect(canClearFormatting(editor('a ==b== c', 0, 9).state)).toBe(true)
+    expect(canClearFormatting(editor('`x` y', 0, 5).state)).toBe(true)
+    // Link não é formatação para limpar (o "Limpar formatação" deixa os links)
+    expect(canClearFormatting(editor('[nuxt](https://nuxt.com) e', 0, 26).state)).toBe(false)
+    // Link com negrito dentro: o negrito conta, o link continua
+    const doc = '[**nuxt**](https://nuxt.com)'
+    const e = editor(doc, 0, doc.length)
+    expect(canClearFormatting(e.state)).toBe(true)
+    clearFormatting(e.view)
+    expect(e.text).toBe('[nuxt](https://nuxt.com)')
   })
 
   it('ignora marcações dentro de código', () => {

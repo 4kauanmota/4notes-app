@@ -13,7 +13,7 @@
  * escondidas, em hidden-markup.ts.
  */
 import { ensureSyntaxTree } from '@codemirror/language'
-import { EditorSelection, EditorState, type ChangeSpec, type Range, type SelectionRange, type StateEffect } from '@codemirror/state'
+import { ChangeSet, EditorSelection, EditorState, type ChangeSpec, type Range, type SelectionRange, type StateEffect } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type Command, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import {
@@ -300,25 +300,63 @@ export function clearColor(view: EditorView): boolean {
   return true
 }
 
-/** Remove toda a formatação inline que encosta na seleção (os links ficam). */
-export function clearFormatting(view: EditorView): boolean {
-  const { state } = view
-  treeFor(state, state.selection.main.to)
-  const transaction = state.changeByRange((range) => {
-    const specs: ChangeSpec[] = []
-    const seen = new Set<string>()
-    for (const seg of segmentsOf(state, range)) {
-      for (const el of findElements(state, seg.lineFrom, seg.lineTo)) {
-        const key = `${el.format}:${el.from}:${el.to}`
-        if (el.format === 'link' || seen.has(key) || el.to < seg.from || el.from > seg.to) continue
-        seen.add(key)
-        specs.push({ from: el.from, to: el.openTo }, { from: el.closeFrom, to: el.to })
-      }
-    }
-    const changes = state.changes(specs)
-    return { changes, range: EditorSelection.range(changes.mapPos(range.from, 1), changes.mapPos(range.to, -1)) }
+/** Formatos que o "Limpar formatação" tira (os links ficam: são conteúdo, não aparência). */
+const CLEARABLE: InlineFormat[] = ['color', 'highlight', 'code', 'strike', 'underline', 'italic', 'bold']
+
+/** Elementos de um formato que alcançam o texto visível do trecho. */
+function overlapping(elements: FormatElement[], seg: Segment, format: InlineFormat): FormatElement[] {
+  return elements.filter((el) => el.format === format && el.openTo < seg.to && seg.from < el.closeFrom)
+}
+
+/**
+ * A seleção tem alguma formatação que o "Limpar formatação" tiraria? (1.7.0: o comando
+ * só aparece na barra quando tem o que limpar.) Seleção vazia = não.
+ */
+export function canClearFormatting(state: EditorState): boolean {
+  const ranges = state.selection.ranges.filter((range) => !range.empty)
+  if (!ranges.length) return false
+  treeFor(state, ranges.at(-1)!.to)
+  return ranges.some((range) => {
+    const { segments, perLine } = preparedSegments(state, range)
+    return segments.some((seg, i) => CLEARABLE.some((format) => overlapping(perLine[i]!, seg, format).length > 0))
   })
-  view.dispatch(state.update(transaction, { userEvent: 'input.format' }))
+}
+
+/**
+ * Tira toda a formatação (negrito, itálico, sublinhado, tachado, marca-texto, código e
+ * cor) só do texto selecionado: o que estiver fora da seleção continua formatado
+ * ("**olá mundo**" com "mundo" selecionado → "**olá** mundo"). Os links ficam.
+ * Um formato de cada vez (as marcações de um mudam as posições do outro), tudo numa
+ * transação só: um Ctrl+Z desfaz a limpeza inteira.
+ */
+export function clearFormatting(view: EditorView): boolean {
+  let state = view.state
+  if (!canClearFormatting(state)) return false
+  let changes: ChangeSet | null = null
+  for (const format of CLEARABLE) {
+    treeFor(state, state.selection.ranges.at(-1)!.to)
+    const current = state
+    const specs: ChangeSpec[] = []
+    for (const range of current.selection.ranges) {
+      if (range.empty) continue
+      const { segments, perLine } = preparedSegments(current, range)
+      segments.forEach((seg, i) => {
+        for (const el of overlapping(perLine[i]!, seg, format)) {
+          specs.push(...removeFromSegment(current, { ...seg, from: Math.max(seg.from, el.openTo), to: Math.min(seg.to, el.closeFrom) }, el, perLine[i]!))
+        }
+      })
+    }
+    if (!specs.length) continue
+    const step = current.changes(specs)
+    const selection = EditorSelection.create(
+      current.selection.ranges.map((range) => (range.empty ? range.map(step) : EditorSelection.range(step.mapPos(range.from, 1), step.mapPos(range.to, -1)))),
+      current.selection.mainIndex,
+    )
+    state = current.update({ changes: step, selection }).state
+    changes = changes ? changes.compose(step) : step
+  }
+  if (!changes) return false
+  view.dispatch(view.state.update({ changes, selection: state.selection, userEvent: 'input.format' }))
   return true
 }
 

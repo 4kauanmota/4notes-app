@@ -7,6 +7,9 @@
  * No fim da faixa, quando a nota aberta tem outras versões ("4notes 1.4.1" →
  * "4notes 1.4.0" e "4notes 1.4.2", na mesma categoria), botões discretos abrem a
  * anterior (‹) e a próxima (›). Cada um só aparece se a versão existir.
+ * A aba temporária (1.7.0, `notes.state.previewId`) tem o título em itálico: o clique
+ * simples numa nota da lista troca a nota dela. Duplo clique na aba (ou editar a nota,
+ * ou "Fixar aba" no menu) a deixa fixa.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { choiceDialog } from '~/composables/useDialog'
@@ -164,8 +167,17 @@ async function requestClose(note: QuickNote) {
   if (choice === 'delete') void notes.deleteNote(note.id)
 }
 
+const isPreview = (note: QuickNote) => notes.state.previewId === note.id
+
+function tabTitle(note: QuickNote): string {
+  const category = notes.categoryOf(note)
+  const title = category ? `${noteTitle(note)} · ${category.name}` : noteTitle(note)
+  return isPreview(note) ? `${title}\nAba temporária: clique duas vezes para fixar` : title
+}
+
 async function openMenu(note: QuickNote) {
   const choice = await showContextMenu([
+    ...(isPreview(note) ? [{ id: 'pin', label: 'Fixar aba' }] : []),
     { id: 'close', label: 'Fechar aba' },
     { id: 'close-others', label: 'Fechar as outras abas', enabled: notes.state.openIds.length > 1 },
     separator,
@@ -177,6 +189,7 @@ async function openMenu(note: QuickNote) {
     { id: 'delete', label: 'Excluir nota', danger: true },
   ])
   if (handleCategoryChoice(choice, note) || handleExportChoice(choice, note)) return
+  if (choice === 'pin') notes.pinTab(note.id)
   if (choice === 'close') void notes.closeTab(note.id)
   if (choice === 'close-others') notes.closeOtherTabs(note.id)
   if (choice === 'duplicate') notes.duplicateNote(note.id)
@@ -215,15 +228,19 @@ async function openMenu(note: QuickNote) {
               dragging: dragIndex === index,
               'drop-target': dropIndex === index && dragIndex !== index,
               'has-category': !!categoryColor(note),
+              preview: isPreview(note),
             }"
             :style="categoryColor(note) ? { '--tab-cat': categoryColor(note)! } : undefined"
             :data-tab="note.id"
             :data-category="notes.categoryOf(note)?.name"
+            :data-preview="isPreview(note) || undefined"
             role="tab"
             :aria-selected="note.id === notes.state.activeId"
-            :title="notes.categoryOf(note) ? `${noteTitle(note)} · ${notes.categoryOf(note)!.name}` : noteTitle(note)"
+            :aria-description="isPreview(note) ? 'Aba temporária' : undefined"
+            :title="tabTitle(note)"
             draggable="true"
             @click="notes.activate(note.id)"
+            @dblclick="notes.pinTab(note.id)"
             @mousedown.middle.prevent="notes.closeTab(note.id)"
             @contextmenu.prevent="openMenu(note)"
             @dragstart="onDragStart(index, note, $event)"
@@ -259,7 +276,7 @@ async function openMenu(note: QuickNote) {
           :data-tip="`Versão anterior\n${noteTitle(previous.note)}`"
           data-tip-pos="left"
           :aria-label="`Abrir a versão anterior: ${noteTitle(previous.note)}`"
-          @click="notes.openNote(previous.note.id)"
+          @click="notes.openNote(previous.note.id, { preview: true })"
         >
           <AppIcon name="chevron-left" :size="14" :stroke="2" />
           <span class="version-label">{{ previous.label }}</span>
@@ -273,7 +290,7 @@ async function openMenu(note: QuickNote) {
           :data-tip="`Próxima versão\n${noteTitle(next.note)}`"
           data-tip-pos="left"
           :aria-label="`Abrir a próxima versão: ${noteTitle(next.note)}`"
-          @click="notes.openNote(next.note.id)"
+          @click="notes.openNote(next.note.id, { preview: true })"
         >
           <span class="version-label">{{ next.label }}</span>
           <AppIcon name="chevron-right" :size="14" :stroke="2" />
@@ -459,6 +476,11 @@ async function openMenu(note: QuickNote) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Aba temporária: título em itálico (como nos editores de código) */
+.tab.preview .tab-title {
+  font-style: italic;
+  padding-right: 1px; /* o itálico não fica cortado no fim */
 }
 .tab-end {
   position: relative;

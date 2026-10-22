@@ -6,12 +6,17 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { displayHost } from '~/lib/links/model'
+import { useCategoriesStore } from '~/stores/categories'
 import { useLinksStore } from '~/stores/links'
 import { savedLinkSubject, showMentionsOf } from '~/stores/mentions'
 
 const props = defineProps<{ open: boolean; linkId: string | null }>()
 const emit = defineEmits<{ close: [] }>()
 const links = useLinksStore()
+const shared = useCategoriesStore()
+
+/** Categorias do app que ainda não estão nos Links (escolher uma a coloca aqui). */
+const others = computed(() => shared.availableFor('links'))
 
 const title = ref('')
 const url = ref('')
@@ -60,6 +65,8 @@ function refresh() {
 
 function save() {
   if (!link.value) return
+  // Uma categoria do app que ainda não estava nos Links passa a aparecer aqui
+  if (folderId.value && !links.folderById.value.has(folderId.value)) links.attachFolder(folderId.value)
   const problem = links.updateLink(link.value.id, { title: title.value, url: url.value, folderId: folderId.value || null })
   if (problem) {
     error.value = problem
@@ -111,6 +118,9 @@ function remove() {
       <select id="link-edit-folder" v-model="folderId" class="select">
         <option value="">Sem categoria</option>
         <option v-for="folder in links.state.folders" :key="folder.id" :value="folder.id">{{ folder.name }}</option>
+        <optgroup v-if="others.length" label="Outras categorias do app">
+          <option v-for="category in others" :key="category.id" :value="category.id">{{ category.name }}</option>
+        </optgroup>
       </select>
 
       <div class="actions">

@@ -323,6 +323,7 @@ defineExpose({
             >
               <CategoryDot :color="category.color" :size="8" /> {{ category.name }}
             </button>
+            <OtherCategoryChips module="tasks" @pick="(id) => (categoryId = tasks.attachCategory(id)?.id ?? categoryId)" />
             <button type="button" class="cat-chip add" @click="categoryDialogOpen = true"><AppIcon name="plus" :size="12" /> Nova</button>
           </div>
         </div>

@@ -29,7 +29,7 @@ describe('registro dos módulos', () => {
       const values = MODULES.map((module) => module[key])
       expect(new Set(values).size, key).toBe(values.length)
     }
-    expect(MODULE_IDS).toEqual(['notes', 'tasks', 'mindmap', 'links', 'timer'])
+    expect(MODULE_IDS).toEqual(['notes', 'tasks', 'mindmap', 'links', 'timer', 'finance'])
   })
 
   it('todo módulo tem um tutorial curto e completo', () => {
@@ -54,8 +54,8 @@ describe('registro dos módulos', () => {
   })
 
   it('o atalho de módulos do "Geral" acompanha a lista de módulos', () => {
-    expect(GENERAL_TUTORIAL.shortcuts[0]!.keys).toEqual(['Mod', '1 / 2 / 3 / 4 / 5'])
-    expect(GENERAL_TUTORIAL.shortcuts[0]!.label).toBe('Ir para Notas / Tarefas / Mapa / Links / Timer')
+    expect(GENERAL_TUTORIAL.shortcuts[0]!.keys).toEqual(['Mod', '1 / 2 / 3 / 4 / 5 / 6'])
+    expect(GENERAL_TUTORIAL.shortcuts[0]!.label).toBe('Ir para Notas / Tarefas / Mapa / Links / Timer / Finanças')
   })
 
   it('acha o módulo pela rota', () => {
@@ -99,12 +99,12 @@ describe('preferências dos módulos (.4notes/app.json)', () => {
   it('a ordem do menu: guardada, completa e tolerante', () => {
     const saved = normalizePrefs({ modules: { order: ['links', 'notes', 'links', 7] } })
     // Os que faltam entram no fim, na ordem padrão
-    expect(saved.order).toEqual(['links', 'notes', 'tasks', 'mindmap', 'timer'])
-    expect(ids(orderedModules(saved))).toEqual(['links', 'notes', 'tasks', 'mindmap', 'timer'])
+    expect(saved.order).toEqual(['links', 'notes', 'tasks', 'mindmap', 'timer', 'finance'])
+    expect(ids(orderedModules(saved))).toEqual(['links', 'notes', 'tasks', 'mindmap', 'timer', 'finance'])
     // Módulo de outra versão do 4notes: fica guardado no lugar, mas não aparece
     const future = normalizePrefs({ modules: { order: ['agenda', 'mindmap'] } })
-    expect(future.order).toEqual(['agenda', 'mindmap', 'notes', 'tasks', 'links', 'timer'])
-    expect(ids(orderedModules(future))).toEqual(['mindmap', 'notes', 'tasks', 'links', 'timer'])
+    expect(future.order).toEqual(['agenda', 'mindmap', 'notes', 'tasks', 'links', 'timer', 'finance'])
+    expect(ids(orderedModules(future))).toEqual(['mindmap', 'notes', 'tasks', 'links', 'timer', 'finance'])
     // Os ativos seguem a ordem
     expect(ids(enabledModules(prefs(['tasks'], 'icon-label', ['links', 'tasks', 'notes', 'mindmap'])))).toEqual(['links', 'notes', 'mindmap'])
     // Todos desativados: volta o primeiro do menu
@@ -113,8 +113,15 @@ describe('preferências dos módulos (.4notes/app.json)', () => {
 
   it('workspace de antes do Timer: ele entra no fim do menu, já ativo', () => {
     const saved = normalizePrefs({ modules: { disabled: ['links'], order: ['tasks', 'notes', 'mindmap', 'links'], navStyle: 'icon' } })
-    expect(saved.order).toEqual(['tasks', 'notes', 'mindmap', 'links', 'timer'])
-    expect(ids(enabledModules(saved))).toEqual(['tasks', 'notes', 'mindmap', 'timer'])
+    expect(saved.order).toEqual(['tasks', 'notes', 'mindmap', 'links', 'timer', 'finance'])
+    expect(ids(enabledModules(saved))).toEqual(['tasks', 'notes', 'mindmap', 'timer', 'finance'])
+  })
+
+  it('workspace de antes das Finanças (1.7.0): elas entram no fim do menu, já ativas', () => {
+    const saved = normalizePrefs({ modules: { disabled: ['mindmap'], order: ['timer', 'notes', 'tasks', 'mindmap', 'links'] } })
+    expect(saved.order).toEqual(['timer', 'notes', 'tasks', 'mindmap', 'links', 'finance'])
+    expect(ids(enabledModules(saved))).toEqual(['timer', 'notes', 'tasks', 'links', 'finance'])
+    expect(moduleForPath('/finance')?.key).toBe('6')
   })
 
   it('reorganizar só os do menu deixa os desativados no lugar', () => {
@@ -135,7 +142,7 @@ describe('preferências dos módulos (.4notes/app.json)', () => {
   })
 
   it('o último módulo ativo não pode ser desligado', () => {
-    const one = prefs(['tasks', 'mindmap', 'links', 'timer'])
+    const one = prefs(['tasks', 'mindmap', 'links', 'timer', 'finance'])
     expect(canDisable(one, 'notes')).toBe(false)
     expect(withModuleEnabled(one, 'notes', false)).toBeNull()
     expect(canDisable(prefs(['tasks']), 'notes')).toBe(true)
