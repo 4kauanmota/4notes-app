@@ -1,19 +1,24 @@
 <script setup lang="ts">
 /**
- * Módulo FINANÇAS (1.7.0): registrar gastos, o histórico e o painel com os gráficos.
+ * Módulo FINANÇAS (1.7.0; contas, entradas, recorrências, saldo e extrato na 1.7.1), em
+ * três áreas:
+ *  - Lançamentos: registrar (gasto ou entrada, uma vez ou repetindo), o histórico e
+ *    importar o extrato do banco;
+ *  - Contas: vencidas, próximas, as recorrências e os pagamentos confirmados;
+ *  - Painel: o saldo (realizado × projetado) e os gráficos.
  * Os dados ficam no store (stores/finance.ts) e em finance/finance.json.
  */
 import { computed, nextTick, ref } from 'vue'
 import { useShortcuts } from '~/composables/useShortcuts'
 import { formatMoney } from '~/lib/finance/format'
-import { filterExpenses, totalOf } from '~/lib/finance/model'
+import { cashFlow } from '~/lib/finance/bills'
 import { canReveal } from '~/lib/platform'
 import { periodOf } from '~/lib/timer/stats'
 import { useFinanceStore, type FinanceTab } from '~/stores/finance'
 
 const finance = useFinanceStore()
 const reveal = canReveal()
-const addRef = ref<{ focusAmount: () => void }>()
+const addRef = ref<{ focusAmount: () => void; start: (kind: 'expense' | 'income', recurring?: boolean) => void }>()
 const historyRef = ref<{ shiftPeriod: (delta: number) => void; focusSearch: () => void }>()
 const dashboardRef = ref<{ shiftPeriod: (delta: number) => void }>()
 
@@ -22,17 +27,23 @@ const tab = computed({
   set: (value: FinanceTab) => finance.setTab(value),
 })
 
-const TABS = [
-  { value: 'expenses' as const, label: 'Gastos', icon: 'wallet' },
-  { value: 'dashboard' as const, label: 'Painel', icon: 'chart' },
-]
+/** Contas vencidas (gastos pendentes com a data passada): o número na aba Contas. */
+const overdue = computed(() => finance.state.expenses.filter((entry) => entry.kind === 'expense' && entry.status === 'pending' && entry.date < finance.today.value).length)
 
-/** "Este mês: R$ 1.234,56 em 18 gastos" (sempre o mês de hoje, com todos os gastos). */
+const TABS = computed(() => [
+  { value: 'expenses' as const, label: 'Lançamentos', icon: 'wallet', badge: 0 },
+  { value: 'bills' as const, label: 'Contas', icon: 'calendar', badge: overdue.value },
+  { value: 'dashboard' as const, label: 'Painel', icon: 'chart', badge: 0 },
+])
+
+/** "Este mês: R$ 1.234,56 em gastos · +R$ 5.000,00 em entradas" (sempre o mês de hoje). */
 const subtitle = computed(() => {
   const month = periodOf('month', finance.today.value)
-  const list = filterExpenses(finance.state.expenses, { from: month.from, to: month.to })
-  if (!list.length) return 'Registre seus gastos e veja para onde vai o seu dinheiro.'
-  return `Este mês: ${formatMoney(totalOf(list))} em ${list.length} ${list.length === 1 ? 'gasto' : 'gastos'}.`
+  const flow = cashFlow(finance.state.expenses, month.from, month.to)
+  if (!flow.paidCount && !flow.receivedCount) return 'Registre gastos e entradas e veja para onde vai o seu dinheiro.'
+  const parts = [`${formatMoney(flow.paid)} em ${flow.paidCount === 1 ? '1 gasto' : `${flow.paidCount} gastos`}`]
+  if (flow.receivedCount) parts.push(`+${formatMoney(flow.received)} em ${flow.receivedCount === 1 ? '1 entrada' : `${flow.receivedCount} entradas`}`)
+  return `Este mês: ${parts.join(' · ')}.`
 })
 
 async function focusAdd() {
@@ -41,11 +52,21 @@ async function focusAdd() {
   addRef.value?.focusAmount()
 }
 
+function openImport() {
+  finance.state.importOpen = true
+}
+
 useShortcuts({
   'mod+n': () => void focusAdd(),
   'mod+f': () => {
     if (tab.value !== 'expenses') return false
     historyRef.value?.focusSearch()
+  },
+  // Fora de campos de texto (no editor das observações, Ctrl+I é itálico)
+  'mod+i': (event) => {
+    const el = event.target as HTMLElement | null
+    if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return false
+    openImport()
   },
   arrowleft: () => shift(-1),
   arrowright: () => shift(1),
@@ -81,6 +102,7 @@ function shift(delta: number): boolean | void {
             >
               <AppIcon :name="item.icon" :size="16" />
               <span>{{ item.label }}</span>
+              <span v-if="item.badge" class="tab-badge" :data-tab-badge="item.value">{{ item.badge > 99 ? '99+' : item.badge }}</span>
             </button>
           </div>
         </header>
@@ -102,13 +124,16 @@ function shift(delta: number): boolean | void {
         <template v-else>
           <div v-if="tab === 'expenses'" class="expenses-area">
             <ExpenseQuickAdd ref="addRef" />
-            <FinanceHistory ref="historyRef" @add="focusAdd" />
+            <FinanceHistory ref="historyRef" @add="focusAdd" @import="openImport" />
           </div>
+          <FinanceBills v-else-if="tab === 'bills'" />
           <FinanceDashboard v-else ref="dashboardRef" @add="focusAdd" />
         </template>
       </div>
     </div>
     <ExpenseDialog />
+    <RecurrenceDialog />
+    <StatementImportDialog />
   </div>
 </template>
 
@@ -167,6 +192,17 @@ function shift(delta: number): boolean | void {
 }
 .tab:hover {
   color: var(--text);
+}
+.tab-badge {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
 }
 .tab.active {
   background: var(--surface);

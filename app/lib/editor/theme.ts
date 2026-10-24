@@ -314,6 +314,14 @@ export const editorTheme = EditorView.theme({
     backgroundColor: 'color-mix(in srgb, var(--accent) 34%, transparent)',
   },
   '.cm-mention.task.done .cm-mention-title': { textDecoration: 'line-through', opacity: '0.75' },
+  // Categoria mencionada com "#" (1.7.1): "#Nome" na cor da categoria
+  '.cm-mention.category': { gap: '1px', paddingLeft: '6px' },
+  '.cm-mention.category:not(.missing)': {
+    backgroundColor: 'color-mix(in srgb, var(--mention-color, var(--primary)) 18%, transparent)',
+    color: 'color-mix(in srgb, var(--mention-color, var(--primary)) 72%, var(--text))',
+  },
+  '.cm-mention.category:not(.missing):hover': { backgroundColor: 'color-mix(in srgb, var(--mention-color, var(--primary)) 28%, transparent)' },
+  '.cm-mention-hash': { fontWeight: '700', opacity: '0.8' },
 
   // Lista de notas aberta pelo "@"
   '.cm-tooltip.cm-tooltip-autocomplete.cm-mention-picker': { padding: '4px' },

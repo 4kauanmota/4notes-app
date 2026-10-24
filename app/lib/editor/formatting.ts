@@ -13,14 +13,18 @@
  * escondidas, em hidden-markup.ts.
  */
 import { ensureSyntaxTree } from '@codemirror/language'
-import { ChangeSet, EditorSelection, EditorState, type ChangeSpec, type Range, type SelectionRange, type StateEffect } from '@codemirror/state'
+import { ChangeSet, EditorSelection, EditorState, type ChangeSpec, type Line, type Range, type SelectionRange, type StateEffect } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type Command, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import {
+  COLORED,
   cssColor,
+  DEFAULT_HIGHLIGHT,
   findElements,
   hasContent,
   hasHiddenMarkup,
+  highlightCss,
+  highlightKey,
   linkDestination,
   linkLabel,
   markersFor,
@@ -38,9 +42,10 @@ import {
   toggleStoredFormat,
 } from './hidden-markup'
 import { editorHost } from './host'
+import { lineMarkerAt } from './line-markers'
 import { refreshMentions } from './mentions'
 
-export { cssColor, findElements, linkAt, type ElementKind, type FormatElement, type InlineFormat } from './elements'
+export { cssColor, DEFAULT_HIGHLIGHT, findElements, HIGHLIGHT_HEX, linkAt, type ElementKind, type FormatElement, type InlineFormat } from './elements'
 export { balancedSlice, storedFormats } from './hidden-markup'
 /** Nomes antigos (1.2.0), usados pelos testes. */
 export const hiddenTagEditing = hiddenMarkupEditing
@@ -59,10 +64,19 @@ interface Segment {
   lineTo: number
 }
 
+/**
+ * Onde começa o conteúdo da linha: depois do marcador da lista ("- ", "1. ", "- [ ] "),
+ * do "# " do título ou do "> " da citação. Os formatos valem só no conteúdo: com o
+ * marcador dentro, "<span…>- item</span>" deixaria de ser um item de lista (1.7.1).
+ */
+function contentStart(state: EditorState, line: Line): number {
+  return lineMarkerAt(state, line)?.to ?? line.from
+}
+
 function segmentsOf(state: EditorState, range: SelectionRange): Segment[] {
   const segments: Segment[] = []
   for (let line = state.doc.lineAt(range.from); ; line = state.doc.line(line.number + 1)) {
-    let from = Math.max(range.from, line.from)
+    let from = Math.max(range.from, contentStart(state, line))
     let to = Math.min(range.to, line.to)
     const text = state.doc.sliceString(from, to)
     from += text.length - text.trimStart().length
@@ -122,6 +136,8 @@ function containerOf(elements: FormatElement[], seg: { from: number; to: number 
 export interface ActiveFormats {
   formats: Set<InlineFormat>
   color: string | null
+  /** Cor do marca-texto da seleção: "default" (o padrão), uma cor, ou null (sem marca-texto ou cores misturadas). */
+  highlight: string | null
   /** Endereço do link em que a seleção está (null = fora de link). */
   link: string | null
 }
@@ -132,25 +148,28 @@ export function activeFormats(state: EditorState): ActiveFormats {
   const formats = new Set<InlineFormat>()
   if (range.empty) {
     for (const stored of storedFormats(state)) formats.add(stored.format)
-    return { formats, color: null, link: null }
+    return { formats, color: null, highlight: null, link: null }
   }
   treeFor(state, range.to)
   const { segments, perLine } = preparedSegments(state, range)
-  if (!segments.length) return { formats, color: null, link: null }
+  if (!segments.length) return { formats, color: null, highlight: null, link: null }
   let color: string | null = null
+  let highlight: string | null = null
   for (const format of ['bold', 'italic', 'underline', 'strike', 'highlight', 'code', 'color'] as InlineFormat[]) {
     const containers = segments.map((seg, i) => containerOf(perLine[i]!, seg, format))
     if (containers.every(Boolean)) {
       formats.add(format)
-      if (format === 'color') {
-        const first = containers[0]!.color ?? null
-        color = containers.every((el) => sameColor(el!.color, first ?? undefined)) ? first : null
+      if (COLORED.has(format)) {
+        const first = containers[0]!.color
+        const same = containers.every((el) => sameColor(el!.color, first))
+        if (format === 'color') color = same ? (first ?? null) : null
+        else highlight = same ? (first ?? DEFAULT_HIGHLIGHT) : null
       }
     }
   }
   const links = segments.map((seg, i) => containerOf(perLine[i]!, seg, 'link'))
   const link = links.every(Boolean) && links.every((el) => el!.url === links[0]!.url) ? (links[0]!.url ?? null) : null
-  return { formats, color, link }
+  return { formats, color, highlight, link }
 }
 
 // ── Comandos de formatação inline ────────────────────────────────────────────
@@ -163,7 +182,7 @@ export function activeFormats(state: EditorState): ActiveFormats {
 function applyToSegment(state: EditorState, seg: Segment, elements: FormatElement[], format: InlineFormat, color?: string): ChangeSpec[] {
   const [open, close] = markersFor(format, color)
   const touching = elements.filter((el) => el.format === format && el.from <= seg.to && seg.from <= el.to)
-  const merge = touching.filter((el) => format !== 'color' || sameColor(el.color, color))
+  const merge = touching.filter((el) => !COLORED.has(format) || sameColor(el.color, color))
   const recolor = touching.filter((el) => !merge.includes(el) && el.openTo < seg.to && seg.from < el.closeFrom)
   const from = Math.min(seg.from, ...merge.map((el) => el.from))
   const to = Math.max(seg.to, ...merge.map((el) => el.to))
@@ -227,8 +246,10 @@ function toggleAtCursor(
   state: EditorState,
   range: SelectionRange,
   format: InlineFormat,
+  color?: string,
 ): { changes?: ChangeSpec; range: SelectionRange; effects?: StateEffect<unknown> } {
-  if (format === 'color') return { range } // cor só se aplica a texto selecionado
+  // Cor (do texto ou do marca-texto, pela paleta) só se aplica a texto selecionado
+  if (format === 'color' || (format === 'highlight' && color !== undefined)) return { range }
   const line = state.doc.lineAt(range.head)
   const el = findElements(state, line.from, line.to).find((e) => e.format === format && e.openTo <= range.head && range.head <= e.closeFrom)
   if (el && hasContent(el)) {
@@ -250,25 +271,34 @@ function toggleAtCursor(
  * Liga/desliga um formato na seleção. Se toda a seleção já tem o formato, ele é
  * removido (só do trecho selecionado); senão, é aplicado a tudo.
  * Para 'color': aplicar a mesma cor de novo remove a cor.
+ * Para 'highlight' (1.7.1): sem `color` (o atalho), liga/desliga o marca-texto padrão
+ * (desliga qualquer cor); com `color` ("default" ou uma cor da paleta, pela barra),
+ * aplica essa cor, e a mesma cor de novo tira o marca-texto.
  */
 export function toggleFormat(view: EditorView, format: InlineFormat, color?: string): boolean {
   const { state } = view
   treeFor(state, state.selection.ranges.at(-1)!.to)
   const single = state.selection.ranges.length === 1
+  const value = format === 'highlight' ? highlightKey(color) : color
+  const sameAs = (el: FormatElement) => {
+    if (format === 'color') return !color || sameColor(el.color, color)
+    if (format === 'highlight') return color === undefined || sameColor(el.color, value)
+    return true
+  }
   const transaction = state.changeByRange((range) => {
     if (range.empty) {
-      const result = toggleAtCursor(state, range, format)
+      const result = toggleAtCursor(state, range, format, color)
       // Formato guardado só com um cursor (vários cursores: nada a fazer)
       return single || !result.effects ? result : { range }
     }
     const { segments, perLine } = preparedSegments(state, range)
     if (!segments.length) return { range }
     const containers = segments.map((seg, i) => containerOf(perLine[i]!, seg, format))
-    const remove = containers.every((el) => el && (format !== 'color' || !color || sameColor(el.color, color)))
+    const remove = containers.every((el) => el && sameAs(el))
     const specs: ChangeSpec[] = []
     segments.forEach((seg, i) => {
       if (remove) specs.push(...removeFromSegment(state, seg, containers[i]!, perLine[i]!))
-      else specs.push(...applyToSegment(state, seg, perLine[i]!, format, color))
+      else specs.push(...applyToSegment(state, seg, perLine[i]!, format, value))
     })
     const changes = state.changes(specs)
     const first = segments[0]!
@@ -281,6 +311,15 @@ export function toggleFormat(view: EditorView, format: InlineFormat, color?: str
 
 /** "Cor padrão": tira a cor do trecho selecionado (o que estiver fora da seleção continua colorido). */
 export function clearColor(view: EditorView): boolean {
+  return clearInline(view, 'color')
+}
+
+/** "Sem marca-texto" (1.7.1): tira o marca-texto (de qualquer cor) só do trecho selecionado. */
+export function clearHighlight(view: EditorView): boolean {
+  return clearInline(view, 'highlight')
+}
+
+function clearInline(view: EditorView, format: InlineFormat): boolean {
   const { state } = view
   treeFor(state, state.selection.ranges.at(-1)!.to)
   const transaction = state.changeByRange((range) => {
@@ -288,7 +327,7 @@ export function clearColor(view: EditorView): boolean {
     const specs: ChangeSpec[] = []
     segments.forEach((seg, i) => {
       for (const el of perLine[i]!) {
-        if (el.format !== 'color' || !(el.openTo < seg.to && seg.from < el.closeFrom)) continue
+        if (el.format !== format || !(el.openTo < seg.to && seg.from < el.closeFrom)) continue
         specs.push(...removeFromSegment(state, { ...seg, from: Math.max(seg.from, el.openTo), to: Math.min(seg.to, el.closeFrom) }, el, perLine[i]!))
       }
     })
@@ -539,6 +578,7 @@ export const formattingKeymap = [
 const hiddenMarkup = Decoration.replace({})
 const underlineMark = Decoration.mark({ class: 'cm-fmt-underline' })
 const highlightMark = Decoration.mark({ class: 'cm-fmt-highlight' })
+const highlightMarks = new Map<string, Decoration>()
 const colorMarks = new Map<string, Decoration>()
 const linkMarks = new Map<string, Decoration>()
 
@@ -549,6 +589,18 @@ function colorMark(color: string): Decoration | null {
   if (!mark) {
     mark = Decoration.mark({ class: 'cm-fmt-color', attributes: { style: `color: ${css}` } })
     colorMarks.set(css, mark)
+  }
+  return mark
+}
+
+/** Marca-texto colorido (1.7.1): a cor da paleta no tema atual. */
+function coloredHighlightMark(color: string): Decoration {
+  const css = highlightCss(color)
+  if (!css) return highlightMark
+  let mark = highlightMarks.get(css)
+  if (!mark) {
+    mark = Decoration.mark({ class: 'cm-fmt-highlight cm-fmt-highlight-color', attributes: { style: `background-color: ${css}` } })
+    highlightMarks.set(css, mark)
   }
   return mark
 }
@@ -608,7 +660,7 @@ function buildPreview(view: EditorView): { decorations: DecorationSet; atoms: De
   for (const el of findElements(state, from, to)) {
     const content = hasContent(el)
     if (content && el.format === 'underline') ranges.push(underlineMark.range(el.openTo, el.closeFrom))
-    if (content && el.format === 'highlight') ranges.push(highlightMark.range(el.openTo, el.closeFrom))
+    if (content && el.format === 'highlight') ranges.push((el.color ? coloredHighlightMark(el.color) : highlightMark).range(el.openTo, el.closeFrom))
     if (content && el.format === 'color') {
       const mark = colorMark(el.color ?? '')
       if (mark) ranges.push(mark.range(el.openTo, el.closeFrom))

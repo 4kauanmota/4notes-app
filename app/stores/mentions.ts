@@ -23,10 +23,12 @@
  */
 import { computed, reactive, watch } from 'vue'
 import { workspaceFileUrl } from '#shared/ipc'
+import { openCategoriesPanel } from '~/composables/useCategoryActions'
 import { showToast } from '~/composables/useToasts'
+import { paletteVar } from '~/lib/colors'
 import { formatDateBR, type ISODate } from '~/lib/dates'
 import { linkDestination } from '~/lib/editor/elements'
-import type { MentionState, MentionTarget } from '~/lib/editor/host'
+import type { CategoryMentionHost, MentionState, MentionTarget } from '~/lib/editor/host'
 import { dirname, nameKey, stripExtension } from '~/lib/files/filename'
 import { displayHost, urlKey, type SavedLink } from '~/lib/links/model'
 import { MENTION_KINDS, rankMentions, type RankItem } from '~/lib/mentions/catalog'
@@ -42,6 +44,7 @@ import {
   mapMentionPath,
   mapOfMentionPath,
   mentionKind,
+  relinkCategory,
   relinkUrl,
   renameMentionLinks,
   retitleIdLinks,
@@ -57,6 +60,8 @@ import { formatDuration } from '~/lib/timer/format'
 import { MODE_LABELS, STATUS_LABELS, type TimerSession } from '~/lib/timer/model'
 import { sessionDay, weekdayName } from '~/lib/timer/stats'
 import { debounce } from '~/lib/utils/async'
+import { suggestSharedColor } from '~/lib/categories/model'
+import { useCategoriesStore, type SharedCategory } from './categories'
 import { useFinanceStore } from './finance'
 import { useLinksStore } from './links'
 import { useModulesStore } from './modules'
@@ -71,6 +76,7 @@ const tasks = useTasksStore()
 const links = useLinksStore()
 const timer = useTimerStore()
 const finance = useFinanceStore()
+const categories = useCategoriesStore()
 
 /** Um item da lista do "@" (o que vai para a nota + o que decide a ordem). */
 export type MentionItem = MentionTarget & RankItem
@@ -306,9 +312,10 @@ const linksProvider: MentionProvider = {
 
 // ── Gastos das Finanças (1.7.0) ──────────────────────────────────────────────
 
-/** Título de um gasto: a descrição (ou "Gasto", se ficou sem). */
-const expenseTitle = (expense: Expense) => expense.description || 'Gasto'
-const expenseDetail = (expense: Expense) => join(finance.categoryOf(expense)?.name, shortDay(expense.date), formatMoney(expense.amount))
+/** Título de um lançamento: a descrição (ou "Gasto"/"Entrada", se ficou sem). */
+const expenseTitle = (expense: Expense) => expense.description || (expense.kind === 'income' ? 'Entrada' : 'Gasto')
+const expenseDetail = (expense: Expense) =>
+  join(finance.categoryOf(expense)?.name, shortDay(expense.date), formatMoney(expense.amount), expense.status === 'pending' ? 'pendente' : expense.status === 'cancelled' ? 'pulada' : undefined)
 
 const financeProvider: MentionProvider = {
   module: 'finance',
@@ -316,7 +323,7 @@ const financeProvider: MentionProvider = {
     finance.state.expenses.map((expense) => ({
       path: idMentionPath('expense', expense.id),
       title: expenseTitle(expense),
-      where: `Gasto · ${expenseDetail(expense)}`,
+      where: `${expense.kind === 'income' ? 'Entrada' : 'Gasto'} · ${expenseDetail(expense)}`,
       // Também acha pela categoria, pela data e pelo valor ("@mercado 21/10", "@52,30")
       keywords: join(finance.categoryOf(expense)?.name, formatDateBR(expense.date), formatMoney(expense.amount)),
       late: 3,
@@ -336,6 +343,60 @@ const financeProvider: MentionProvider = {
   },
 }
 
+// ── Categorias (o "#", 1.7.1) ────────────────────────────────────────────────
+
+/** Onde a categoria aparece ("Notas, Tarefas"), para diferenciar na lista e na dica do chip. */
+function categoryWhere(category: SharedCategory): string {
+  const places = categories.usage(category.id).filter((item) => item.member || item.records.length)
+  return places.length ? `Categoria · ${places.map((item) => item.label).join(', ')}` : 'Categoria'
+}
+
+const categoryTarget = (category: SharedCategory): MentionTarget => ({
+  path: idMentionPath('category', category.id),
+  title: category.name,
+  where: categoryWhere(category),
+  color: paletteVar(category.color),
+})
+
+const categoryProvider: MentionProvider = {
+  // Categorias aparecem no "#", não na lista do "@"
+  items: () => [],
+  describe: (path) => {
+    const category = categories.resolveCategory(idOf(path)?.id)
+    return category ? { title: category.name, detail: categoryWhere(category), color: paletteVar(category.color) } : null
+  },
+  open: (path) => {
+    const category = categories.resolveCategory(idOf(path)?.id)
+    if (!category) return gone('category')
+    tasks.closeDrawer()
+    openCategoriesPanel(category.id)
+  },
+}
+
+/**
+ * O "#" dos editores (Notas, Mapa, descrição das tarefas, observações das Finanças): as
+ * categorias do app pelo nome e "Criar categoria" (entra no app, ainda sem módulo: aparece
+ * nas Configurações › Categorias e nos módulos onde for usada).
+ */
+export const categoryMentions: CategoryMentionHost = {
+  search: (query) => {
+    const ranked = rankMentions(
+      categories.state.categories.map((category) => ({ category, title: category.name })),
+      query,
+      40,
+    )
+    return ranked.map((item) => categoryTarget(item.category))
+  },
+  create: (name) => {
+    const existing = categories.findByName(name)
+    if (existing) return categoryTarget(existing)
+    const created = categories.createCategory({ name, color: suggestSharedColor(categories.state.categories.map((category) => category.color)) })
+    if (!created) return null
+    showToast({ message: `Categoria “${created.name}” criada`, icon: 'tag', tone: 'success' })
+    return categoryTarget(created)
+  },
+}
+
 const PROVIDERS: Record<MentionKind, MentionProvider> = {
   note: notesProvider,
   map: mapNotesProvider,
@@ -344,6 +405,7 @@ const PROVIDERS: Record<MentionKind, MentionProvider> = {
   timer: timerProvider,
   link: linksProvider,
   expense: financeProvider,
+  category: categoryProvider,
 }
 
 // ── Buscar, descrever e abrir ────────────────────────────────────────────────
@@ -448,6 +510,9 @@ export const mentionRevision = computed(() => {
   for (const session of timer.state.sessions) parts.push(`${session.id}:${session.activity}:${session.categoryId}:${session.duration}`)
   parts.push(timer.state.categories.map((category) => category.name).join('/'))
   for (const expense of finance.state.expenses) parts.push(`${expense.id}:${expense.description}:${expense.amount}:${expense.categoryId}:${expense.date}`)
+  // Categorias (chips "#Nome": nome, cor e onde é usada)
+  for (const category of categories.state.categories) parts.push(`c:${category.id}:${category.name}:${category.color}`)
+  parts.push(`c:${Object.keys(categories.state.replaced).length}:${categories.state.revision}`)
   parts.push(finance.state.categories.map((category) => category.name).join('/'))
   // Ícones dos links salvos (aparecem na frente dos links mencionados)
   let withIcon = 0
@@ -474,15 +539,22 @@ export interface MentionSubject {
   url?: string
 }
 
+/** Caminhos que também valem como o item: os ids antigos de uma categoria juntada a ela. */
+function subjectAliases(subject: MentionSubject): string[] {
+  const found = idOf(subject.path)
+  return found?.kind === 'category' ? categories.aliasesOf(found.id).map((id) => idMentionPath('category', id)) : []
+}
+
 /** Procura nas Notas, nas notas de todos os mapas e nas tarefas. */
 export async function findMentionPlaces(subject: MentionSubject): Promise<MentionPlace[]> {
   const subjectRef = refFromPath(subject.path, subject.title, subject.url)
   const subjectKey = subjectRef ? refKey(subjectRef) : null
   const urlKeyOf = subject.url ? linkKey(subject.url) : null
+  const paths = [subject.path, ...subjectAliases(subject)]
   const mentions = (content: string, dir: string) =>
     linksIn(content, dir).some(
       (link) =>
-        (link.path !== null && samePath(link.path, subject.path)) ||
+        (link.path !== null && paths.some((path) => samePath(link.path!, path))) ||
         (urlKeyOf !== null && /^https?:/i.test(link.url) && linkKey(link.url) === urlKeyOf),
     )
 
@@ -507,8 +579,18 @@ export async function findMentionPlaces(subject: MentionSubject): Promise<Mentio
     if (!inList && !mentions(task.notes, DESCRIPTION_DIR)) continue
     places.push({ path: taskMentionPath(task.id), kind: 'task', title: task.title, where: join('Tarefa', taskDetail(task)) })
   }
+  // Observações dos gastos e das entradas (só têm "#", 1.7.1)
+  for (const record of finance.notedRecords()) {
+    if (!mentions(record.notes, DATA_PATHS.financeDir)) continue
+    places.push({ path: record.path, kind: 'expense', title: record.title, where: record.where })
+  }
   return places
 }
+
+export const categorySubject = (category: SharedCategory): MentionSubject => ({
+  path: idMentionPath('category', category.id),
+  title: category.name,
+})
 
 /** O que o diálogo "Ver menções" está mostrando (components/shell/MentionsDialog.vue). */
 export const mentionsDialog = reactive({ subject: null as MentionSubject | null })
@@ -616,6 +698,22 @@ export function installMentionTracking(): void {
   trackTitles(() => tasks.state.tasks.map((task) => [taskMentionPath(task.id), task.title]))
   trackTitles(() => timer.state.sessions.map((session) => [idMentionPath('timer', session.id), sessionTitle(session)]))
   trackTitles(() => finance.state.expenses.map((expense) => [idMentionPath('expense', expense.id), expenseTitle(expense)]))
+  // Categoria renomeada (1.7.1): o texto das menções "#" acompanha
+  trackTitles(() => categories.state.categories.map((category) => [idMentionPath('category', category.id), category.name]))
+
+  // Categoria juntada a outra: as menções à antiga passam a apontar para a que ficou
+  let merged = new Map(Object.entries(categories.state.replaced))
+  watch(
+    () => Object.entries(categories.state.replaced),
+    (entries) => {
+      for (const [from, to] of entries) {
+        if (merged.has(from) || !to) continue
+        const target = categories.resolveCategory(to)
+        if (target) rewriteEverywhere((content, dir) => relinkCategory(content, dir, from, target.id, target.name))
+      }
+      merged = new Map(entries)
+    },
+  )
 
   // Link salvo com endereço novo: os links nas notas e as menções nas tarefas acompanham
   let urls = new Map<string, string>()

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Barra lateral de navegação entre os módulos + tutorial + tema + configurações.
+ * Barra lateral de navegação entre os módulos + tutorial + configurações (o tema e as
+ * categorias ficam nas Configurações, 1.7.1).
  *
  * - Mostra só os módulos ativos (stores/modules.ts), com ícone e nome ou só o ícone.
  * - Ligar um módulo "conecta" ele ao 4notes: o espaço dele abre, um fio sai dele
@@ -20,13 +21,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect
 import { useRoute } from 'vue-router'
 import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
 import { useSortableList } from '~/composables/useSortableList'
-import { useTheme } from '~/composables/useTheme'
 import { toggleTutorial, tutorial } from '~/composables/useTutorial'
-import { openCategoriesPanel, useCategoryUi } from '~/composables/useCategoryActions'
 import { isModuleId, moduleById, moduleForPath, type ModuleDefinition, type ModuleId } from '~/lib/modules'
 import { modKeyLabel } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
 import { EFFECT_MS, useModulesStore, type ModuleEffect } from '~/stores/modules'
+import { useFinanceStore } from '~/stores/finance'
 import { useTasksStore } from '~/stores/tasks'
 import { useTimerStore } from '~/stores/timer'
 import { useUpdatesStore } from '~/stores/updates'
@@ -35,12 +35,12 @@ const route = useRoute()
 const app = useAppStore()
 const modules = useModulesStore()
 const tasks = useTasksStore()
-const { theme, setTheme } = useTheme()
-const categoryUi = useCategoryUi()
 const mod = modKeyLabel()
 
 const dueCount = computed(() => tasks.progress.value.total - tasks.progress.value.done)
-const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : 0)
+/** Finanças (1.7.1): contas com "Me lembre de pagar" que vencem hoje ou já venceram. */
+const finance = useFinanceStore()
+const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : id === 'finance' ? finance.reminders.value.length : 0)
 const timer = useTimerStore()
 /** Timer com uma sessão em andamento: um ponto no ícone (pulsando enquanto conta). */
 /** Versão nova esperando (depois de um "Agora não"): um ponto discreto na engrenagem. */
@@ -220,7 +220,6 @@ async function railMenu(event: MouseEvent): Promise<void> {
     separator,
     { id: 'labels', label: 'Mostrar os nomes', type: 'checkbox', checked: labels.value },
     separator,
-    { id: 'categories', label: 'Ver categorias…' },
     { id: 'settings', label: 'Configurações dos módulos…' },
     { id: 'tutorial', label: 'Tutorial', hint: 'F1' },
   ]
@@ -235,18 +234,11 @@ async function railMenu(event: MouseEvent): Promise<void> {
     modules.setEnabled(id, !modules.isEnabled(id))
   } else if (choice === 'labels') {
     modules.setNavStyle(labels.value ? 'icon' : 'icon-label')
-  } else if (choice === 'categories') {
-    openCategoriesPanel()
   } else if (choice === 'settings') {
     app.openSettings('modules')
   } else if (choice === 'tutorial') {
     toggleTutorial(current.value?.id ?? 'general')
   }
-}
-
-function toggleTheme(event: MouseEvent) {
-  const next = theme.resolved === 'dark' ? 'light' : 'dark'
-  void setTheme(next, { x: event.clientX, y: event.clientY })
 }
 </script>
 
@@ -316,30 +308,7 @@ function toggleTheme(event: MouseEvent) {
     </div>
 
     <div class="rail-bottom">
-      <!-- Categorias do app inteiro (1.7.0): as mesmas em todos os módulos -->
-      <button
-        class="rail-button"
-        :class="{ on: categoryUi.panel.open }"
-        data-action="categories"
-        data-tip="Ver categorias"
-        data-tip-pos="right"
-        aria-label="Ver categorias"
-        @click="openCategoriesPanel()"
-      >
-        <AppIcon name="tag" :size="19" />
-      </button>
-      <button
-        class="rail-button"
-        :data-tip="theme.resolved === 'dark' ? 'Tema claro' : 'Tema escuro'"
-        data-tip-pos="right"
-        aria-label="Alternar tema"
-        @click="toggleTheme"
-      >
-        <Transition name="spin" mode="out-in">
-          <AppIcon :key="theme.resolved" :name="theme.resolved === 'dark' ? 'sun' : 'moon'" :size="19" />
-        </Transition>
-      </button>
-      <!-- Tutorial logo abaixo do tema (e acima das configurações) -->
+      <!-- Tutorial logo acima das configurações -->
       <button
         class="rail-button"
         :class="{ on: tutorial.open }"
@@ -561,19 +530,6 @@ function toggleTheme(event: MouseEvent) {
 .rail-button.on {
   background: var(--primary-soft);
   color: var(--primary-text);
-}
-
-.spin-enter-active,
-.spin-leave-active {
-  transition: transform 260ms var(--ease-out), opacity 200ms;
-}
-.spin-enter-from {
-  transform: rotate(-90deg) scale(0.6);
-  opacity: 0;
-}
-.spin-leave-to {
-  transform: rotate(90deg) scale(0.6);
-  opacity: 0;
 }
 
 /* ── Ligar / desligar um módulo ─────────────────────────────────────────── */

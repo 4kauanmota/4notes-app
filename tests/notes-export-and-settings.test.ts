@@ -130,6 +130,14 @@ describe('exportar como PDF (HTML com a formatação)', () => {
     expect(html).toContain('<div class="line">fim</div>')
   })
 
+  it('marca-texto colorido (1.7.1): tom claro no PDF e texto limpo no TXT', async () => {
+    const note = '- <mark style="background-color: #fef08a">amarelo</mark> e <span style="color: red"><mark style="background-color: #bfdbfe">duas</mark></span>'
+    const html = await noteToHtml(note, 'notes')
+    expect(html).toContain('<span class="hl" style="background: #fef08a">amarelo</span>')
+    expect(html).toContain('<span class="hl" style="color: var(--cat-red); background: #bfdbfe">duas</span>')
+    expect(noteToPlainText(note, 'notes').trim()).toBe('• amarelo e duas')
+  })
+
   it('linhas vazias continuam no lugar; links para arquivos e endereços estranhos não viram links', async () => {
     const html = await noteToHtml('a\n\nb [x](javascript:alert(1)) [y](arquivo.pdf)', 'notes')
     expect(html.split('\n')[1]).toBe('<div class="line">&nbsp;</div>')

@@ -83,7 +83,7 @@ function onDrop(index: number) {
           @drop.prevent="onDrop(index)"
           @dragend="dragIndex = null"
         >
-          <CategoryDot :color="category.color" />
+          <SharedCategoryIcon :id="category.id" :color="category.color" :name="category.name" :size="18" />
           <span class="nav-label">{{ category.name }}</span>
           <span v-if="tasks.pendingCountByCategory.value.get(category.id)" class="count">{{ tasks.pendingCountByCategory.value.get(category.id) }}</span>
           <span class="item-actions">

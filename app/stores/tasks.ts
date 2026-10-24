@@ -397,6 +397,11 @@ registerCategoryModule({
   id: 'tasks',
   ready: () => state.loaded && !state.error,
   members: () => state.categories.map((category) => ({ id: category.id, name: category.name, color: category.color })),
+  counts: () => {
+    const counts = new Map<string, number>()
+    for (const task of state.tasks) if (task.categoryId) counts.set(task.categoryId, (counts.get(task.categoryId) ?? 0) + 1)
+    return counts
+  },
   records: (id) =>
     state.tasks
       .filter((task) => task.categoryId === id)

@@ -103,7 +103,7 @@ defineExpose({ focus: () => input.value?.focus() })
     />
     <TransitionGroup name="pop" tag="span" class="qa-chips">
       <span v-if="parsed.date" key="date" class="qa-chip"><AppIcon name="calendar" :size="12" /> {{ relativeDayLabel(parsed.date, tasks.today.value) }}</span>
-      <span v-if="category" key="cat" class="qa-chip"><CategoryDot :color="category.color" :size="7" /> {{ category.name }}</span>
+      <span v-if="category" key="cat" class="qa-chip"><SharedCategoryIcon :id="category.id" :color="category.color" :name="category.name" :size="14" /> {{ category.name }}</span>
       <MentionChip v-for="item in tasks.state.quickAddMentions" :key="refKey(item)" :mention="item" removable @remove="removeMention(item)" />
     </TransitionGroup>
     <button type="button" class="icon-btn qa-more" data-tip="Mais opções (data, recorrência…)" aria-label="Mais opções" @click="moreOptions">

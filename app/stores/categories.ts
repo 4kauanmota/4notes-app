@@ -21,6 +21,7 @@ import {
   CATEGORY_MODULES,
   markReplaced,
   normalizeCategoriesFile,
+  resolveReplaced,
   reconcile,
   sameName,
   sharedIdFor,
@@ -43,7 +44,7 @@ export interface MemberRef {
   name: string
 }
 
-/** Um registro de um módulo que usa uma categoria (para o "Ver categorias"). */
+/** Um registro de um módulo que usa uma categoria (para Configurações › Categorias). */
 export interface CategoryRecord {
   id: string
   title: string
@@ -64,6 +65,8 @@ export interface CategoryProvider {
   members(): ModuleMember[]
   /** Os registros do módulo com essa categoria. */
   records(id: string): CategoryRecord[]
+  /** Quantos registros cada categoria tem no módulo (id → quantidade), de uma vez (a lista com centenas de categorias, 1.7.1). */
+  counts?(): Map<string, number>
   /** Copia nome, cor, ícone e foto da lista central (se a categoria estiver no módulo). false = falhou. */
   sync(category: SharedCategory): Promise<boolean> | boolean
   /** Passa a mostrar a categoria (o "Usar categoria existente"). */
@@ -127,6 +130,23 @@ function findCategory(id: string | null | undefined): SharedCategory | undefined
   return id ? byId.value.get(id) : undefined
 }
 
+/**
+ * A categoria que vale para um id (1.7.1): a própria ou, se ela foi juntada a outra,
+ * a que ficou no lugar (menções antigas continuam levando à categoria certa).
+ */
+function resolveCategory(id: string | null | undefined): SharedCategory | undefined {
+  if (!id) return undefined
+  const direct = byId.value.get(id)
+  if (direct) return direct
+  const target = resolveReplaced(data(), id)
+  return target ? byId.value.get(target) : undefined
+}
+
+/** Ids antigos (juntados) que hoje levam à categoria `id`. */
+function aliasesOf(id: string): string[] {
+  return Object.keys(state.replaced).filter((old) => resolveReplaced(data(), old) === id)
+}
+
 function findByName(name: string): SharedCategory | undefined {
   return state.categories.find((category) => sameName(category.name, name))
 }
@@ -164,8 +184,35 @@ function usage(id: string): CategoryUsage[] {
 }
 
 function recordCount(id: string): number {
-  return usage(id).reduce((sum, item) => sum + item.records.length, 0)
+  return summaries.value.get(id)?.total ?? usage(id).reduce((sum, item) => sum + item.records.length, 0)
 }
+
+export interface CategorySummary {
+  /** Módulos onde a categoria aparece (na lista ou com registros). */
+  modules: CategoryModuleId[]
+  /** Registros em todos os módulos. */
+  total: number
+}
+
+/**
+ * Resumo de todas as categorias de uma vez (1.7.1): a lista das Configurações com
+ * centenas de categorias não recalcula os registros de cada uma separadamente.
+ */
+const summaries = computed(() => {
+  void state.revision
+  const map = new Map<string, CategorySummary>()
+  for (const category of state.categories) map.set(category.id, { modules: [], total: 0 })
+  for (const provider of orderedProviders()) {
+    const members = new Set(provider.members().map((member) => member.id))
+    const counts = provider.counts?.()
+    for (const [id, entry] of map) {
+      const count = counts ? (counts.get(id) ?? 0) : provider.records(id).length
+      if (members.has(id) || count) entry.modules.push(provider.id)
+      entry.total += count
+    }
+  }
+  return map
+})
 
 // ── Gravação ────────────────────────────────────────────────────────────────
 
@@ -500,7 +547,7 @@ async function libraryImage(path: string): Promise<string | null> {
   }
 }
 
-/** Algo mudou nos registros de um módulo (para o "Ver categorias" recalcular). */
+/** Algo mudou nos registros de um módulo (para Configurações › Categorias recalcular). */
 function touch(): void {
   state.revision++
 }
@@ -510,12 +557,15 @@ export function useCategoriesStore() {
     state,
     byId,
     findCategory,
+    resolveCategory,
+    aliasesOf,
     findByName,
     nameProblem,
     memberIds,
     availableFor,
     usage,
     recordCount,
+    summaries,
     load,
     flush,
     refreshFromDisk,

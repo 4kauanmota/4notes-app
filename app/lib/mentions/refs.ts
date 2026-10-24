@@ -27,6 +27,7 @@ export type MentionRef =
   | { kind: 'task'; id: string; title: string }
   | { kind: 'timer'; id: string; title: string }
   | { kind: 'expense'; id: string; title: string }
+  | { kind: 'category'; id: string; title: string }
   | { kind: 'link'; id: string; url: string; title: string }
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -49,7 +50,7 @@ export function normalizeRef(raw: unknown): MentionRef | null {
     const map = text(raw.map)
     return map ? { kind: 'mindmap', map, title: text(raw.title) || map } : null
   }
-  if (raw.kind === 'task' || raw.kind === 'timer' || raw.kind === 'expense') {
+  if (raw.kind === 'task' || raw.kind === 'timer' || raw.kind === 'expense' || raw.kind === 'category') {
     const id = text(raw.id)
     return id ? { kind: raw.kind, id, title: text(raw.title) } : null
   }

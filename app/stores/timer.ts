@@ -598,6 +598,11 @@ registerCategoryModule({
   id: 'timer',
   ready: () => state.loaded && !state.error,
   members: () => state.categories.map((category) => ({ id: category.id, name: category.name, color: category.color })),
+  counts: () => {
+    const counts = new Map<string, number>()
+    for (const session of state.sessions) if (session.categoryId) counts.set(session.categoryId, (counts.get(session.categoryId) ?? 0) + 1)
+    return counts
+  },
   records: (id) =>
     state.sessions
       .filter((session) => session.categoryId === id)

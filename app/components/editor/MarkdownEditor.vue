@@ -27,6 +27,7 @@ import {
   canClearFormatting,
   clearColor,
   clearFormatting,
+  clearHighlight,
   normalizeLinkUrl,
   removeLink,
   setLink,
@@ -88,7 +89,7 @@ const toolbar = reactive({
   below: false,
   /** Largura máxima (editor estreito: os botões quebram em duas fileiras); null = uma fileira. */
   maxWidth: null as number | null,
-  active: { formats: new Set<InlineFormat>(), color: null, link: null } as ActiveFormats,
+  active: { formats: new Set<InlineFormat>(), color: null, highlight: null, link: null } as ActiveFormats,
   /** A seleção pode virar bloco de texto (fora de blocos de código/texto). */
   textBlock: false,
   /** A seleção tem formatação para o "Limpar formatação" tirar (senão o botão não aparece). */
@@ -194,6 +195,8 @@ function run(command: (view: EditorView) => boolean): void {
 
 const applyInline = (format: InlineFormat) => run((v) => toggleFormat(v, format))
 const applyColor = (color: PaletteColor | null) => run((v) => (color ? toggleFormat(v, 'color', color) : clearColor(v)))
+/** Cor do marca-texto (1.7.1): "default" = o padrão (==), uma cor da paleta, ou null = tirar. */
+const applyHighlight = (color: string | null) => run((v) => (color ? toggleFormat(v, 'highlight', color) : clearHighlight(v)))
 const applyLine = (format: LineFormat) => run((v) => toggleLineFormat(v, format))
 /** "Bloco de texto": a seleção vira um bloco (só por aqui — nada vira bloco de texto sozinho). */
 const applyTextBlock = () => run(wrapInTextBlock)
@@ -512,6 +515,7 @@ defineExpose({
       :docked="docked"
       @inline="applyInline"
       @color="applyColor"
+      @highlight="applyHighlight"
       @line="applyLine"
       @open-link="openLink"
       @link="applyLink"

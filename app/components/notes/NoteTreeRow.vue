@@ -29,7 +29,7 @@ function onDragStart(event: DragEvent) {
 <template>
   <div
     class="tree-row"
-    :class="[row.kind, { active: !!row.note && row.note.id === notes.state.activeId, 'is-open': !!row.note && notes.state.openIds.includes(row.note.id) }]"
+    :class="[row.kind, { active: !!row.note && row.note.id === (notes.state.settings.revealActive ? notes.state.activeId : notes.state.treeSelected), 'is-open': !!row.note && notes.state.openIds.includes(row.note.id) }]"
     :style="{ '--depth': row.depth }"
     :data-note="row.note?.id"
     :data-folder="row.folderKey ?? undefined"

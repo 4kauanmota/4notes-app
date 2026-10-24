@@ -86,10 +86,11 @@ const sections = computed(() =>
 const rootRows = computed(() => rowsOf(null))
 const nothingFound = computed(() => searching.value && !notes.filteredNotes.value.length)
 
-// A nota ativa fica à vista: as pastas (pelo título) até ela abrem sozinhas
+// A nota ativa fica à vista: as pastas (pelo título) até ela abrem sozinhas. Com
+// "Selecionar a nota aberta na lista" desligado (1.7.1), a lista fica como você deixou.
 const activePlace = computed(() => {
   const note = notes.activeNote.value
-  if (!note) return null
+  if (!note || !notes.state.settings.revealActive) return null
   const category = notes.categoryOf(note)
   const path = folderPathTo(trees.value.get(sectionKey(category)) ?? [], note.id)
   return path ? { id: note.id, category: category?.name ?? null, path } : null
@@ -105,10 +106,20 @@ watch(
   },
 )
 
+// Desligou o "selecionar a nota aberta": a lista continua destacando a que estava aberta
+watch(
+  () => notes.state.settings.revealActive,
+  (reveal) => {
+    if (!reveal) notes.state.treeSelected = notes.state.activeId
+  },
+  { immediate: true },
+)
+
 // ── Ações ────────────────────────────────────────────────────────────────────
 
 /** Clique simples: a nota abre na aba temporária (troca a nota que estava nela). */
 function onRowClick(row: Row, category: NoteCategory | null) {
+  if (row.note) notes.state.treeSelected = row.note.id
   if (row.kind === 'note') {
     if (row.note) notes.openNote(row.note.id, { preview: true })
     return

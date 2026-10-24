@@ -8,7 +8,7 @@ import type { MentionHost } from '~/lib/editor/host'
 import { paletteVar, type PaletteColor } from '~/lib/colors'
 import { countWords } from '~/lib/notes/title'
 import { DATA_PATHS } from '~/lib/storage/paths'
-import { describeMention, mentionRevision, openMentionPath, savedLinkIcon, searchMentions } from '~/stores/mentions'
+import { categoryMentions, describeMention, mentionRevision, openMentionPath, savedLinkIcon, searchMentions } from '~/stores/mentions'
 import { useMindmapStore } from '~/stores/mindmap'
 import { trashPlace } from '~/lib/platform'
 
@@ -23,13 +23,14 @@ const note = computed(() => mindmap.selectedNote.value!)
 const noteDir = computed(() => `${DATA_PATHS.mindmapDir}/${mindmap.state.currentMap}`)
 const notePath = computed(() => `${noteDir.value}/${note.value.id}`)
 
-/** Menções (@) a itens de todos os módulos — stores/mentions.ts. */
+/** Menções (@) a itens de todos os módulos e (#) a categorias: stores/mentions.ts. */
 const mentions: MentionHost = {
   search: (query) => searchMentions(query, { exceptPath: notePath.value }),
   describe: describeMention,
   open: openMentionPath,
   revision: () => mentionRevision.value,
   linkIcon: savedLinkIcon,
+  categories: categoryMentions,
 }
 const neighbors = computed(() => mindmap.neighbors(note.value.id))
 const color = computed(() => mindmap.noteColor(note.value.id))

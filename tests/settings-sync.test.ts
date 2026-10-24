@@ -119,7 +119,7 @@ describe('cada workspace com as suas configurações (1.6.3)', () => {
     // Trabalho (novo): tudo no padrão — nada vem do Pessoal
     ws = await open('trabalho')
     expect(ws.settings.settingsSection('theme')).toBe('system')
-    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: true, foldersFirst: false, wrapCode: false, wrapText: true })
+    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: true, foldersFirst: false, wrapCode: false, wrapText: true, revealActive: true })
     expect(ws.modules.state.prefs.navStyle).toBe('icon-label')
     ws.notes.updateSettings({ folderCase: 'upper' })
     await ws.settings.flushSettings()
@@ -127,7 +127,7 @@ describe('cada workspace com as suas configurações (1.6.3)', () => {
     // De volta ao Pessoal: as configurações dele, intactas
     ws = await open('pessoal')
     expect(ws.settings.settingsSection('theme')).toBe('dark')
-    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: false, foldersFirst: true, wrapCode: true, wrapText: true })
+    expect(ws.notes.state.settings).toEqual({ autoCategory: false, folderCase: 'typed', titleFirstLine: false, foldersFirst: true, wrapCode: true, wrapText: true, revealActive: true })
     expect(ws.modules.state.prefs.navStyle).toBe('icon')
     // E o Trabalho continua com as dele
     expect(JSON.parse(disks.trabalho.get('.4notes/settings.json')!)).toMatchObject({ theme: 'system', notes: { folderCase: 'upper', titleFirstLine: true, foldersFirst: false, wrapCode: false } })
@@ -184,7 +184,7 @@ describe('os módulos leem e gravam a parte deles', () => {
     const links = (await import('~/stores/links')).useLinksStore()
     const modules = (await import('~/stores/modules')).useModulesStore()
     await Promise.all([notes.load(), links.load(), modules.load()])
-    expect(notes.state.settings).toEqual({ autoCategory: true, folderCase: 'typed', titleFirstLine: true, foldersFirst: false, wrapCode: false, wrapText: true })
+    expect(notes.state.settings).toEqual({ autoCategory: true, folderCase: 'typed', titleFirstLine: true, foldersFirst: false, wrapCode: false, wrapText: true, revealActive: true })
     expect(links.state.sort).toBe('name')
     expect(modules.isEnabled('links')).toBe(false)
     expect(modules.state.prefs.navStyle).toBe('icon')

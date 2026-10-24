@@ -4,6 +4,7 @@
  *
  *   **negrito**   *itálico*   ~~tachado~~   ==marca-texto==   `código`   [texto](endereço)
  *   <u>sublinhado</u>   <span style="color: red">colorido</span>
+ *   <mark style="background-color: #fef08a">marca-texto colorido</mark>   (1.7.1)
  *
  * No editor, as marcações desses trechos ficam sempre escondidas (ver
  * formatting.ts e hidden-markup.ts). Este arquivo só LÊ os trechos: sem DOM e sem
@@ -11,7 +12,7 @@
  */
 import { syntaxTree } from '@codemirror/language'
 import type { EditorState } from '@codemirror/state'
-import { isPaletteColor, paletteVar } from '../colors'
+import { isPaletteColor, PALETTE, paletteVar, type PaletteColor } from '../colors'
 import { isMentionUrl } from './mentions'
 
 export type InlineFormat = 'bold' | 'italic' | 'underline' | 'strike' | 'highlight' | 'code' | 'color'
@@ -25,7 +26,7 @@ export interface FormatElement {
   openTo: number
   closeFrom: number
   to: number
-  /** Só para format = 'color'. */
+  /** format = 'color': a cor do texto. format = 'highlight': a cor do marca-texto (sem = o padrão, "==…=="). */
   color?: string
   /** Só para format = 'link'. */
   url?: string
@@ -42,8 +43,57 @@ const MARKERS: Record<Exclude<InlineFormat, 'color'>, readonly [string, string]>
 
 const colorMarkers = (color: string) => [`<span style="color: ${color}">`, '</span>'] as const
 
+/**
+ * Cores do marca-texto (1.7.1). No arquivo vai um tom claro (fica legível em qualquer
+ * programa que abra o Markdown); no app, a cor da paleta no tema atual (claro ou escuro).
+ */
+export const HIGHLIGHT_HEX: Record<PaletteColor, string> = {
+  purple: '#e9d5ff',
+  yellow: '#fef08a',
+  blue: '#bfdbfe',
+  green: '#bbf7d0',
+  red: '#fecaca',
+  orange: '#fed7aa',
+  teal: '#99f6e4',
+  pink: '#fbcfe8',
+  gray: '#e5e7eb',
+}
+
+/** "default" (ou nada) = o marca-texto padrão, "==…==". */
+export const DEFAULT_HIGHLIGHT = 'default'
+
+/** Cor do marca-texto lida do arquivo: o nome da paleta quando é um dos tons dela. */
+export function highlightColorOf(raw: string): string {
+  const value = raw.trim().toLowerCase()
+  if (isPaletteColor(value)) return value
+  return PALETTE.find((color) => HIGHLIGHT_HEX[color] === value) ?? value
+}
+
+const highlightMarkers = (color: string) => [`<mark style="background-color: ${isPaletteColor(color) ? HIGHLIGHT_HEX[color] : color}">`, '</mark>'] as const
+
+/** Cor do marca-texto que vale no elemento (undefined = o padrão). */
+export const highlightKey = (color?: string | null) => (!color || color === DEFAULT_HIGHLIGHT ? undefined : color)
+
 export function markersFor(format: InlineFormat, color?: string): readonly [string, string] {
-  return format === 'color' ? colorMarkers(color ?? 'purple') : MARKERS[format]
+  if (format === 'color') return colorMarkers(color ?? 'purple')
+  if (format === 'highlight' && highlightKey(color)) return highlightMarkers(highlightKey(color)!)
+  return MARKERS[format]
+}
+
+/** Formatos com cor (texto e marca-texto): "a mesma cor" importa ao juntar, trocar e tirar. */
+export const COLORED: ReadonlySet<ElementKind> = new Set<ElementKind>(['color', 'highlight'])
+
+/** Fundo do marca-texto colorido no app (segue o tema); null = cor inválida. */
+export function highlightCss(color: string | undefined): string | null {
+  if (!color) return null
+  if (isPaletteColor(color)) return `color-mix(in srgb, ${paletteVar(color)} 34%, transparent)`
+  return cssColor(color)
+}
+
+/** Fundo do marca-texto colorido num PDF (sempre o tom claro). */
+export function highlightPrintColor(color: string | undefined): string | null {
+  if (!color) return null
+  return isPaletteColor(color) ? HIGHLIGHT_HEX[color] : cssColor(color)
 }
 
 /**
@@ -76,6 +126,7 @@ const CODE_NODES = new Set(['InlineCode', 'FencedCode', 'CodeBlock', 'CodeText',
 const UNDERLINE_RE = /<u>(.*?)<\/u>/g
 const COLOR_RE = /<span\s+style\s*=\s*(["'])\s*color\s*:\s*([#\w(),.%\s-]+?)\s*;?\s*\1\s*>(.*?)<\/span>/gi
 const HIGHLIGHT_RE = /==([^\s=](?:[^=\n]*?[^\s=])?)==/g
+const MARK_RE = /<mark\s+style\s*=\s*(["'])\s*background(?:-color)?\s*:\s*([#\w(),.%\s-]+?)\s*;?\s*\1\s*>(.*?)<\/mark>/gi
 
 type SyntaxNode = ReturnType<typeof syntaxTree>['topNode']
 
@@ -132,6 +183,10 @@ export function findElements(state: EditorState, from: number, to: number): Form
   }
   scan(UNDERLINE_RE, (m, start) => ({ format: 'underline', from: start, openTo: start + 3, closeFrom: start + m[0].length - 4, to: start + m[0].length }))
   scan(HIGHLIGHT_RE, (m, start) => ({ format: 'highlight', from: start, openTo: start + 2, closeFrom: start + m[0].length - 2, to: start + m[0].length }))
+  scan(MARK_RE, (m, start) => {
+    const closeFrom = start + m[0].length - '</mark>'.length
+    return { format: 'highlight', from: start, openTo: closeFrom - m[3]!.length, closeFrom, to: start + m[0].length, color: highlightColorOf(m[2]!) }
+  })
   scan(COLOR_RE, (m, start) => {
     const closeFrom = start + m[0].length - '</span>'.length
     return { format: 'color', from: start, openTo: closeFrom - m[3]!.length, closeFrom, to: start + m[0].length, color: m[2]!.trim().toLowerCase() }
@@ -146,7 +201,7 @@ export const hasContent = (el: FormatElement) => el.closeFrom > el.openTo
  * As marcações deste trecho ficam escondidas? Todo trecho com texto; as tags HTML
  * (sublinhado, cor) mesmo sem texto, porque são compridas demais para aparecer.
  */
-export const hasHiddenMarkup = (el: FormatElement) => hasContent(el) || HTML_FORMATS.has(el.format)
+export const hasHiddenMarkup = (el: FormatElement) => hasContent(el) || HTML_FORMATS.has(el.format) || (el.format === 'highlight' && !!el.color)
 
 /** Trechos com marcação escondida nas linhas de `from` até `to`. */
 export function hiddenElements(state: EditorState, from: number, to: number): FormatElement[] {

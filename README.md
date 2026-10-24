@@ -6,7 +6,7 @@
 
 **Notes, tasks, mind maps, links, a timer and expenses in a single app — 100% local, on your computer and on your phone.**
 
-![Version](https://img.shields.io/badge/version-1.7.0-7c5cf0?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.7.1-7c5cf0?style=flat-square)
 ![Windows](https://img.shields.io/badge/Windows-Electron_44-7c5cf0?style=flat-square&logo=electron&logoColor=white)
 ![Android](https://img.shields.io/badge/Android_7+-Capacitor_8-fdcf3f?style=flat-square&logo=android&logoColor=black)
 ![Nuxt](https://img.shields.io/badge/Nuxt_4-Vue_3-00dc82?style=flat-square&logo=nuxt.js&logoColor=white)
@@ -50,11 +50,11 @@ What sets it apart:
 | | Module | In short |
 | :-: | --- | --- |
 | 📝 | **Notes** (_Notas_) | Quick notes in tabs, categories with a color, icon or photo, automatic folders by title, newest notes on top, navigation between versions, TXT/PDF export. |
-| ✅ | **Tasks** (_Tarefas_) | Categories, dates, recurrence (that works with the app closed), quick creation and a description with the same formatting as notes. |
+| ✅ | **Tasks** (_Tarefas_) | Categories (with their app-wide icon or photo), dates, recurrence (that works with the app closed), quick creation and a description with the same formatting as notes. |
 | 🧠 | **Mind Map** (_Mapa Mental_) | Multiple maps; each node is a permanent note. Connections by dragging, multi-note selection and a "Reorganize" (_Reorganizar_) that avoids crossings. |
 | 🔗 | **Links** | Paste an address and the site's title and icon arrive on their own. Categories, search and import of browser bookmarks. |
 | ⏱️ | **Timer** | Stopwatch, countdown timer and Pomodoro, with a filterable history and statistics with charts and period comparison. |
-| 💰 | **Finances** (_Finanças_) | Expenses with amount, description, date, category and notes; a history with filters and totals, and a dashboard with charts and period comparison. |
+| 💰 | **Finances** (_Finanças_) | Expenses and income, bills with a payment reminder, recurring entries (rent, subscriptions, salary), realized and projected balance, bank statement import (CSV/OFX), and a dashboard with charts and period comparison. |
 
 Modules can be **enabled, disabled and reordered** (by dragging in the side menu). Disabling only removes the module from the menu: no data is deleted.
 
@@ -75,6 +75,8 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 - **Full screen for blocks**: a text or code block opens in full screen from its card. **Quebrar linhas** (_Wrap lines_, button in the header or `Alt+Z`) fits long lines to the window width instead of scrolling sideways — only on screen: the block's content gets no real line breaks. In code, a wrapped line continues at its own indentation. Off by default for code and on for text (as before); the choice is remembered per workspace.
 - **Export** from the context menu: **TXT** (text only, no formatting) or **PDF** (as it looks on screen, with images and highlighted code).
 - Notes **without a category** ask, when you close the tab, whether you want to keep or delete them; notes in a category close right away, already saved.
+- **Follow the open note in the list** (_Selecionar a nota aberta na lista_, Settings › Modules › Notes, on by default): switching tabs opens the folders down to the note and highlights it. Turned off, the list stays as you left it (folders and highlight only change when you click in the list).
+- **Deleting a note** moves the file to the trash; once the **Undo** toast is gone, the library images that only that note used are removed too. Images still used anywhere else (another note, a map, a task, a Finances entry, a category photo) stay, and anything that can't be checked stays as well.
 
 </details>
 
@@ -87,7 +89,8 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 - **Recurrence**: daily, weekly, every N days/weeks/months/years, counted from the scheduled date or from completion. A task stores only the rule and the next date — that's why it works with the app closed, with no background process.
 - When completed, the next occurrence is calculated from today (missed ones are skipped); you can also **skip** an occurrence.
 - **Pending** lists (Today and Overdue), **Scheduled** and **Completed**.
-- **Formatted description** with the same editor as notes: bold, lists, checklists, code, pasted images and mentions.
+- **Formatted description** with the same editor as notes: bold, lists, checklists, code, pasted images and mentions (`@` items, `#` categories).
+- Each task shows its **category icon** (or photo, or initial) from the app's central category list; changing the icon anywhere updates the tasks right away.
 - The edit panel closes when you click outside it (without losing the draft of a new task).
 
 </details>
@@ -138,10 +141,17 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 
 <br>
 
-- **Quick entry**: type the amount and the description and press `Enter`; the date starts as today. Category and notes (_Observações_) are optional, in the same form. The amount accepts `52,30`, `52.30` or `1.234,56`, and is shown in Brazilian reais (`R$ 1.234,56`).
-- **Categories** are the app's shared categories: pick one used in another module, or create a new one without leaving the form.
-- **History** (_Gastos_) grouped by day, with period (day, week, month, year, range or everything), category, search by description and sorting by date or amount. The total, count and average of what is shown appear on top. Clicking an expense opens it to edit, repeat today, see its mentions or delete it (with a confirmation and **Undo**).
-- **Dashboard** (_Painel_) built only from your expenses: spending per day, week or month, by category (donut), the days with the most spending, the biggest expenses, and a **comparison with the previous period** (for the current period, the same stretch of both, e.g. October 1 to 22 against September 1 to 22). Every number follows the period and category filters, and empty periods show a short explanation instead of a chart.
+Three areas: **Lançamentos** (_Entries_: register, history, import), **Contas** (_Bills_) and **Painel** (_Dashboard_).
+
+- **Quick entry**: choose **Gasto** (expense) or **Entrada** (income), type the amount and the description and press `Enter`; the date starts as today. Category and notes (_Observações_, collapsible, with the notes editor) are optional, in the same form. The amount accepts `52,30`, `52.30` or `1.234,56`, and is shown in Brazilian reais (`R$ 1.234,56`).
+- **`#` categories**: `Feira #Mercado` in the description picks (or creates) the category and leaves `Feira` as the text; in the notes, `#` inserts a category mention linked by id.
+- **Me lembre de pagar** (_Remind me to pay_): the expense stays **pending** until you confirm the payment, which records the day it was paid. States: pending, paid and overdue. With the app open, bills due today or overdue show a reminder (and, on Windows, a system notification), plus a badge on the module icon.
+- **Recurring entries** (_Repetir_): daily, weekly, monthly or yearly, until you stop it or until a date. Occurrences up to today become real entries with their own id (recurrence + scheduled date, so reopening the app or syncing never duplicates them), date and status, and stay pending until confirmed; later ones are forecasts. Changing the amount, frequency or next date asks whether it applies to **the next one only** or **the next and future ones**; stopping or deleting keeps the payment history. Short months and leap years are handled from the first date (the 31st falls on the last day of shorter months).
+- **Contas** (_Bills_): overdue and upcoming bills and income (stored and forecast, up to the end of the month, 30 or 90 days), the recurring entries and the payment history.
+- **History** grouped by day (a paid bill counts on the day it was paid), with period, entry type, category, search and sorting; pending and overdue entries are marked and can be paid from the row, and forecast occurrences in the period show up separately. Clicking an entry opens it to edit, confirm or undo a payment, skip an occurrence, repeat today, see its mentions or delete it (with a confirmation and **Undo**).
+- **Balance** (_Saldo_): the **realized** balance (an optional opening balance + income received − expenses paid, up to today; without an opening balance it is labeled as an estimate) and the **projected** balance (realized − pending, overdue and upcoming bills + expected income, up to the chosen date), plus received/paid in the period, committed amount and expected income.
+- **Bank statement import** (CSV or OFX): delimiter, header row, columns (single signed amount, separate credit/debit or a D/C column), date order and decimal separator are detected and can be changed; Windows-1252 files are read correctly. Expense or income comes from the sign and the statement type (account or credit card). A preview lets you edit and select rows, suggests categories from similar descriptions or category names, leaves possible duplicates unchecked (same bank id, or same amount within 3 days) and confirms a pending bill that shows up as paid. The file is only read on the device and is not copied; each entry remembers which import it came from, and the import can be undone.
+- **Dashboard** (_Painel_) built only from your records: spending (paid expenses) per day, week or month, by category (donut), the days with the most spending, the biggest expenses, and a **comparison with the previous period** (for the current period, the same stretch of both, e.g. October 1 to 22 against September 1 to 22). Every number follows the period and category filters, and empty periods show a short explanation instead of a chart.
 - **Mentions**: expenses can be mentioned with `@` in notes and tasks. The mention stores only the expense's id, so it always shows the current description and amount, and opening it shows the expense in the history.
 - Amounts are stored in **cents** (whole numbers), so totals never have rounding errors.
 
@@ -151,15 +161,15 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 
 | | Feature | Description |
 | :-: | --- | --- |
-| ✍️ | **Visual Markdown editor** | Formatting toolbar when you select text; lists that renumber themselves; clickable checklists; text blocks and code blocks from the toolbar (the block's name switches between text and code and picks the language, with syntax highlighting); language detected when pasting code; pasted images; `Ctrl+D` to edit several occurrences. |
-| 🔁 | **Mentions (`@`)** | Notes and tasks mention notes, maps, tasks, saved links, Timer records and expenses. One click opens the item in its module; renaming in the app fixes the mentions. |
-| 🏷️ | **Shared categories** | One list of categories for the whole app. Create a category in any module and reuse it in the others; **Ver categorias** (_View categories_, the tag in the side menu) shows where each one is used, opens its records, edits the name, color, icon or photo everywhere at once, merges two categories and deletes one, moving its records to another category or leaving them without one. Nothing is lost. |
+| ✍️ | **Visual Markdown editor** | Formatting toolbar when you select text, with text color and highlight color palettes (both also inside lists); lists that renumber themselves; clickable checklists; text blocks and code blocks from the toolbar (the block's name switches between text and code and picks the language, with syntax highlighting); language detected when pasting code; pasted images; `Ctrl+D` to edit several occurrences. |
+| 🔁 | **Mentions (`@` and `#`)** | Notes and tasks mention notes, maps, tasks, saved links, Timer records and finance entries with `@`. `#` mentions an app category (or creates one) in any note, task description and finance notes; the mention is linked by id, follows renames and merges, and opens the category with its records. One click opens the item in its module; renaming in the app fixes the mentions. |
+| 🏷️ | **Shared categories** | One list of categories for the whole app. Create a category in any module and reuse it in the others. **Settings › Categories** (_Configurações › Categorias_) is a compact, search-as-you-type list built for hundreds of categories; opening one shows where it is used (each module's records on demand), its `#` mentions, and lets you edit the name, color, icon or photo everywhere at once, use it in another module, merge two categories and delete one, moving its records to another category or leaving them without one. Nothing is lost. |
 | 🧹 | **Clear formatting** | **Limpar formatação** (_Clear formatting_) shows up in the formatting toolbar only when the selection has formatting to remove, and removes it only inside the selection. |
-| 🖼️ | **Image library** | Every uploaded image goes to `attachments/` to be reused in notes, tasks and categories, with no duplicate copies. |
+| 🖼️ | **Image library** | Every uploaded image goes to `attachments/` to be reused in notes, tasks, finance notes and categories, with no duplicate copies. Images left unused by a deleted note are cleaned up safely. |
 | 🗂️ | **Workspaces** | Create as many as you want, each with its own data and settings (a new workspace starts with the default settings). The workspace name appears in the top-left corner. |
 | 🖥️ | **Full-width screens** | Tasks, Links and the Timer use the whole width of the window, at any size. |
 | 🎓 | **Tutorials** | `F1` (or the **?** in the side menu) opens a panel with each module's purpose, features, context menu and shortcuts. |
-| 🌗 | **Light and dark theme** | In purple and yellow, also in the context menus. Animations respect the system's "reduce motion" setting. |
+| 🌗 | **Light and dark theme** | In purple and yellow, also in the context menus; chosen in Settings › General. Animations respect the system's "reduce motion" setting. |
 | 🔄 | **Automatic updates** | On startup, the app looks for a new version on GitHub Releases and installs it with one click (Windows and Android). |
 | 🚀 | **Start with the computer** | Optional, in the installed app. |
 
@@ -237,7 +247,7 @@ Personal/                     ← the workspace
 │   ├── links.json            links and categories
 │   └── icons/                site icons
 ├── timer/timer.json          categories, history and the running session
-├── finance/finance.json      expenses and the categories used in Finances
+├── finance/finance.json      expenses, income, recurring entries, opening balance, imports
 ├── categories/categories.json  the shared categories (name, color, icon, photo)
 ├── attachments/              image library
 └── .4notes/                  settings.json, node positions and backups
@@ -520,9 +530,10 @@ Markdown shortcuts work at the start of a line: `# `, `- `, `1. `, `- [ ] `, `> 
 | Timer | `Space` | Start, pause or resume |
 | Timer | `Ctrl+Enter` | Finish the session |
 | Timer | `←` / `→` | Previous / next period |
-| Finances | `Ctrl+N` | New expense (goes to the amount) |
-| Finances | `Enter` | Register the expense |
+| Finances | `Ctrl+N` | New entry (goes to the amount) |
+| Finances | `Enter` | Register the entry |
 | Finances | `Ctrl+F` | Search the history |
+| Finances | `Ctrl+I` | Import a bank statement (outside text fields) |
 | Finances | `←` / `→` | Previous / next period |
 
 </details>
@@ -536,7 +547,7 @@ npm test             # unit tests (Vitest)
 npm run typecheck    # strict TypeScript in the interface and in Electron
 ```
 
-The tests live in [`tests/`](tests/) (29 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order and folders on top), line wrapping in full screen, note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones), Finances (amounts, history, dashboard numbers and comparison), shared categories (the 1.6 migration, renaming, merging and deleting across all modules, files from an older version), temporary and fixed tabs, and updates.
+The tests live in [`tests/`](tests/) (33 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order and folders on top), line wrapping in full screen, note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones), Finances (amounts, history, dashboard numbers and comparison; recurring entries with short months and leap years, no duplicates, next-only and future changes, bills and payment confirmation, realized and projected balance, CSV/OFX statement parsing, category suggestions and duplicate detection), `#` category mentions (renames and merges), the cleanup of images left by a deleted note, shared categories (the 1.6 migration, renaming, merging and deleting across all modules, files from an older version), temporary and fixed tabs, and updates.
 
 ---
 

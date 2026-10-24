@@ -9,10 +9,13 @@
  * `docked` (toque/celular): a barra fica fixa embaixo da nota, acima do teclado, rolando
  * para o lado quando não cabe; ganha "Imagem" e, num link, "Abrir" (no desktop isso fica
  * no botão direito e no Ctrl + clique).
+ *
+ * Cor do texto e cor do marca-texto (1.7.1) abrem cada uma a sua paleta, do mesmo jeito:
+ * o "A" com a barrinha colorida é a cor das letras; o marcador, a cor de fundo.
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { PALETTE, PALETTE_LABELS, paletteVar, type PaletteColor } from '~/lib/colors'
-import type { ActiveFormats, InlineFormat, LineFormat } from '~/lib/editor/formatting'
+import { DEFAULT_HIGHLIGHT, HIGHLIGHT_HEX, type ActiveFormats, type InlineFormat, type LineFormat } from '~/lib/editor/formatting'
 import { modKeyLabel } from '~/lib/platform'
 
 const props = defineProps<{
@@ -38,6 +41,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   inline: [format: InlineFormat]
   color: [color: PaletteColor | null]
+  /** Cor do marca-texto: "default" (o padrão), uma cor da paleta, ou null (tirar o marca-texto). */
+  highlight: [color: string | null]
   line: [format: LineFormat]
   'open-link': []
   link: [url: string]
@@ -51,13 +56,20 @@ const emit = defineEmits<{
 }>()
 
 const mod = modKeyLabel()
-const paletteOpen = ref(false)
+/** Paleta aberta: a da cor do texto, a do marca-texto, ou nenhuma. */
+const openPalette = ref<'color' | 'highlight' | null>(null)
+const paletteOpen = computed(() => openPalette.value === 'color')
+const highlightOpen = computed(() => openPalette.value === 'highlight')
 const linkInput = ref<HTMLInputElement>()
 const linkValue = ref('')
 watch(
   () => [props.x, props.y],
-  () => (paletteOpen.value = false),
+  () => (openPalette.value = null),
 )
+
+function togglePalette(which: 'color' | 'highlight') {
+  openPalette.value = openPalette.value === which ? null : which
+}
 watch(
   () => props.linkMode,
   async (open) => {
@@ -109,7 +121,18 @@ const currentColor = computed(() => {
 
 function pickColor(color: PaletteColor | null) {
   emit('color', color)
-  paletteOpen.value = false
+  openPalette.value = null
+}
+
+/** Cor do marca-texto da seleção (para marcar a bolinha e pintar a barrinha do botão). */
+const currentHighlight = computed(() => props.active.highlight)
+const highlightSwatch = (color: string) => (color === DEFAULT_HIGHLIGHT ? 'var(--mark)' : `color-mix(in srgb, ${paletteVar(color as PaletteColor)} 34%, transparent)`)
+const HIGHLIGHT_CHOICES = [DEFAULT_HIGHLIGHT, ...PALETTE.filter((color) => color in HIGHLIGHT_HEX)]
+const highlightLabel = (color: string) => (color === DEFAULT_HIGHLIGHT ? 'Padrão' : PALETTE_LABELS[color as PaletteColor])
+
+function pickHighlight(color: string | null) {
+  emit('highlight', color)
+  openPalette.value = null
 }
 </script>
 
@@ -170,21 +193,23 @@ function pickColor(color: PaletteColor | null) {
         data-tip-pos="top"
         aria-label="Cor do texto"
         :aria-expanded="paletteOpen"
-        @click="paletteOpen = !paletteOpen"
+        @click="togglePalette('color')"
       >
         <AppIcon name="text-color" :size="15" :stroke="2" />
         <span class="color-bar" :style="{ background: currentColor ? paletteVar(currentColor) : 'var(--text-3)' }" />
       </button>
       <button
-        class="fmt-btn"
-        :class="{ on: active.formats.has('highlight') }"
+        class="fmt-btn color-btn"
+        :class="{ on: highlightOpen || active.formats.has('highlight') }"
         data-format="highlight"
-        :data-tip="`Marca-texto (${mod}+Shift+H)`"
+        :data-tip="`Cor do marca-texto (${mod}+Shift+H: padrão)`"
         data-tip-pos="top"
-        aria-label="Marca-texto"
-        @click="emit('inline', 'highlight')"
+        aria-label="Cor do marca-texto"
+        :aria-expanded="highlightOpen"
+        @click="togglePalette('highlight')"
       >
-        <AppIcon name="highlighter" :size="16" :stroke="1.9" />
+        <AppIcon name="highlighter" :size="15" :stroke="1.9" />
+        <span class="color-bar mark-bar" :style="{ background: currentHighlight ? highlightSwatch(currentHighlight) : 'transparent' }" />
       </button>
       <span class="sep" />
       <button
@@ -252,7 +277,38 @@ function pickColor(color: PaletteColor | null) {
       </button>
     </div>
 
-    <div v-if="paletteOpen && !linkMode" class="palette" role="radiogroup" aria-label="Cor do texto">
+    <div v-if="highlightOpen && !linkMode" class="palette" role="radiogroup" aria-label="Cor do marca-texto" data-palette="highlight">
+      <button
+        class="swatch none"
+        role="radio"
+        :aria-checked="!active.formats.has('highlight')"
+        data-highlight="none"
+        data-tip="Sem marca-texto"
+        data-tip-pos="top"
+        aria-label="Sem marca-texto"
+        @click="pickHighlight(null)"
+      >
+        <AppIcon name="x" :size="12" :stroke="2.2" />
+      </button>
+      <button
+        v-for="color in HIGHLIGHT_CHOICES"
+        :key="color"
+        class="swatch mark"
+        role="radio"
+        :aria-checked="currentHighlight === color"
+        :class="{ on: currentHighlight === color }"
+        :style="{ '--c': highlightSwatch(color), '--ring': color === 'default' ? 'var(--mark)' : paletteVar(color as PaletteColor) }"
+        :data-highlight="color"
+        :data-tip="highlightLabel(color)"
+        data-tip-pos="top"
+        :aria-label="`Marca-texto ${highlightLabel(color)}`"
+        @click="pickHighlight(color)"
+      >
+        <span class="mark-a">A</span>
+      </button>
+    </div>
+
+    <div v-if="paletteOpen && !linkMode" class="palette" role="radiogroup" aria-label="Cor do texto" data-palette="color">
       <button class="swatch default" role="radio" :aria-checked="!active.color" data-tip="Cor padrão" data-tip-pos="top" aria-label="Cor padrão" @click="pickColor(null)">
         <span class="default-a">A</span>
       </button>
@@ -388,6 +444,28 @@ function pickColor(color: PaletteColor | null) {
 .swatch.default {
   background: var(--surface-3);
   box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+/* Marca-texto: a bolinha é o fundo (com o "A" por cima), para não confundir com a cor das letras */
+.swatch.mark {
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ring) 45%, transparent);
+}
+.swatch.mark.on {
+  box-shadow: 0 0 0 2px var(--elevated), 0 0 0 4px var(--ring);
+}
+.swatch.none {
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--text-3);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.mark-a {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.mark-bar {
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 .default-a {
   font-size: 12px;

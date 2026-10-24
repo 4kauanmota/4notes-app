@@ -70,6 +70,13 @@ export const MENTION_KINDS: Record<MentionKind, MentionKindInfo> = {
     missing: 'Gasto não encontrado',
     gone: 'O gasto não foi encontrado nas Finanças (foi excluído).',
   },
+  category: {
+    icon: 'tag',
+    noun: 'Categoria',
+    open: 'Ver a categoria e os registros dela',
+    missing: 'Categoria excluída',
+    gone: 'A categoria não existe mais (foi excluída).',
+  },
 }
 
 /** Um item da lista do "@", antes de filtrar e ordenar. */

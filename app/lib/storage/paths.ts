@@ -18,8 +18,10 @@ export const DATA_PATHS = {
   timerFile: 'timer/timer.json',
   /** Categorias compartilhadas por todos os módulos (1.7.0): nome, cor, ícone e foto de cada uma. */
   categoriesFile: 'categories/categories.json',
-  /** Finanças (1.7.0): os gastos (e a lista de categorias usadas nelas). */
+  /** Finanças (1.7.0): gastos, entradas, recorrências (1.7.1) e a lista de categorias usadas nelas. */
   financeFile: 'finance/finance.json',
+  /** Pasta das Finanças: base dos links (menções "#") escritos nas observações. */
+  financeDir: 'finance',
 
   metaDir: '.4notes',
   /**

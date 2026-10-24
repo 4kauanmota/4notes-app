@@ -33,6 +33,12 @@ export interface NotesSettings {
    */
   wrapCode: boolean
   wrapText: boolean
+  /**
+   * A lista lateral acompanha a nota aberta nas abas (1.7.1; padrão ligado, como
+   * sempre): abre as pastas até ela e a destaca. Desligado, a lista fica como você
+   * deixou (as pastas e a nota destacada só mudam quando você clica nela).
+   */
+  revealActive: boolean
 }
 
 export const DEFAULT_NOTES_SETTINGS: NotesSettings = {
@@ -42,6 +48,7 @@ export const DEFAULT_NOTES_SETTINGS: NotesSettings = {
   foldersFirst: false,
   wrapCode: false,
   wrapText: true,
+  revealActive: true,
 }
 
 /** Como as Notas estavam na tela deste aparelho (lib/storage/device-state.ts). */
@@ -72,6 +79,7 @@ export function normalizeNotesSettings(raw: unknown): NotesSettings {
     foldersFirst: settings.foldersFirst === true,
     wrapCode: settings.wrapCode === true,
     wrapText: settings.wrapText !== false,
+    revealActive: settings.revealActive !== false,
   }
 }
 

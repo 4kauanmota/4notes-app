@@ -524,6 +524,11 @@ registerCategoryModule({
   id: 'links',
   ready: () => state.loaded && !state.error,
   members: () => state.folders.map((folder) => ({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon, image: folder.image })),
+  counts: () => {
+    const counts = new Map<string, number>()
+    for (const link of state.links) if (link.folderId) counts.set(link.folderId, (counts.get(link.folderId) ?? 0) + 1)
+    return counts
+  },
   records: (id) =>
     state.links
       .filter((link) => link.folderId === id)

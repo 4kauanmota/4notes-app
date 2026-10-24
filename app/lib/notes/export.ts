@@ -17,7 +17,7 @@ import { EditorState, type Line } from '@codemirror/state'
 import { highlightCode, tagHighlighter, tags as t } from '@lezer/highlight'
 import { workspaceFileUrl } from '#shared/ipc'
 import { codeBlocks, type CodeBlock } from '../editor/code-blocks'
-import { cssColor, findElements, hasHiddenMarkup, type FormatElement } from '../editor/elements'
+import { cssColor, findElements, hasHiddenMarkup, highlightPrintColor, type FormatElement } from '../editor/elements'
 import { findLanguage, isTextBlockInfo, languageLabel } from '../editor/languages'
 import { lineMarkerAt } from '../editor/line-markers'
 import { resolveFromNote } from '../files/workspace-path'
@@ -209,7 +209,10 @@ function wrap(text: string, active: FormatElement[]): string {
   if (active.some((el) => el.format === 'code')) html = `<code>${html}</code>`
   const classes = [...new Set(active.map((el) => SPAN_CLASSES[el.format]).filter(Boolean))]
   const color = cssColor(active.filter((el) => el.format === 'color').at(-1)?.color)
-  if (classes.length || color) html = `<span${classes.length ? ` class="${classes.join(' ')}"` : ''}${color ? ` style="color: ${color}"` : ''}>${html}</span>`
+  // Marca-texto colorido (1.7.1): o tom claro da cor, legível no papel
+  const background = highlightPrintColor(active.filter((el) => el.format === 'highlight').at(-1)?.color)
+  const styles = [color ? `color: ${color}` : '', background ? `background: ${background}` : ''].filter(Boolean).join('; ')
+  if (classes.length || styles) html = `<span${classes.length ? ` class="${classes.join(' ')}"` : ''}${styles ? ` style="${styles}"` : ''}>${html}</span>`
   const link = active.filter((el) => el.format === 'link').at(-1)
   if (link) {
     const href = externalUrl(link.url)

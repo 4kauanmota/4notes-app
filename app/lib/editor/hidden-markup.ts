@@ -36,6 +36,7 @@ import {
 } from '@codemirror/state'
 import { EditorView, keymap, type Command } from '@codemirror/view'
 import {
+  COLORED,
   FLANKING,
   findElements,
   hasContent,
@@ -147,7 +148,7 @@ function applyFormats(
   const closes: string[] = []
   for (const stored of formats) {
     const previous = elements
-      .filter((el) => el.format === stored.format && (stored.format !== 'color' || sameColor(el.color, stored.color)) && el.to <= from)
+      .filter((el) => el.format === stored.format && (!COLORED.has(stored.format) || sameColor(el.color, stored.color)) && el.to <= from)
       .filter((el) => !state.sliceDoc(el.to, from).trim() && !extended.includes(el))
       .sort((a, b) => b.to - a.to)[0]
     if (previous) {
@@ -490,15 +491,16 @@ const endWithGravity: Command = (view) => {
 
 // ── 6. Teclas encostadas nas marcações ───────────────────────────────────────
 
-/** Tag de abertura (sublinhado ou cor) no fim do texto. */
-const OPEN_TAG_AT_END = /(?:<u>|<span\s+style\s*=\s*(["'])\s*color\s*:\s*[#\w(),.%\s-]+?\s*;?\s*\1\s*>)$/i
+/** Tag de abertura (sublinhado, cor ou marca-texto colorido) no fim do texto. */
+const OPEN_TAG_AT_END = /(?:<u>|<span\s+style\s*=\s*(["'])\s*color\s*:\s*[#\w(),.%\s-]+?\s*;?\s*\1\s*>|<mark\s+style\s*=\s*(["'])\s*background(?:-color)?\s*:\s*[#\w(),.%\s-]+?\s*;?\s*\2\s*>)$/i
 
 /** Tags vazias em volta da posição `at` da linha (ex.: "<u>|</u>", de versões antigas): [início, fim] ou null. */
 function emptyTagsAround(text: string, at: number): [number, number] | null {
   let start = at
   let end = at
   for (let open = OPEN_TAG_AT_END.exec(text.slice(0, start)); open; open = OPEN_TAG_AT_END.exec(text.slice(0, start))) {
-    const close = open[0].toLowerCase() === '<u>' ? '</u>' : '</span>'
+    const tag = open[0].toLowerCase()
+    const close = tag === '<u>' ? '</u>' : tag.startsWith('<mark') ? '</mark>' : '</span>'
     if (text.slice(end, end + close.length).toLowerCase() !== close) break
     start -= open[0].length
     end += close.length

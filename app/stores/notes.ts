@@ -12,7 +12,9 @@
  *   continuarem certas (stores/mentions.ts).
  */
 import { computed, reactive, watch } from 'vue'
+import { IMAGE_FILE } from '#shared/files'
 import { errorCode, errorMessage, type FileEntry } from '#shared/ipc'
+import { inLibrary, referencedFiles } from '#shared/library'
 import { notifyError, showToast } from '~/composables/useToasts'
 import type { PaletteColor } from '~/lib/colors'
 import { basename, nameKey, sanitizeFileName, stripExtension, uniqueName, UNTITLED } from '~/lib/files/filename'
@@ -93,6 +95,11 @@ const state = reactive({
   openFolders: [] as string[],
   /** Muda quando a imagem de uma categoria é trocada (a lista recarrega a imagem). */
   imageVersion: 0,
+  /**
+   * A nota destacada na lista lateral quando ela não acompanha as abas (1.7.1,
+   * settings.revealActive desligado): a última clicada na lista. Só nesta sessão.
+   */
+  treeSelected: null as string | null,
   /** Configurações das Notas (Configurações › Módulos), guardadas no settings.json do workspace. */
   settings: { ...DEFAULT_NOTES_SETTINGS } as NotesSettings,
 })
@@ -619,12 +626,32 @@ async function flushAll(): Promise<void> {
 
 // ── Excluir / duplicar ──────────────────────────────────────────────────────
 
+// ── Imagens que a nota excluída deixou (1.7.1) ──────────────────────────────
+
+type ImagesReleased = (paths: string[]) => void
+const releasedListeners: ImagesReleased[] = []
+
+/**
+ * Avisa quando uma nota excluída deixa imagens da biblioteca (attachments/) para trás:
+ * quem escuta (stores/app.ts) confere se ainda são usadas em algum lugar e só exclui as
+ * sem uso.
+ */
+export function onImagesReleased(listener: ImagesReleased): void {
+  releasedListeners.push(listener)
+}
+
+/** Imagens da biblioteca citadas no texto de uma nota. */
+function libraryImagesOf(path: string, content: string): string[] {
+  return [...new Set(referencedFiles(path, content).filter((file) => inLibrary(file) && IMAGE_FILE.test(file)))]
+}
+
 async function deleteNote(id: string): Promise<void> {
   const note = findNote(id)
   if (!note) return
   timers.get(id)?.cancel()
   await queue.run(id, async () => undefined) // espera salvamentos em andamento
   const snapshot = { content: note.content, wasOpen: state.openIds.includes(id), title: noteTitle(note), category: categoryOf(note)?.name ?? null }
+  const images = libraryImagesOf(note.path ?? `${ROOT}/${UNTITLED}.md`, note.content)
   if (note.path) {
     try {
       await repo.trash(note.path)
@@ -635,18 +662,25 @@ async function deleteNote(id: string): Promise<void> {
   }
   removeFromState(id)
   if (!snapshot.content.trim()) return
+  let undone = false
   showToast({
     message: `“${snapshot.title}” foi para ${trashPlace()}`,
     icon: 'trash',
     action: {
       label: 'Desfazer',
       run: async () => {
+        undone = true
         const restored = createNote(snapshot.content, snapshot.category)
         if (!snapshot.wasOpen) {
           void closeTab(restored.id)
         }
         await saveNow(restored.id)
       },
+    },
+    // Só depois que o "Desfazer" não está mais na tela: as imagens que ficaram sem uso podem sair
+    onClose: () => {
+      if (undone || !images.length) return
+      for (const listener of releasedListeners) listener(images)
     },
   })
 }
@@ -867,7 +901,7 @@ function attachShared(source: SharedCategory): Promise<NoteCategory | null> {
       state.categories.map((category) => category.name),
     )
     if (problem) {
-      notifyError(`“${source.name}” não pode virar uma pasta nas Notas: ${problem} Renomeie a categoria em Ver categorias.`)
+      notifyError(`“${source.name}” não pode virar uma pasta nas Notas: ${problem} Renomeie a categoria em Configurações › Categorias.`)
       return null
     }
     try {
@@ -1092,6 +1126,17 @@ registerCategoryModule({
       icon: category.icon,
       image: category.source ?? categoryImagePath(category),
     })),
+  counts: () => {
+    const byDir = new Map(state.categories.filter((category) => category.id).map((category) => [nameKey(categoryDir(category.name)), category.id!]))
+    const counts = new Map<string, number>()
+    for (const note of visibleNotes.value) {
+      if (!note.path) continue
+      // A nota conta na categoria da pasta dela (notes/<Categoria>), como em records()
+      const id = byDir.get(nameKey(note.dir))
+      if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+    return counts
+  },
   records: (id) => {
     const category = state.categories.find((item) => item.id === id)
     if (!category) return []

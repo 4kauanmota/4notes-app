@@ -100,7 +100,9 @@ async function openMenu() {
           <AppIcon name="calendar" :size="12" /> {{ dateInfo.label }}
         </span>
         <span v-if="recurrenceLabel" class="meta recurrence"><AppIcon name="repeat" :size="12" /> {{ recurrenceLabel }}</span>
-        <span v-if="showCategory && category" class="meta"><CategoryDot :color="category.color" :size="7" /> {{ category.name }}</span>
+        <span v-if="showCategory && category" class="meta category" :data-task-category="category.id"
+          ><SharedCategoryIcon :id="category.id" :color="category.color" :name="category.name" :size="14" /> {{ category.name }}</span
+        >
         <MentionChip v-for="mention in task.mentions" :key="refKey(mention)" :mention="mention" class="meta-mention" />
       </div>
     </div>

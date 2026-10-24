@@ -2,19 +2,17 @@
 /**
  * Navegação do celular (layout compact — celular, tela externa do Fold): os módulos
  * ativos na barra de baixo, ao alcance do polegar, na ordem escolhida por você; e
- * "Mais": workspace, tema, categorias, tutorial e configurações (o que fica no menu lateral do
- * desktop). Toque prolongado num módulo: mover ou desativar.
+ * "Mais": workspace, tutorial e configurações (o que fica no menu lateral do desktop;
+ * o tema e as categorias ficam nas Configurações, 1.7.1). Toque prolongado num módulo: mover ou desativar.
  */
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { openCategoriesPanel } from '~/composables/useCategoryActions'
 import { showContextMenu } from '~/composables/useContextMenu'
-import { useTheme } from '~/composables/useTheme'
 import { openTutorial } from '~/composables/useTutorial'
 import { moduleById, moduleForPath, type ModuleId } from '~/lib/modules'
-import type { ThemePreference } from '#shared/ipc'
 import { useAppStore } from '~/stores/app'
 import { useModulesStore } from '~/stores/modules'
+import { useFinanceStore } from '~/stores/finance'
 import { useTasksStore } from '~/stores/tasks'
 import { useTimerStore } from '~/stores/timer'
 import { useUpdatesStore } from '~/stores/updates'
@@ -26,7 +24,6 @@ const route = useRoute()
 const app = useAppStore()
 const modules = useModulesStore()
 const tasks = useTasksStore()
-const { theme, setTheme } = useTheme()
 
 const shown = computed(() => modules.enabled.value.slice(0, MAX_ITEMS))
 const overflow = computed(() => modules.enabled.value.slice(MAX_ITEMS))
@@ -35,22 +32,14 @@ const current = computed(() => moduleForPath(route.path))
 const updates = useUpdatesStore()
 const updateReady = computed(() => updates.state.status === 'available' || updates.state.status === 'permission')
 const dueCount = computed(() => tasks.progress.value.total - tasks.progress.value.done)
-const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : 0)
+/** Finanças (1.7.1): contas com "Me lembre de pagar" que vencem hoje ou já venceram. */
+const finance = useFinanceStore()
+const badgeOf = (id: ModuleId) => (id === 'tasks' ? dueCount.value : id === 'finance' ? finance.reminders.value.length : 0)
 const timer = useTimerStore()
 /** Timer com uma sessão em andamento: um ponto no ícone (pulsando enquanto conta). */
 const liveOf = (id: ModuleId) => (id === 'timer' && timer.state.active ? (timer.state.active.runningSince !== null ? 'running' : 'paused') : null)
 
 const moreOpen = ref(false)
-
-const themeChoice = computed<ThemePreference>({
-  get: () => theme.preference,
-  set: (value) => void setTheme(value),
-})
-const themeOptions: { value: ThemePreference; label: string; icon: string }[] = [
-  { value: 'light', label: 'Claro', icon: 'sun' },
-  { value: 'dark', label: 'Escuro', icon: 'moon' },
-  { value: 'system', label: 'Sistema', icon: 'monitor' },
-]
 
 async function itemMenu(id: ModuleId) {
   const visible = modules.enabled.value.map((module) => module.id)
@@ -115,13 +104,6 @@ function run(action: () => unknown) {
       </div>
 
       <div class="more-group">
-        <div class="more-theme">
-          <span class="more-theme-label">Tema</span>
-          <UiSegmented v-model="themeChoice" :options="themeOptions" />
-        </div>
-      </div>
-
-      <div class="more-group">
         <button type="button" class="more-row" data-action="workspace-open" @click="run(() => app.openWorkspace(false))">
           <AppIcon name="folder-open" :size="19" />
           <span>Abrir outro workspace…</span>
@@ -133,10 +115,6 @@ function run(action: () => unknown) {
       </div>
 
       <div class="more-group">
-        <button type="button" class="more-row" data-action="categories" @click="run(() => openCategoriesPanel())">
-          <AppIcon name="tag" :size="19" />
-          <span>Categorias</span>
-        </button>
         <button type="button" class="more-row" data-action="tutorial" @click="run(() => openTutorial(current?.id ?? 'general'))">
           <AppIcon name="help" :size="19" />
           <span>Tutorial{{ current ? ` de ${current.name}` : '' }}</span>
@@ -337,24 +315,5 @@ function run(action: () => unknown) {
 }
 .more-row:active {
   background: var(--hover);
-}
-.more-theme {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  padding: 10px 8px 8px 12px;
-}
-/* As três opções dividem a largura (não cabem lado a lado com o nome na tela externa do Fold) */
-.more-theme :deep(.segmented) {
-  display: flex;
-  width: 100%;
-}
-.more-theme :deep(.segmented > *) {
-  flex: 1;
-  justify-content: center;
-}
-.more-theme-label {
-  font-size: 15px;
 }
 </style>

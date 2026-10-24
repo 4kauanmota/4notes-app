@@ -11,7 +11,24 @@ import { customPeriod, periodOf } from '~/lib/timer/stats'
 const NOW = '2026-10-22T12:00:00.000Z'
 let seq = 0
 function expense(date: string, amount: number, categoryId: string | null = null, description = `Gasto ${++seq}`): Expense {
-  return { id: `e_${++seq}`, description, amount, date, categoryId, notes: '', createdAt: `${date}T10:00:${String(seq % 60).padStart(2, '0')}.000Z`, updatedAt: NOW }
+  return {
+    id: `e_${++seq}`,
+    kind: 'expense',
+    description,
+    amount,
+    date,
+    categoryId,
+    notes: '',
+    status: 'done',
+    doneOn: null,
+    remind: false,
+    recurrenceId: null,
+    occurrence: null,
+    importId: null,
+    externalId: null,
+    createdAt: `${date}T10:00:${String(seq % 60).padStart(2, '0')}.000Z`,
+    updatedAt: NOW,
+  }
 }
 
 describe('valores em reais', () => {
@@ -68,7 +85,8 @@ describe('finance.json', () => {
     expect(data.expenses.map((item) => `${item.id}:${item.amount}`)).toEqual(['e1:5230', 'e2:990'])
     expect(data.expenses[0]).toMatchObject({ description: 'Feira', categoryId: 'mercado', notes: 'barraca do Zé' })
     const raw = JSON.parse(serializeFinance(data))
-    expect(raw).toMatchObject({ app: '4notes', version: 1, currency: 'BRL' })
+    // 1.7.1: versão 2 (entradas, contas, recorrências); um gasto comum continua igual
+    expect(raw).toMatchObject({ app: '4notes', version: 2, currency: 'BRL', incomes: [], recurrences: [], imports: [] })
     expect(normalizeFinanceFile(raw, NOW)).toEqual(data)
     expect(() => normalizeFinanceFile([], NOW)).toThrow()
   })

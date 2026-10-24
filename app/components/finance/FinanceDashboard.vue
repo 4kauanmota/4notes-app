@@ -1,8 +1,16 @@
 <script setup lang="ts">
 /**
- * Finanças › painel (1.7.0): para entender para onde vai o dinheiro, sempre com os
- * gastos registrados (nada de exemplo). Responde ao período e à categoria escolhidos.
+ * Finanças › painel (1.7.0; saldo na 1.7.1): para entender para onde vai o dinheiro,
+ * sempre com os lançamentos registrados (nada de exemplo).
  *
+ * - Saldo (1.7.1): o REALIZADO (saldo inicial, se você informou, + entradas recebidas −
+ *   gastos pagos, até hoje; sem saldo inicial é só uma estimativa) e o PROJETADO (o
+ *   realizado − vencidos, pendentes e as próximas contas + as entradas previstas, até a
+ *   data escolhida); no período: entradas recebidas e gastos pagos. Uma conta pendente
+ *   nunca é descontada como se estivesse paga. O saldo é da conta toda (sem o filtro de
+ *   categoria).
+ * - Os gráficos usam os gastos PAGOS, cada um no dia em que foi pago, e respondem ao
+ *   período e à categoria escolhidos.
  * - Resumo: total, quantidade, valor médio por gasto e média por dia (com a variação
  *   em relação ao período anterior equivalente).
  * - Gastos ao longo do tempo (por dia, semana ou mês), comparando com o anterior se quiser.
@@ -13,8 +21,10 @@
  */
 import { computed, ref, watch } from 'vue'
 import { paletteVar } from '~/lib/colors'
-import { formatMoney, formatSignedMoney, MONEY_FORMAT } from '~/lib/finance/format'
-import { filterExpenses, type Expense } from '~/lib/finance/model'
+import { formatDateBR } from '~/lib/dates'
+import { balanceSummary, cashFlow } from '~/lib/finance/bills'
+import { formatAmountInput, formatMoney, formatSignedMoney, MONEY_FORMAT, parseAmount } from '~/lib/finance/format'
+import { filterExpenses, paidExpenses, type Expense } from '~/lib/finance/model'
 import {
   byCategory,
   compareSpending,
@@ -30,7 +40,7 @@ import {
 } from '~/lib/finance/stats'
 import { formatPercent } from '~/lib/timer/format'
 import { periodLabel, periodOf, shiftPeriod, type Period } from '~/lib/timer/stats'
-import { useFinanceStore } from '~/stores/finance'
+import { useFinanceStore, type ForecastHorizon } from '~/stores/finance'
 
 const emit = defineEmits<{ add: [] }>()
 const finance = useFinanceStore()
@@ -44,10 +54,64 @@ const period = computed<Period>({
 const categoryChoice = ref('all')
 const categoryFilter = computed(() => (categoryChoice.value === 'all' ? undefined : categoryChoice.value === 'none' ? null : categoryChoice.value))
 
-/** Os gastos com o filtro de categoria (o período é aplicado em cada conta). */
-const scoped = computed(() =>
-  filterExpenses(finance.state.expenses, { category: categoryFilter.value, knownCategories: finance.knownCategoryIds.value }),
-)
+/** Os gastos pagos (no dia do pagamento) com o filtro de categoria (o período é aplicado em cada conta). */
+const paid = computed(() => paidExpenses(finance.state.expenses))
+const scoped = computed(() => filterExpenses(paid.value, { category: categoryFilter.value, knownCategories: finance.knownCategoryIds.value }))
+const hasAnything = computed(() => !!finance.state.expenses.length || !!finance.state.recurrences.length || !!finance.state.openingBalance)
+
+// ── Saldo ───────────────────────────────────────────────────────────────────
+
+const horizon = computed({
+  get: () => finance.state.horizon,
+  set: (value: ForecastHorizon) => finance.setHorizon(value),
+})
+const HORIZONS = [
+  { value: 'month' as const, label: 'Fim do mês' },
+  { value: '30' as const, label: '30 dias' },
+  { value: '90' as const, label: '90 dias' },
+]
+const balance = computed(() => balanceSummary(finance.state.expenses, finance.state.recurrences, finance.state.openingBalance, today.value, finance.horizonEnd.value))
+const flow = computed(() => cashFlow(finance.state.expenses, period.value.from, period.value.to))
+
+const editingOpening = ref(false)
+const openingText = ref('')
+const openingDate = ref('')
+const openingError = ref<string | null>(null)
+
+function startOpening() {
+  const current = finance.state.openingBalance
+  openingText.value = current ? `${current.amount < 0 ? '-' : ''}${formatAmountInput(Math.abs(current.amount))}` : ''
+  openingDate.value = current?.date ?? today.value
+  openingError.value = null
+  editingOpening.value = true
+}
+
+/** "1.234,56", "-80,00", "0" → centavos com sinal (null = inválido). */
+function parseBalance(text: string): number | null {
+  const trimmed = text.trim()
+  const negative = /^[-−]/.test(trimmed)
+  const rest = trimmed.replace(/^[-−]\s*/, '')
+  if (/^(R\$\s*)?0+([.,]0{1,2})?$/i.test(rest)) return 0
+  const value = parseAmount(rest)
+  return value === null ? null : negative ? -value : value
+}
+
+function saveOpening() {
+  const amount = parseBalance(openingText.value)
+  if (amount === null) {
+    openingError.value = 'Valor inválido. Exemplos: 1.500,00 ou -80,00.'
+    return
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(openingDate.value)) {
+    openingError.value = 'Escolha o dia desse saldo.'
+    return
+  }
+  if (finance.setOpeningBalance({ amount, date: openingDate.value })) editingOpening.value = false
+}
+
+function clearOpening() {
+  if (finance.setOpeningBalance(null)) editingOpening.value = false
+}
 const inside = computed(() => filterExpenses(scoped.value, { from: period.value.from, to: period.value.to }))
 
 const label = computed(() => periodLabel(period.value, today.value))
@@ -149,18 +213,76 @@ defineExpose({ shiftPeriod: (delta: number) => navRef.value?.shift(delta) })
       </select>
     </div>
 
-    <div v-if="!finance.state.expenses.length" class="dash-empty">
+    <div v-if="!hasAnything" class="dash-empty">
       <AppIcon name="chart" :size="32" />
-      <h3>Ainda não há gastos registrados</h3>
+      <h3>Ainda não há lançamentos</h3>
       <p>
-        O painel usa só os seus gastos: o total do período, a evolução, as categorias, os dias e os maiores gastos, e a comparação com o período anterior.
-        Registre o primeiro e ele aparece aqui.
+        O painel usa só os seus registros: o saldo (realizado e projetado), o total do período, a evolução, as categorias, os dias e os maiores gastos, e a
+        comparação com o período anterior. Registre o primeiro e ele aparece aqui.
       </p>
-      <button type="button" class="btn btn-primary" @click="emit('add')"><AppIcon name="plus" :size="15" /> Registrar um gasto</button>
+      <button type="button" class="btn btn-primary" @click="emit('add')"><AppIcon name="plus" :size="15" /> Registrar</button>
     </div>
 
     <template v-else>
-      <div class="tiles">
+      <!-- Saldo -->
+      <section class="card balance-card" data-section="balance">
+        <header class="card-head">
+          <h3>Saldo</h3>
+          <div class="card-actions">
+            <UiSegmented v-model="horizon" :options="HORIZONS" size="sm" aria-label="Projeção até" data-field="dashboard-horizon" />
+            <button type="button" class="btn btn-sm btn-ghost" data-action="opening-balance" @click="startOpening">
+              <AppIcon name="edit" :size="13" /> {{ finance.state.openingBalance ? 'Saldo inicial' : 'Informar saldo inicial' }}
+            </button>
+          </div>
+        </header>
+        <form v-if="editingOpening" class="opening" data-opening-form @submit.prevent="saveOpening">
+          <p class="opening-help">O saldo da sua conta num dia (no fim dele). Os lançamentos depois desse dia entram na conta.</p>
+          <div class="opening-row">
+            <label class="opening-field">
+              <span>Saldo</span>
+              <span class="amount-box"><span class="currency">R$</span><input v-model="openingText" class="amount-input" inputmode="decimal" autocomplete="off" placeholder="0,00" data-field="opening-amount" @input="openingError = null" /></span>
+            </label>
+            <label class="opening-field">
+              <span>Em</span>
+              <input v-model="openingDate" class="input" type="date" data-field="opening-date" />
+            </label>
+            <div class="opening-actions">
+              <button v-if="finance.state.openingBalance" type="button" class="btn btn-sm btn-ghost" @click="clearOpening">Remover</button>
+              <button type="button" class="btn btn-sm btn-ghost" @click="editingOpening = false">Cancelar</button>
+              <button type="submit" class="btn btn-sm btn-primary" data-action="save-opening">Salvar</button>
+            </div>
+          </div>
+          <p v-if="openingError" class="opening-error" role="alert">{{ openingError }}</p>
+        </form>
+        <div class="balance-figures">
+          <div class="bfig">
+            <span class="bfig-label">Saldo realizado <span v-if="balance.estimated" class="estimate" data-balance-estimate>estimativa</span></span>
+            <strong class="bfig-value" :class="{ negative: balance.realized < 0 }" data-balance="realized">{{ formatMoney(balance.realized) }}</strong>
+            <span class="bfig-sub">
+              {{
+                balance.estimated
+                  ? 'Só com o que você registrou (sem saldo inicial): não é o saldo do banco.'
+                  : `Saldo de ${formatDateBR(balance.since!)} + o que entrou − o que foi pago depois, até hoje.`
+              }}
+            </span>
+          </div>
+          <div class="bfig">
+            <span class="bfig-label">Saldo projetado até {{ formatDateBR(balance.until) }}</span>
+            <strong class="bfig-value projected" :class="{ negative: balance.projected < 0 }" data-balance="projected">{{ formatMoney(balance.projected) }}</strong>
+            <span class="bfig-sub">Depois das contas pendentes e vencidas, das próximas e das entradas previstas.</span>
+          </div>
+        </div>
+        <dl class="breakdown">
+          <div><dt>Entradas recebidas · {{ label.toLowerCase() }}</dt><dd class="positive" data-balance="received">+{{ formatMoney(flow.received) }}</dd></div>
+          <div><dt>Gastos pagos · {{ label.toLowerCase() }}</dt><dd data-balance="paid">{{ formatMoney(flow.paid) }}</dd></div>
+          <div><dt>Pendentes (a vencer até {{ formatDateBR(balance.until).slice(0, 5) }})</dt><dd data-balance="pending">{{ formatMoney(balance.pending) }} <span class="count">{{ balance.pendingCount }}</span></dd></div>
+          <div><dt>Vencidas</dt><dd :class="{ negative: balance.overdue > 0 }" data-balance="overdue">{{ formatMoney(balance.overdue) }} <span class="count">{{ balance.overdueCount }}</span></dd></div>
+          <div><dt>Comprometido com pagamentos</dt><dd data-balance="committed">{{ formatMoney(balance.committed) }}</dd></div>
+          <div><dt>Entradas previstas</dt><dd class="positive" data-balance="expected">+{{ formatMoney(balance.expected) }}</dd></div>
+        </dl>
+      </section>
+
+      <div class="tiles" data-section="spending">
         <div class="tile">
           <span class="tile-label">Total gasto</span>
           <strong class="tile-value" data-stat="total">{{ formatMoney(summary.total) }}</strong>
@@ -333,6 +455,163 @@ defineExpose({ shiftPeriod: (delta: number) => navRef.value?.shift(delta) })
 </template>
 
 <style scoped>
+.balance-card {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 7%, var(--surface)), var(--surface) 60%);
+}
+.balance-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+.bfig {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.bfig-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.estimate {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 17px;
+}
+.bfig-value {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.bfig-value.projected {
+  color: var(--text-2);
+}
+.bfig-sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.negative {
+  color: var(--danger) !important;
+}
+.positive {
+  color: var(--success);
+}
+.breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.breakdown > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.breakdown dt {
+  min-width: 0;
+  color: var(--text-2);
+}
+.breakdown dd {
+  flex: none;
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.count {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.opening {
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.opening-help {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.opening-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.opening-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.opening-field .input {
+  height: 34px;
+}
+.amount-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.amount-box:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
+.currency {
+  color: var(--text-3);
+  font-weight: 650;
+}
+.amount-input {
+  width: 120px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.opening-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.opening-error {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+@container (max-width: 520px) {
+  .balance-figures,
+  .breakdown {
+    grid-template-columns: 1fr;
+  }
+}
 .dashboard {
   display: flex;
   flex-direction: column;

@@ -12,6 +12,11 @@
  *   o item no módulo dele.
  * - Um link salvo entra como um link comum ([título](endereço), texto editável) e
  *   aparece com o ícone do site na frente (formatting.ts).
+ * - "#" (1.7.1) menciona uma categoria do app: a lista filtra pelo nome e, se não houver
+ *   uma com o nome digitado, oferece criar. Fica um link para a categoria pelo id
+ *   ([Estudo](../categories/categories.json#estudo)), que aparece como o chip "#Estudo"
+ *   na cor dela; clicar abre a categoria. Não abre em "C#" (colado numa palavra), em
+ *   títulos ("# " com espaço), em código nem em números ("#12").
  */
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete'
 import { syntaxTree } from '@codemirror/language'
@@ -72,12 +77,18 @@ class MentionWidget extends WidgetType {
     readonly missing: boolean,
     readonly done: boolean,
     readonly detail: string,
+    readonly color: string,
   ) {
     super()
   }
   override eq(other: MentionWidget): boolean {
     return (
-      other.path === this.path && other.title === this.title && other.missing === this.missing && other.done === this.done && other.detail === this.detail
+      other.path === this.path &&
+      other.title === this.title &&
+      other.missing === this.missing &&
+      other.done === this.done &&
+      other.detail === this.detail &&
+      other.color === this.color
     )
   }
   toDOM(): HTMLElement {
@@ -88,7 +99,16 @@ class MentionWidget extends WidgetType {
     chip.dataset.path = this.path
     const tip = this.missing ? info.missing : this.done ? 'Tarefa concluída — abrir' : info.open
     chip.dataset.tip = this.detail && !this.missing ? `${tip} · ${this.detail}` : tip
-    chip.innerHTML = iconSvg(kind === 'task' && this.done ? 'tasks' : info.icon, 13)
+    if (kind === 'category') {
+      // Categoria: "#Nome" na cor dela
+      if (this.color && !this.missing) chip.style.setProperty('--mention-color', this.color)
+      const hash = document.createElement('span')
+      hash.className = 'cm-mention-hash'
+      hash.textContent = '#'
+      chip.append(hash)
+    } else {
+      chip.innerHTML = iconSvg(kind === 'task' && this.done ? 'tasks' : info.icon, 13)
+    }
     const label = document.createElement('span')
     label.className = 'cm-mention-title'
     label.textContent = this.title
@@ -107,7 +127,7 @@ function buildChips(state: EditorState): DecorationSet {
     const current = mentions.describe(link.path)
     const label = current?.title ?? (link.text || stripExtension(basename(link.path)))
     return Decoration.replace({
-      widget: new MentionWidget(link.path, label, current === null, current?.done === true, current?.detail ?? ''),
+      widget: new MentionWidget(link.path, label, current === null, current?.done === true, current?.detail ?? '', current?.color ?? ''),
     }).range(link.from, link.to)
   })
   return Decoration.set(ranges, true)
@@ -180,8 +200,72 @@ async function mentionCompletions(context: CompletionContext): Promise<Completio
   }
 }
 
+// ── "#" (categorias, 1.7.1) ──────────────────────────────────────────────────
+
+const fold = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .trim()
+
+function insertCategory(view: EditorView, target: MentionTarget, from: number, to: number): void {
+  const host = view.state.facet(editorHost)
+  if (!host) return
+  const text = mentionMarkdown(host.assetBase(), target.path, target.title)
+  const next = view.state.sliceDoc(to, to + 1)
+  const insert = next && /\s/.test(next) ? text : `${text} `
+  view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length }, userEvent: 'input.complete', scrollIntoView: true })
+}
+
+/**
+ * O texto antes do cursor pede a lista de categorias? Devolve onde está o "#" e o que
+ * foi digitado depois dele (null = não). Regras puras (testadas em tests/).
+ */
+export function categoryQueryAt(textBefore: string): { at: number; query: string } | null {
+  // "#" no começo da linha ou depois de espaço/pontuação de abertura ("C#" não abre)
+  const match = /(?:^|[\s([{"'])#([^#\n]{0,40})$/.exec(textBefore)
+  if (!match) return null
+  const query = match[1]!
+  // "# " é título; espaço duplo encerra; "#12" é número (issue, item…)
+  if (/^\s|\s{2}/.test(query) || /^\d+$/.test(query)) return null
+  return { at: textBefore.length - query.length - 1, query }
+}
+
+function categoryCompletions(context: CompletionContext): CompletionResult | null {
+  const categories = context.state.facet(editorHost)?.mentions?.categories
+  if (!categories) return null
+  const line = context.state.doc.lineAt(context.pos)
+  const found = categoryQueryAt(context.state.sliceDoc(line.from, context.pos))
+  if (!found) return null
+  const at = line.from + found.at
+  if (insideCode(context.state, at)) return null
+  const name = found.query.trim()
+  const targets = categories.search(name)
+  const options: Completion[] = targets.map((target) => ({
+    label: target.title,
+    detail: target.where,
+    type: 'mention-category',
+    apply: (view, _completion, from, to) => insertCategory(view, target, from, to),
+  }))
+  // Criar: nome de uma palavra (o texto que continua depois de um espaço não vira categoria)
+  if (name && !/\s/.test(name) && !targets.some((target) => fold(target.title) === fold(name))) {
+    options.push({
+      label: `Criar categoria “${name}”`,
+      type: 'mention-category-new',
+      boost: -50,
+      apply: (view, _completion, from, to) => {
+        const created = categories.create(name)
+        if (created) insertCategory(view, created, from, to)
+      },
+    })
+  }
+  if (!options.length) return null
+  return { from: at, to: context.pos, filter: false, options }
+}
+
 const mentionPicker = autocompletion({
-  override: [mentionCompletions],
+  override: [mentionCompletions, categoryCompletions],
   icons: false,
   closeOnBlur: true,
   maxRenderedOptions: 40,
@@ -192,13 +276,17 @@ const mentionPicker = autocompletion({
       render: (completion) => {
         const icon = document.createElement('span')
         icon.className = 'cm-mention-option-icon'
+        if (completion.type === 'mention-category-new') {
+          icon.innerHTML = iconSvg('plus', 14)
+          return icon
+        }
         const kind = (completion.type?.replace('mention-', '') ?? 'note') as MentionKind
-        icon.innerHTML = iconSvg(MENTION_KINDS[kind]?.icon ?? 'notes', 14)
+        icon.innerHTML = kind === 'category' ? '<span class="cm-mention-hash">#</span>' : iconSvg(MENTION_KINDS[kind]?.icon ?? 'notes', 14)
         return icon
       },
     },
   ],
 })
 
-/** Menções (@) e chips dos itens mencionados. */
+/** Menções (@ e #) e chips dos itens mencionados. */
 export const noteMentions: Extension = [chipField, chipClicks, mentionPicker]

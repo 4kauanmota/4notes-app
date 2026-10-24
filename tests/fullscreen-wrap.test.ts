@@ -50,6 +50,8 @@ describe('configurações das Notas (1.6.4)', () => {
       foldersFirst: false,
       wrapCode: false,
       wrapText: true,
+      // 1.7.1: a lista acompanha a nota aberta (como sempre)
+      revealActive: true,
     })
   })
 

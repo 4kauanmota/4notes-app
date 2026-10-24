@@ -10,6 +10,7 @@ import {
   canClearFormatting,
   breakOutOfTags,
   clearColor,
+  clearHighlight,
   clearFormatting,
   cssColor,
   deleteBackwardAcrossTags,
@@ -355,5 +356,123 @@ describe('tags escondidas (sublinhado e cor)', () => {
     expect(e.text).toBe(`a <span style="color: blue">bcd</span> e`)
     clearColor(e.view)
     expect(e.text).toBe('a bcd e')
+  })
+})
+
+// ── 1.7.1 ──────────────────────────────────────────────────────────────────
+
+const RED = (text: string) => `<span style="color: red">${text}</span>`
+const MARK = (hex: string, text: string) => `<mark style="background-color: ${hex}">${text}</mark>`
+
+describe('formatos dentro de listas (1.7.1)', () => {
+  it('cor com o item inteiro selecionado (marcador junto): a lista continua lista', () => {
+    const doc = '- item um\n- item dois'
+    const whole = editor(doc, 0, doc.length)
+    toggleFormat(whole.view, 'color', 'red')
+    expect(whole.text).toBe(`- ${RED('item um')}\n- ${RED('item dois')}`)
+    // Aplicar de novo a mesma cor tira só a cor (o marcador continua)
+    toggleFormat(whole.view, 'color', 'red')
+    expect(whole.text).toBe(doc)
+
+    const line = editor(doc, 0, '- item um'.length)
+    toggleFormat(line.view, 'color', 'blue')
+    expect(line.text).toBe('- <span style="color: blue">item um</span>\n- item dois')
+  })
+
+  it('numeradas, tarefas, subitens, títulos e citações: só o conteúdo', () => {
+    const ordered = editor('1. primeiro\n2. segundo', 0, 22)
+    toggleFormat(ordered.view, 'color', 'red')
+    expect(ordered.text).toBe(`1. ${RED('primeiro')}\n2. ${RED('segundo')}`)
+
+    const task = editor('- [ ] tarefa\n- [x] feita', 0, 24)
+    toggleFormat(task.view, 'color', 'green')
+    expect(task.text).toBe('- [ ] <span style="color: green">tarefa</span>\n- [x] <span style="color: green">feita</span>')
+
+    const nested = editor('- pai\n  - filho', 0, 15)
+    toggleFormat(nested.view, 'bold')
+    expect(nested.text).toBe('- **pai**\n  - **filho**')
+
+    const heading = editor('# Título', 0, 8)
+    toggleFormat(heading.view, 'color', 'purple')
+    expect(heading.text).toBe('# <span style="color: purple">Título</span>')
+
+    const quote = editor('> citação', 0, 9)
+    toggleFormat(quote.view, 'italic')
+    expect(quote.text).toBe('> *citação*')
+  })
+
+  it('seleção parcial dentro do item e só o marcador selecionado', () => {
+    const doc = '- item um'
+    const partial = editor(doc, 4, 6)
+    toggleFormat(partial.view, 'color', 'red')
+    expect(partial.text).toBe(`- it${RED('em')} um`)
+    // Só o "- " selecionado: nada a formatar
+    const marker = editor(doc, 0, 2)
+    toggleFormat(marker.view, 'color', 'red')
+    expect(marker.text).toBe(doc)
+  })
+
+  it('a cor do item é reconhecida (botão da barra) e o resto do item continua igual', () => {
+    const doc = `- ${RED('item')} e **outro**`
+    const e = editor(doc, 0, doc.length)
+    expect(activeFormats(e.state).color).toBeNull() // só parte do item é vermelha
+    const one = editor(doc, 0, `- ${RED('item')}`.length)
+    expect(activeFormats(one.state).color).toBe('red')
+  })
+})
+
+describe('cor do marca-texto (1.7.1)', () => {
+  it('aplica, troca e tira a cor; a mesma cor de novo tira o marca-texto', () => {
+    const doc = 'olá mundo'
+    const e = editor(doc, 0, doc.length)
+    toggleFormat(e.view, 'highlight', 'yellow')
+    expect(e.text).toBe(MARK('#fef08a', 'olá mundo'))
+    expect(activeFormats(e.state).highlight).toBe('yellow')
+    expect(activeFormats(e.state).formats.has('highlight')).toBe(true)
+    toggleFormat(e.view, 'highlight', 'blue')
+    expect(e.text).toBe(MARK('#bfdbfe', 'olá mundo'))
+    toggleFormat(e.view, 'highlight', 'blue')
+    expect(e.text).toBe(doc)
+  })
+
+  it('o padrão continua "==…==" e a troca vale só no trecho selecionado', () => {
+    const doc = '==olá mundo=='
+    const e = editor(doc, 6, 11)
+    expect(activeFormats(e.state).highlight).toBe('default')
+    toggleFormat(e.view, 'highlight', 'pink')
+    expect(e.text).toBe(`==olá== ${MARK('#fbcfe8', 'mundo')}`)
+    const back = editor(MARK('#fbcfe8', 'mundo'), 0, MARK('#fbcfe8', 'mundo').length)
+    toggleFormat(back.view, 'highlight', 'default')
+    expect(back.text).toBe('==mundo==')
+  })
+
+  it('o atalho (sem cor) tira qualquer marca-texto; "Sem marca-texto" e "Limpar formatação" também', () => {
+    const doc = MARK('#fef08a', 'abc')
+    const shortcut = editor(doc, 0, doc.length)
+    toggleFormat(shortcut.view, 'highlight')
+    expect(shortcut.text).toBe('abc')
+    const none = editor(`x ${doc} y`, 0, `x ${doc} y`.length)
+    clearHighlight(none.view)
+    expect(none.text).toBe('x abc y')
+    const clear = editor(`**${doc}**`, 0, `**${doc}**`.length)
+    expect(canClearFormatting(clear.state)).toBe(true)
+    clearFormatting(clear.view)
+    expect(clear.text).toBe('abc')
+  })
+
+  it('com cor do texto junto, dentro de listas e lido de arquivos escritos à mão', () => {
+    const list = editor('- item', 0, 6)
+    toggleFormat(list.view, 'highlight', 'green')
+    toggleFormat(list.view, 'color', 'red')
+    expect(list.text.startsWith('- ')).toBe(true)
+    expect(findElements(list.state, 0, list.text.length).map((el) => [el.format, el.color])).toEqual(
+      expect.arrayContaining([
+        ['highlight', 'green'],
+        ['color', 'red'],
+      ]),
+    )
+    // Nome de cor no lugar do tom, hex desconhecido, "background:" sem "-color"
+    const hand = editor('<mark style="background-color: yellow">a</mark> <mark style="background: #123456">b</mark>', 0)
+    expect(findElements(hand.state, 0, hand.text.length).map((el) => el.color)).toEqual(['yellow', '#123456'])
   })
 })

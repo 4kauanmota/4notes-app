@@ -20,14 +20,14 @@ import { useLinksStore } from './links'
 import { flushMentionUpdates, installMentionTracking } from './mentions'
 import { useMindmapStore } from './mindmap'
 import { useModulesStore } from './modules'
-import { useNotesStore } from './notes'
+import { onImagesReleased, useNotesStore } from './notes'
 import { flushSettings, loadSettings, refreshSettings, settingsSection } from './settings'
 import { useTasksStore } from './tasks'
 import { useTimerStore } from './timer'
 
 export type AppPhase = 'booting' | 'no-desktop' | 'setup' | 'ready' | 'error'
 /** Abas das Configurações (os atalhos ficam nos Tutoriais, F1). */
-export type SettingsTab = 'general' | 'modules'
+export type SettingsTab = 'general' | 'categories' | 'modules'
 export { isModuleId, type ModuleId } from '~/lib/modules'
 
 const state = reactive({
@@ -57,8 +57,37 @@ const finance = useFinanceStore()
 const modules = useModulesStore()
 const categories = useCategoriesStore()
 
+/**
+ * Uma nota excluída deixou imagens (1.7.1): depois de gravar tudo o que estava
+ * pendente (uma nota que acabou de usar a mesma imagem), cada uma é conferida em todo o
+ * workspace (notas, mapas, tarefas, Finanças, fotos das categorias: shared/library.ts)
+ * e só vai para a lixeira se ninguém mais usa. Qualquer dúvida ou erro: a imagem fica.
+ */
+async function releaseImages(paths: string[]): Promise<void> {
+  if (!hasDesktopApi() || state.phase !== 'ready') return
+  try {
+    await flushEverything()
+  } catch {
+    return
+  }
+  for (const path of paths) {
+    try {
+      const result = await desktop().library.remove(path)
+      if (result === 'removed') console.info('[4notes] Imagem sem uso removida:', path)
+    } catch (error) {
+      console.warn('[4notes] A imagem ficou (não deu para conferir o uso):', path, error)
+    }
+  }
+}
+
+let imagesWatched = false
+
 async function loadModules(): Promise<void> {
   installMentionTracking()
+  if (!imagesWatched) {
+    imagesWatched = true
+    onImagesReleased((paths) => void releaseImages(paths))
+  }
   // Primeiro as configurações do workspace (os módulos leem a parte deles)
   await loadSettings()
   applyWorkspaceTheme(settingsSection('theme'))

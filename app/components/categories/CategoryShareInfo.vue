@@ -2,7 +2,7 @@
 /**
  * No diálogo de editar categoria de um módulo (1.7.0): onde mais a categoria é usada
  * (o que você muda aqui vale em todos) e os atalhos para juntar com outra categoria e
- * para o "Ver categorias". `leave` avisa o diálogo para fechar antes de abrir outra janela.
+ * para Configurações › Categorias. `leave` avisa o diálogo para fechar antes de abrir outra janela.
  */
 import { computed } from 'vue'
 import { openCategoriesPanel, requestCategoryMerge } from '~/composables/useCategoryActions'

@@ -8,8 +8,9 @@
  *   (notes/<Categoria>/<Categoria>.png); as de antes da biblioteca aparecem nela do
  *   mesmo jeito. Imagens iguais (mesmo conteúdo) aparecem uma vez só.
  * - "Em uso" = citada numa nota (.md em notes/ ou mindmap/), na descrição de uma
- *   tarefa (tasks/tasks.json) ou foto de uma categoria (Notas, Links ou a lista de
- *   categorias do app, categories/categories.json). Só imagens
+ *   tarefa (tasks/tasks.json), nas observações de um lançamento ou recorrência das
+ *   Finanças (finance/finance.json, 1.7.1) ou foto de uma categoria (Notas, Links ou a
+ *   lista de categorias do app, categories/categories.json). Só imagens
  *   sem uso podem ser excluídas.
  */
 import { ATTACHMENTS_DIR, IMAGE_FILE, libraryName, MAX_IMAGE_BYTES } from './files'
@@ -46,6 +47,8 @@ const LINKS_FILE = 'links/links.json'
 const SHARED_CATEGORIES_FILE = 'categories/categories.json'
 /** As descrições das tarefas (Markdown, como as notas) também podem ter imagens. */
 const TASKS_FILE = 'tasks/tasks.json'
+/** E as observações das Finanças (1.7.1): lançamentos, entradas e recorrências. */
+const FINANCE_FILE = 'finance/finance.json'
 /** Pastas com notas (.md) que podem citar imagens. */
 const NOTE_DIRS = [
   { dir: 'notes', one: 'nota', many: 'notas' },
@@ -163,9 +166,10 @@ export function referencedFiles(notePath: string, content: string): string[] {
   return found
 }
 
-/** Quem cita imagens: as notas de cada pasta e, por último, as descrições das tarefas. */
-const USERS = [...NOTE_DIRS, { one: 'tarefa', many: 'tarefas' }] as const
-const TASKS_INDEX = USERS.length - 1
+/** Quem cita imagens: as notas de cada pasta, as descrições das tarefas e as observações das Finanças. */
+const USERS = [...NOTE_DIRS, { one: 'tarefa', many: 'tarefas' }, { one: 'lançamento das Finanças', many: 'lançamentos das Finanças' }] as const
+const TASKS_INDEX = NOTE_DIRS.length
+const FINANCE_INDEX = NOTE_DIRS.length + 1
 
 /** Quantas notas de cada pasta (e quantas tarefas) citam cada arquivo: caminho → contagem. */
 async function noteReferences(io: LibraryIo): Promise<Map<string, number[]>> {
@@ -184,6 +188,15 @@ async function noteReferences(io: LibraryIo): Promise<Map<string, number[]>> {
   const tasks = await io.readJson(TASKS_FILE)
   for (const task of isObject(tasks) && Array.isArray(tasks.tasks) ? tasks.tasks : []) {
     if (isObject(task) && typeof task.notes === 'string' && task.notes) count(referencedFiles(TASKS_FILE, task.notes), TASKS_INDEX)
+  }
+  // Observações das Finanças: relativas à pasta finance/
+  const finance = await io.readJson(FINANCE_FILE)
+  if (isObject(finance)) {
+    for (const list of [finance.expenses, finance.incomes, finance.recurrences]) {
+      for (const item of Array.isArray(list) ? list : []) {
+        if (isObject(item) && typeof item.notes === 'string' && item.notes) count(referencedFiles(FINANCE_FILE, item.notes), FINANCE_INDEX)
+      }
+    }
   }
   return counts
 }

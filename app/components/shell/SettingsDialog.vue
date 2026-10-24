@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * Configurações, em duas abas:
+ * Configurações, em três abas:
  *  - Geral: tema, tutoriais, atualizações (UpdateSettings.vue), iniciar com o
  *    computador, workspace (pasta de dados) e a biblioteca de imagens;
+ *  - Categorias (1.7.1): as categorias do app, de todos os módulos (CategoriesPanel.vue);
  *  - Módulos: primeiro as configurações gerais dos módulos (quais estão ativos e
  *    como aparecem no menu lateral); depois as de cada módulo ativo que fazem
  *    sentido como ajuste permanente. Tudo guardado no workspace. O que se usa toda
@@ -14,7 +15,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { errorMessage, type LaunchAtLogin, type ThemePreference } from '#shared/ipc'
 import { useRoute } from 'vue-router'
 import { openImageLibrary } from '~/composables/useImageLibrary'
-import { openCategoriesPanel } from '~/composables/useCategoryActions'
+import { useCategoryUi } from '~/composables/useCategoryActions'
 import { useSortableList } from '~/composables/useSortableList'
 import { notifyError } from '~/composables/useToasts'
 import { useLayoutSize } from '~/composables/useLayoutSize'
@@ -46,6 +47,7 @@ const tab = computed({
 
 const TABS: { id: SettingsTab; label: string; icon: string }[] = [
   { id: 'general', label: 'Geral', icon: 'settings' },
+  { id: 'categories', label: 'Categorias', icon: 'tag' },
   { id: 'modules', label: 'Módulos', icon: 'layers' },
 ]
 
@@ -167,6 +169,15 @@ watch(
   },
 )
 
+// Fechou: a aba Categorias volta para a lista na próxima vez
+const categoryUi = useCategoryUi()
+watch(
+  () => app.state.settingsOpen,
+  (open) => {
+    if (!open) categoryUi.panel.selected = null
+  },
+)
+
 const version = computed(() => app.state.bootstrap?.appVersion ?? '')
 </script>
 
@@ -211,16 +222,6 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
             </SettingRow>
           </section>
 
-          <section>
-            <h3 class="section-label">Categorias</h3>
-            <SettingRow
-              label="Categorias do app"
-              help="As mesmas categorias em todos os módulos: veja onde cada uma é usada, edite, junte duas e exclua."
-            >
-              <button class="btn btn-sm" data-action="open-categories" @click="openCategoriesPanel()"><AppIcon name="tag" :size="14" /> Ver categorias…</button>
-            </SettingRow>
-          </section>
-
           <UpdateSettings v-if="updatesAvailable" />
 
           <section v-if="launchAvailable">
@@ -260,7 +261,7 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
               <li><code>mindmap/</code> mapas mentais — uma pasta por mapa, com as notas (.md) e o mapa.json (conexões e cores)</li>
               <li><code>links/links.json</code> links salvos e categorias (ícones dos sites em <code>links/icons/</code>)</li>
               <li><code>timer/timer.json</code> categorias e histórico do Timer (e a sessão em andamento)</li>
-              <li><code>finance/finance.json</code> gastos das Finanças</li>
+              <li><code>finance/finance.json</code> Finanças: gastos, entradas, contas, recorrências e saldo inicial (o extrato importado não é copiado)</li>
               <li><code>categories/categories.json</code> categorias do app (nome, cor, ícone e foto), usadas por todos os módulos</li>
               <li><code>attachments/</code> biblioteca de imagens (coladas nas notas, enviadas, fotos das categorias)</li>
               <li><code>.4notes/</code> configurações (settings.json — as mesmas no computador e no celular), posições do mapa e backups diários das tarefas, dos links e do Timer</li>
@@ -279,6 +280,9 @@ const version = computed(() => app.state.bootstrap?.appVersion ?? '')
             </div>
           </footer>
         </template>
+
+        <!-- Categorias -->
+        <CategoriesPanel v-else-if="tab === 'categories'" />
 
         <!-- Módulos -->
         <template v-else-if="tab === 'modules'">

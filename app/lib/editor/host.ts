@@ -29,6 +29,8 @@ export interface MentionTarget {
   where: string
   /** Link salvo (módulo Links): entra na nota como um link comum, [título](endereço). */
   url?: string
+  /** Categoria (1.7.1): a cor dela (valor CSS), para a bolinha na lista do "#". */
+  color?: string
 }
 
 /** Como está agora o que foi mencionado. */
@@ -38,6 +40,16 @@ export interface MentionState {
   done?: boolean
   /** De onde é / detalhes para a dica do chip ("Estudo · 12/10 · 1 h 20 min"). */
   detail?: string
+  /** Categoria (1.7.1): a cor dela (valor CSS) no chip. */
+  color?: string
+}
+
+/** Categorias no "#" (1.7.1): a lista e o "Criar categoria" sem sair do texto. */
+export interface CategoryMentionHost {
+  /** Categorias do app filtradas pelo texto depois do "#". */
+  search(query: string): MentionTarget[]
+  /** Cria a categoria (no app inteiro) e devolve o alvo da menção; null = nome com problema (o aviso já apareceu). */
+  create(name: string): MentionTarget | null
 }
 
 /** Menções (só nos editores em que o app liga o recurso). */
@@ -58,6 +70,11 @@ export interface MentionHost {
    * mencionadas" da tarefa). Sem isso, entra o link da menção.
    */
   choose?(target: MentionTarget): string
+  /**
+   * "#" menciona uma categoria (1.7.1). A menção entra sempre como link no texto (mesmo
+   * onde o "@" usa `choose`). Sem isso, o "#" é só texto.
+   */
+  categories?: CategoryMentionHost
 }
 
 export interface EditorHost {
@@ -77,7 +94,7 @@ export interface EditorHost {
   chooseLanguage?(current: string): Promise<string | null>
   /** Aviso rápido; `undo` mostra o botão "Desfazer". */
   notify(message: string, undo?: () => void): void
-  /** Menções a itens dos módulos (@). Sem isso, links para notas aparecem como links comuns. */
+  /** Menções a itens dos módulos (@) e a categorias (#). Sem isso, links para notas aparecem como links comuns. */
   mentions?: MentionHost
   /** A primeira linha de uma nota vazia já começa como título (# ). Lido a cada nota vazia (pode mudar). */
   readonly titleFirstLine?: boolean

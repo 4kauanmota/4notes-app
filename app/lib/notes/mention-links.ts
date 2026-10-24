@@ -9,6 +9,7 @@
  *   [Estudar Godot](../tasks/tasks.json#t_k3j9x0)     → tarefa (o id fica depois do "#")
  *   [Estudando Godot](../timer/timer.json#s_k3j9x0)   → registro do histórico do Timer
  *   [Feira](../finance/finance.json#e_k3j9x0)         → gasto das Finanças (1.7.0)
+ *   [Estudo](../categories/categories.json#estudo)    → categoria (o "#" das notas, 1.7.1)
  *   [Nuxt](https://nuxt.com)                          → link salvo (um link comum)
  *
  * Tarefas, registros do Timer e links salvos são achados pelo id (que não muda);
@@ -29,12 +30,19 @@ export const escapeLinkText = (text: string) => text.replace(/[\\[\]]/g, '\\$&')
 export const unescapeLinkText = (text: string) => text.replace(/\\([\\[\]])/g, '$1')
 
 /** Itens achados pelo id: o arquivo onde ficam (o id vai depois do "#"). */
-const ID_FILES = { task: DATA_PATHS.tasksFile, timer: DATA_PATHS.timerFile, link: DATA_PATHS.linksFile, expense: DATA_PATHS.financeFile } as const
+const ID_FILES = {
+  task: DATA_PATHS.tasksFile,
+  timer: DATA_PATHS.timerFile,
+  link: DATA_PATHS.linksFile,
+  expense: DATA_PATHS.financeFile,
+  category: DATA_PATHS.categoriesFile,
+} as const
 export type IdKind = keyof typeof ID_FILES
 
 /**
  * O que uma menção pode ser: nota das Notas, nota de um mapa ("map"), um mapa mental
- * inteiro ("mindmap"), tarefa, registro do Timer, link salvo ou gasto das Finanças.
+ * inteiro ("mindmap"), tarefa, registro do Timer, link salvo, gasto das Finanças ou
+ * categoria (1.7.1).
  */
 export type MentionKind = 'note' | 'map' | 'mindmap' | IdKind
 
@@ -94,6 +102,7 @@ export function mentionTarget(noteDir: string, href: string): string | null {
     if (nameKey(link.path) === nameKey(ID_FILES.task)) return idMentionPath('task', link.fragment)
     if (nameKey(link.path) === nameKey(ID_FILES.timer)) return idMentionPath('timer', link.fragment)
     if (nameKey(link.path) === nameKey(ID_FILES.expense)) return idMentionPath('expense', link.fragment)
+    if (nameKey(link.path) === nameKey(ID_FILES.category)) return idMentionPath('category', link.fragment)
     return null
   }
   const map = mapOfMentionPath(link.path)
@@ -194,6 +203,18 @@ export function retitleIdLinks(content: string, noteDir: string, titles: Readonl
     const title = path && idOf(path) ? titles.get(path) : undefined
     if (!title || unescapeLinkText(link.text) === title) return null
     return `[${escapeLinkText(title)}](${link.href})`
+  })
+}
+
+/**
+ * Categoria juntada a outra (1.7.1): as menções a `from` passam a apontar para `to`,
+ * com o nome dela. Só os links (menções), não o texto comum.
+ */
+export function relinkCategory(content: string, noteDir: string, from: string, to: string, title: string): string | null {
+  const fromPath = idMentionPath('category', from)
+  return mapLinks(content, (link) => {
+    if (link.image || mentionTarget(noteDir, link.href) !== fromPath) return null
+    return mentionMarkdown(noteDir, idMentionPath('category', to), title)
   })
 }
 

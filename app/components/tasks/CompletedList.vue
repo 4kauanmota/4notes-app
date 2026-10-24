@@ -36,7 +36,9 @@ const categoryOf = (entry: CompletedEntry) => (entry.task.categoryId ? (tasks.ca
               <span v-if="entry.recurring" class="recurring">
                 <AppIcon name="repeat" :size="11" /> ocorrência de {{ entry.due ? formatShortDate(entry.due, tasks.today.value) : '—' }}
               </span>
-              <span v-if="categoryOf(entry)"><CategoryDot :color="categoryOf(entry)!.color" :size="7" /> {{ categoryOf(entry)!.name }}</span>
+              <span v-if="categoryOf(entry)" class="category"
+                ><SharedCategoryIcon :id="categoryOf(entry)!.id" :color="categoryOf(entry)!.color" :name="categoryOf(entry)!.name" :size="13" /> {{ categoryOf(entry)!.name }}</span
+              >
             </div>
           </div>
           <div v-if="!entry.recurring" class="actions">
@@ -104,7 +106,7 @@ const categoryOf = (entry: CompletedEntry) => (entry.task.categoryId ? (tasks.ca
   font-size: 12px;
   color: var(--text-3);
 }
-.meta span {
+.meta > span {
   display: inline-flex;
   align-items: center;
   gap: 5px;

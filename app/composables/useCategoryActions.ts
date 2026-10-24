@@ -1,7 +1,8 @@
 /**
  * Ações das categorias compartilhadas que abrem uma janela (1.7.0): excluir (com a
- * escolha do destino dos registros), juntar com outra e o "Ver categorias". As janelas
- * ficam no app.vue (uma de cada), e qualquer módulo pode pedir.
+ * escolha do destino dos registros) e juntar com outra. As janelas ficam no app.vue
+ * (uma de cada), e qualquer módulo pode pedir. As categorias em si ficam em
+ * Configurações › Categorias (1.7.1): openCategoriesPanel abre lá (o app.vue atende).
  */
 import { reactive } from 'vue'
 import type { CategoryModuleId } from '~/lib/categories/model'
@@ -16,8 +17,8 @@ const ui = reactive({
   removal: null as (Pending & { module: CategoryModuleId | null }) | null,
   /** Juntar `id` com outra categoria. */
   merge: null as Pending | null,
-  /** "Ver categorias": aberto e a categoria escolhida (null = a lista). */
-  panel: { open: false, selected: null as string | null },
+  /** Configurações › Categorias: pedidos para abrir (o app.vue atende) e a categoria aberta (null = a lista). */
+  panel: { request: 0, selected: null as string | null },
 })
 
 function settle(pending: Pending | null, done: boolean): void {
@@ -40,14 +41,10 @@ export function requestCategoryMerge(id: string): Promise<boolean> {
   })
 }
 
-/** Abre o "Ver categorias" (numa categoria, se `id` vier). */
+/** Abre Configurações › Categorias (já numa categoria, se `id` vier). */
 export function openCategoriesPanel(id: string | null = null): void {
   ui.panel.selected = id
-  ui.panel.open = true
-}
-
-export function closeCategoriesPanel(): void {
-  ui.panel.open = false
+  ui.panel.request++
 }
 
 /** Fecha a janela de exclusão (ou de junção) dizendo se a ação aconteceu. */

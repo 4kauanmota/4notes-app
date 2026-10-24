@@ -18,7 +18,7 @@ import { DESCRIPTION_DIR } from '~/lib/tasks/description'
 import { refKey, type MentionRef } from '~/lib/mentions/refs'
 import { taskMentionPath } from '~/lib/notes/mention-links'
 import { describeRecurrence, type Recurrence, type RecurrenceDraft } from '~/lib/tasks/recurrence'
-import { describeMention, mentionRevision, openMentionPath, refFromTarget, savedLinkIcon, searchMentions } from '~/stores/mentions'
+import { categoryMentions, describeMention, mentionRevision, openMentionPath, refFromTarget, savedLinkIcon, searchMentions } from '~/stores/mentions'
 import { useTasksStore, withMention } from '~/stores/tasks'
 
 const tasks = useTasksStore()
@@ -161,6 +161,7 @@ const descriptionMentions: MentionHost = {
   open: openMentionPath,
   revision: () => mentionRevision.value,
   linkIcon: savedLinkIcon,
+  categories: categoryMentions,
 }
 /** Documento do editor da descrição: um por tarefa (o desfazer de cada uma fica guardado). */
 const descriptionKey = computed(() => (task.value ? `task:${task.value.id}` : `task-new:${creation.value}`))
@@ -321,7 +322,7 @@ defineExpose({
               :style="{ '--c': `var(--cat-${category.color})` }"
               @click="categoryId = category.id"
             >
-              <CategoryDot :color="category.color" :size="8" /> {{ category.name }}
+              <SharedCategoryIcon :id="category.id" :color="category.color" :name="category.name" :size="16" /> {{ category.name }}
             </button>
             <OtherCategoryChips module="tasks" @pick="(id) => (categoryId = tasks.attachCategory(id)?.id ?? categoryId)" />
             <button type="button" class="cat-chip add" @click="categoryDialogOpen = true"><AppIcon name="plus" :size="12" /> Nova</button>

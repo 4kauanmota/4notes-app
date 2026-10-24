@@ -6,6 +6,7 @@
  */
 import { computed, nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useCategoryUi } from '~/composables/useCategoryActions'
 import { useLayoutSize } from '~/composables/useLayoutSize'
 import { useShortcuts } from '~/composables/useShortcuts'
 import { toggleTutorial } from '~/composables/useTutorial'
@@ -58,6 +59,15 @@ watch(
   ([path, , phase]) => {
     const module = phase === 'ready' ? moduleForPath(path) : null
     if (module && !modules.isEnabled(module.id)) void router.replace(moduleById(modules.startModule.value).route)
+  },
+)
+
+// "#Categoria" numa nota, os diálogos de categoria dos módulos: abrem Configurações › Categorias
+const categoryUi = useCategoryUi()
+watch(
+  () => categoryUi.panel.request,
+  () => {
+    if (app.state.phase === 'ready') app.openSettings('categories')
   },
 )
 
@@ -126,7 +136,6 @@ function reload() {
     <ImageLibraryDialog v-if="app.state.phase === 'ready'" />
     <TutorialPanel v-if="app.state.phase === 'ready'" />
     <MentionsDialog v-if="app.state.phase === 'ready'" />
-    <CategoriesPanel v-if="app.state.phase === 'ready'" />
     <CategoryRemovalDialog v-if="app.state.phase === 'ready'" />
     <CategoryMergeDialog v-if="app.state.phase === 'ready'" />
     <FolderPickerDialog />

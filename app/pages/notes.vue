@@ -12,7 +12,7 @@ import { SHORT_MAX, useLayoutSize } from '~/composables/useLayoutSize'
 import { useShortcuts } from '~/composables/useShortcuts'
 import type { MentionHost } from '~/lib/editor/host'
 import type { CursorInfo } from '~/lib/editor/setup'
-import { describeMention, mentionRevision, openMentionPath, savedLinkIcon, searchMentions } from '~/stores/mentions'
+import { categoryMentions, describeMention, mentionRevision, openMentionPath, savedLinkIcon, searchMentions } from '~/stores/mentions'
 import { onNoteOpened, useNotesStore } from '~/stores/notes'
 
 const notes = useNotesStore()
@@ -47,13 +47,14 @@ onBackButton(() => {
   return true
 })
 
-/** Menções (@) a itens de todos os módulos — stores/mentions.ts. */
+/** Menções (@) a itens de todos os módulos e (#) a categorias: stores/mentions.ts. */
 const mentions: MentionHost = {
   search: (query) => searchMentions(query, { exceptPath: notes.activeNote.value?.path ?? null }),
   describe: describeMention,
   open: openMentionPath,
   revision: () => mentionRevision.value,
   linkIcon: savedLinkIcon,
+  categories: categoryMentions,
 }
 
 /**

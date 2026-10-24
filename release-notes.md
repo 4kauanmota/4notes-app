@@ -1,16 +1,23 @@
 ## Novidades
-- **Finanças**: um módulo novo para registrar gastos. Digite o valor e a descrição e aperte Enter (a data já vem como hoje); categoria e observações são opcionais. O histórico mostra os gastos por dia, com período, categoria, busca e ordem por data ou valor, e o total do que está na tela. O **Painel** traz a evolução por dia, semana ou mês, os gastos por categoria, os dias com mais gastos, os maiores gastos e a comparação com o período anterior, tudo calculado só com os seus gastos.
-- **Categorias compartilhadas**: as categorias agora valem para o app inteiro. Uma categoria criada nas Notas pode ser usada nas Tarefas, nos Links, no Timer e nas Finanças, sem criar outra igual. Em **Ver categorias** (a etiqueta no menu lateral; no celular, em "Mais") você vê onde cada uma é usada, abre os registros dela, muda nome, cor, ícone ou foto em todos os módulos de uma vez, junta duas categorias e exclui uma escolhendo para onde vão os registros.
-- **Abas temporárias nas Notas**: um clique numa nota da lista abre uma aba temporária (título em itálico), que o próximo clique reaproveita para outra nota. Clique duplo, "Abrir em aba fixa" no menu ou começar a editar deixam a aba fixa, e ela não é mais trocada.
-- **Gastos nas menções**: com @, notas e tarefas podem citar um gasto. A menção mostra a descrição e o valor atuais e leva até o gasto nas Finanças.
+- **Contas a pagar**: marque "Me lembre de pagar" ao registrar um gasto e ele fica pendente até você confirmar o pagamento (com o dia em que foi pago). Pendente, pago e vencido aparecem diferentes no histórico e na nova área **Contas**, que reúne as vencidas, as próximas e o histórico dos pagamentos. Com o app aberto, as contas do dia e as vencidas aparecem num aviso (no Windows, também como aviso do sistema) e com um número no ícone das Finanças.
+- **Recorrências**: aluguel, assinaturas, salário. Ative "Repetir" ao registrar (diária, semanal, mensal ou anual, até você encerrar ou até uma data). Cada ocorrência tem data e situação próprias e nunca é considerada paga só porque a data chegou. Ao mudar o valor, a frequência ou a data, você escolhe se vale só para a próxima ou também para as futuras; encerrar ou excluir mantém o histórico dos pagamentos. Meses curtos e anos bissextos são tratados (todo dia 31 cai no último dia do mês).
+- **Entradas e saldo**: registre salário e outras entradas (uma vez ou recorrentes). O Painel mostra o **saldo realizado** (só o que entrou e o que foi pago de verdade) e o **saldo projetado** (depois das contas pendentes, vencidas e das próximas, e das entradas previstas), além do que ficou comprometido. Informe o saldo da conta num dia para o cálculo partir dele; sem isso, o saldo aparece marcado como estimativa.
+- **Importar extrato** (CSV ou OFX): o app descobre as colunas, as datas e os centavos, mostra uma prévia para você revisar e corrigir, sugere categorias pelas descrições parecidas, deixa desmarcados os possíveis duplicados e confirma como paga a conta pendente que aparece no extrato. O arquivo é lido só no aparelho e não é guardado.
+- **# para categorias**: em qualquer nota (e na descrição das tarefas), "#" lista as categorias do app e cria uma nova sem sair do texto. A menção fica ligada à categoria de verdade: renomear ou juntar com outra mantém o vínculo, e um clique abre a categoria com os registros dela. Nas Finanças, "#Mercado" na descrição escolhe a categoria do lançamento, e nas observações vira uma menção.
+- **Cor do marca-texto**: o marca-texto agora tem paleta de cores, ao lado da cor do texto.
 
 ## Melhorias
-- **Limpar formatação** só aparece na barra quando o trecho selecionado tem alguma formatação para tirar, e tira apenas dentro da seleção (Ctrl+Z desfaz).
-- Excluir uma categoria que tem registros pergunta antes o que fazer com eles: passar para outra categoria ou deixar sem categoria. Nada é apagado.
-- Janelas mais largas que a tela (como a biblioteca de imagens) agora encolhem para caber em vez de passar da borda.
+- **Configurações › Categorias**: a lista de categorias agora fica nas Configurações, compacta e com busca enquanto você digita, pensada para centenas de categorias. Os detalhes, onde cada uma é usada e as menções abrem só quando você pede.
+- O tema claro/escuro e as categorias saíram do menu lateral (e do "Mais" no celular): os dois ficam nas Configurações.
+- As Tarefas mostram o ícone (ou a foto) de cada categoria, o mesmo de todo o app.
+- As observações das Finanças abrem e fecham, com a formatação das notas.
+- Nova opção nas Notas: "Selecionar a nota aberta na lista". Desligada, a lista lateral não abre pastas nem muda o destaque ao trocar de aba.
+- Ao excluir uma nota, as imagens que só ela usava saem da biblioteca depois que o "Desfazer" some. Imagens usadas em outro lugar continuam.
+
+## Correções
+- A cor do texto agora funciona dentro de listas (com marcadores, numeradas e de tarefas) e fica só no trecho selecionado.
 
 ## Observações
-- Na primeira abertura da 1.7.0, as categorias de mesmo nome em módulos diferentes viram uma só (a cor, o ícone e a foto vêm da categoria das Notas, se houver). Antes disso, uma cópia dos arquivos fica em `.4notes/backups/1.7.0/`.
-- Os gastos ficam em `finance/finance.json` e as categorias compartilhadas em `categories/categories.json`, dentro do seu workspace.
-- Se você usa o mesmo workspace num aparelho com uma versão antiga, atualize os dois: a versão antiga continua lendo os arquivos, mas só a 1.7.0 conhece as Finanças e as categorias compartilhadas.
-- Suas notas, tarefas, links e sessões do Timer não se perdem com a atualização.
+- As Finanças guardam os novos dados no mesmo `finance/finance.json` (entradas em `incomes`, recorrências em `recurrences`). Um gasto comum continua no formato da 1.7.0.
+- Se você usa o mesmo workspace num aparelho com a 1.7.0, atualize os dois: a versão antiga não conhece as entradas nem as recorrências e pode apagá-las ao salvar.
+- No celular, os lembretes aparecem com o app aberto (aviso e número no ícone); o Android não recebe aviso do sistema.

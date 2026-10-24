@@ -3,12 +3,12 @@
  * Sem dependência do editor: pode ser usado em qualquer lugar.
  */
 
-/** Remove o HTML de formatação usado pelo editor: <u>…</u> e <span style="color: …">…</span>. */
+/** Remove o HTML de formatação usado pelo editor: <u>…</u>, <span style="color: …">…</span> e <mark style="…">…</mark>. */
 export function stripHtmlFormatting(text: string): string {
   return text
     .replace(/<\/?u>/gi, '')
-    .replace(/<span\s+style\s*=\s*(["'])[^"']*\1\s*>/gi, '')
-    .replace(/<\/span>/gi, '')
+    .replace(/<(?:span|mark)\s+style\s*=\s*(["'])[^"']*\1\s*>/gi, '')
+    .replace(/<\/(?:span|mark)>/gi, '')
 }
 
 /** Remove imagens (![](…)) — o texto delas não conta como conteúdo. */
