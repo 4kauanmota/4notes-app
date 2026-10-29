@@ -12,7 +12,8 @@
  * categoria, ver menções, excluir. Abrir uma menção a um lançamento traz ele para a tela.
  */
 import { computed, nextTick, ref, watch } from 'vue'
-import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { pickCategory } from '~/composables/useCategoryPicker'
+import { separator, showContextMenu } from '~/composables/useContextMenu'
 import { paletteVar } from '~/lib/colors'
 import { addDays, formatDateBR, relativeDayLabel, type ISODate } from '~/lib/dates'
 import { formatMoney } from '~/lib/finance/format'
@@ -20,10 +21,12 @@ import { entryState, filterExpenses, groupByDay, SORT_LABELS, sortExpenses, stat
 import type { UpcomingItem } from '~/lib/finance/bills'
 import { weekdayName } from '~/lib/timer/stats'
 import { expenseSubject, showMentionsOf } from '~/stores/mentions'
+import { useBankStore } from '~/stores/bank'
 import { useFinanceStore } from '~/stores/finance'
 
 const emit = defineEmits<{ add: []; import: [] }>()
 const finance = useFinanceStore()
+const bank = useBankStore()
 const today = finance.today
 
 const searchInput = ref<HTMLInputElement>()
@@ -34,8 +37,8 @@ const period = computed({
   set: (value) => (finance.state.period = value),
 })
 const categoryChoice = computed({
-  get: () => (finance.state.category === undefined ? 'all' : finance.state.category === null ? 'none' : finance.state.category),
-  set: (value: string) => (finance.state.category = value === 'all' ? undefined : value === 'none' ? null : value),
+  get: () => finance.state.categoryFilter,
+  set: (value: string | null | (string | null)[]) => (finance.state.categoryFilter = Array.isArray(value) ? value : []),
 })
 const kindChoice = computed({
   get: () => finance.state.kind,
@@ -53,7 +56,7 @@ const filtered = computed(() =>
   filterExpenses(view.value, {
     from: period.value?.from ?? null,
     to: period.value?.to ?? null,
-    category: finance.state.category,
+    category: finance.state.categoryFilter,
     search: finance.state.search,
     knownCategories: finance.knownCategoryIds.value,
     kind: finance.state.kind === 'all' ? undefined : finance.state.kind,
@@ -76,7 +79,7 @@ const dayTotals = computed(() => {
   return map
 })
 
-watch([period, () => finance.state.search, () => finance.state.category, () => finance.state.kind, sort], () => (limit.value = 150))
+watch([period, () => finance.state.search, () => finance.state.categoryFilter, () => finance.state.kind, sort], () => (limit.value = 150))
 
 const totals = computed(() => {
   const result = { count: filtered.value.length, paid: 0, paidCount: 0, received: 0, receivedCount: 0, pending: 0, pendingCount: 0 }
@@ -97,11 +100,11 @@ const totals = computed(() => {
   }
   return result
 })
-const hasFilters = computed(() => !!finance.state.search.trim() || finance.state.category !== undefined || finance.state.kind !== 'all')
+const hasFilters = computed(() => !!finance.state.search.trim() || finance.state.categoryFilter.length > 0 || finance.state.kind !== 'all')
 
 function clearFilters() {
   finance.state.search = ''
-  finance.state.category = undefined
+  finance.state.categoryFilter = []
   finance.state.kind = 'all'
 }
 
@@ -115,7 +118,7 @@ const forecast = computed<UpcomingItem[]>(() => {
     .upcomingUntil(range.to)
     .filter((item) => !item.stored && item.date >= from)
     .filter((item) => finance.state.kind === 'all' || item.kind === finance.state.kind)
-    .filter((item) => finance.state.category === undefined || (item.categoryId && finance.knownCategoryIds.value.has(item.categoryId) ? item.categoryId : null) === finance.state.category)
+    .filter((item) => !finance.state.categoryFilter.length || finance.state.categoryFilter.includes(item.categoryId && finance.knownCategoryIds.value.has(item.categoryId) ? item.categoryId : null))
     .filter((item) => !search || item.description.toLocaleLowerCase('pt-BR').includes(search))
 })
 const showForecast = ref(true)
@@ -143,16 +146,6 @@ function pay(entry: Expense) {
 async function rowMenu(entry: Expense) {
   const current = finance.categoryOf(entry)
   const real = original(entry)
-  const categoryItems: MenuItemSpec[] = [
-    { id: 'category:', label: 'Sem categoria', type: 'radio', checked: !current },
-    ...finance.state.categories.map((category) => ({
-      id: `category:${category.id}`,
-      label: category.name,
-      type: 'radio' as const,
-      checked: current?.id === category.id,
-      swatch: paletteVar(category.color),
-    })),
-  ]
   const income = real.kind === 'income'
   const choice = await showContextMenu([
     { id: 'open', label: 'Abrir' },
@@ -160,7 +153,7 @@ async function rowMenu(entry: Expense) {
     ...(real.status === 'pending' && real.recurrenceId ? [{ id: 'skip', label: 'Pular esta' }] : []),
     ...(real.status === 'cancelled' ? [{ id: 'restore', label: 'Voltar a pendente' }] : []),
     ...(real.recurrenceId && finance.findRecurrence(real.recurrenceId) ? [{ id: 'recurrence', label: 'Abrir a recorrência' }] : [{ id: 'repeat', label: 'Repetir hoje' }]),
-    { label: 'Categoria', submenu: categoryItems },
+    { id: 'category', label: 'Categoria…', hint: current?.name },
     { id: 'mentions', label: 'Ver menções' },
     separator,
     { id: 'delete', label: 'Excluir…', danger: true },
@@ -174,7 +167,11 @@ async function rowMenu(entry: Expense) {
   else if (choice === 'repeat') finance.repeatExpense(entry.id)
   else if (choice === 'mentions') showMentionsOf(expenseSubject(real))
   else if (choice === 'delete') void finance.requestDeleteExpense(entry.id)
-  else if (choice.startsWith('category:')) finance.updateExpense(entry.id, { categoryId: choice.slice('category:'.length) || null })
+  else if (choice === 'category') {
+    // O seletor de categorias (1.7.2), perto de onde o menu estava
+    const picked = await pickCategory({ module: 'finance', selected: [current?.id ?? null], title: 'Categoria do lançamento' })
+    if (picked) finance.updateExpense(entry.id, { categoryId: picked[0] ?? null })
+  }
 }
 
 // ── Abrir um lançamento mencionado ──────────────────────────────────────────
@@ -211,9 +208,22 @@ defineExpose({
     <div class="toolbar">
       <div class="toolbar-top">
         <PeriodNav ref="navRef" v-model="period" :week-start="finance.state.settings.weekStart" :today="today" allow-all all-label="Todos os lançamentos" />
-        <button type="button" class="btn btn-sm import-btn" data-action="import-statement" @click="emit('import')">
-          <AppIcon name="upload" :size="14" /> Importar extrato
-        </button>
+        <span class="toolbar-actions">
+          <button
+            v-if="finance.state.settings.bank.connections.length"
+            type="button"
+            class="btn btn-sm import-btn"
+            data-action="bank-sync"
+            :disabled="bank.state.syncing"
+            data-tip="Busca as transações novas dos bancos conectados"
+            @click="bank.sync({ manual: true })"
+          >
+            <AppIcon name="refresh" :size="14" /> {{ bank.state.syncing ? 'Buscando…' : 'Buscar no banco' }}
+          </button>
+          <button type="button" class="btn btn-sm import-btn" data-action="import-statement" @click="emit('import')">
+            <AppIcon name="upload" :size="14" /> Importar extrato
+          </button>
+        </span>
       </div>
       <div class="filters">
         <label class="search">
@@ -228,11 +238,7 @@ defineExpose({
           <option value="expense">Só gastos</option>
           <option value="income">Só entradas</option>
         </select>
-        <select v-model="categoryChoice" class="select sm" aria-label="Categoria" data-filter="category">
-          <option value="all">Todas as categorias</option>
-          <option value="none">Sem categoria</option>
-          <option v-for="category in finance.state.categories" :key="category.id" :value="category.id">{{ category.name }}</option>
-        </select>
+        <CategorySelect v-model="categoryChoice" module="finance" multiple size="sm" label="Filtrar por categoria" data-filter="category" />
         <select v-model="sort" class="select sm" aria-label="Ordem" data-filter="sort">
           <option v-for="[value, label] in SORTS" :key="value" :value="value">{{ label }}</option>
         </select>
@@ -551,6 +557,11 @@ html[data-touch] .row {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .import-btn {
   flex: none;

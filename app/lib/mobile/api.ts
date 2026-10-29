@@ -37,6 +37,7 @@ import { readLocalValue, writeLocalValue } from '~/lib/storage/device-state'
 import { createWorkspace, copyDataDir, dataDirStatus, inspectFolder, prepareDataDir } from './data-dir'
 import { cleanPath, dirnameFs, FsError, isInside, joinFs, type FsDriver } from './fs'
 import type { FourNotesNative } from './native'
+import { createMobileBank } from './bank'
 import { createMobileUpdates, type UpdaterNative } from './updates'
 import { pickFiles } from './pick-files'
 import { WorkspaceFiles } from './workspace'
@@ -238,6 +239,7 @@ export async function createMobileApi(options: MobileOptions): Promise<FourNotes
 
   return {
     bootstrap,
+    bank: createMobileBank({ test: options.test }),
     updates: options.updater
       ? createMobileUpdates({ repository: options.updatesRepository ?? '', version: options.version, native: options.updater, test: options.test })
       : undefined,

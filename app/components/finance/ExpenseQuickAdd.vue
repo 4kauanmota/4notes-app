@@ -8,13 +8,15 @@
  * - "Me lembre de pagar": o gasto fica pendente até você confirmar o pagamento.
  * - "Repetir": vira uma recorrência (frequência e fim: até você encerrar ou até uma data);
  *   cada ocorrência fica pendente até você confirmar.
- * Uma descrição já usada sugere a categoria dela.
+ * A categoria é automática (1.7.2, lib/finance/categorize.ts): sai do que você já fez,
+ * de um dicionário de estabelecimentos ("iFood" → a sua categoria de alimentação) ou da
+ * categoria padrão; escolher uma à mão (ou com "#") vale até o próximo registro.
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { showToast } from '~/composables/useToasts'
 import { addDays, formatDateBR, type ISODate } from '~/lib/dates'
 import { formatMoney, parseAmount } from '~/lib/finance/format'
-import { foldText, MAX_DESCRIPTION, recentDescriptions, type EntryKind } from '~/lib/finance/model'
+import { MAX_DESCRIPTION, recentDescriptions, type EntryKind } from '~/lib/finance/model'
 import { FREQUENCIES, occurrencesBetween, type Frequency } from '~/lib/finance/recurrence'
 import { useFinanceStore } from '~/stores/finance'
 
@@ -38,8 +40,8 @@ const amountError = ref<string | null>(null)
 const descriptionError = ref<string | null>(null)
 /** Muda a cada registro: o editor das observações começa vazio. */
 const formKey = ref(0)
-/** A categoria foi escolhida à mão (a sugestão pela descrição não troca mais). */
-let categoryTouched = false
+/** A categoria foi escolhida à mão (ou com "#"): a automática não troca mais. */
+const manual = ref(false)
 
 const amountInput = ref<HTMLInputElement>()
 const descriptionInput = ref<{ focus: () => void }>()
@@ -72,25 +74,22 @@ watch(today, (now, before) => {
   if (date.value === before) date.value = now
 })
 
-watch(categoryId, () => (categoryTouched = true))
-watch(kind, () => {
-  pending.value = false
-  if (!categoryTouched) categoryId.value = null
-})
+watch(kind, () => (pending.value = false))
+watch(description, () => (descriptionError.value = null))
 
-// Descrição já usada: a categoria dela vem junto (se você ainda não escolheu outra)
-watch(description, (text) => {
-  descriptionError.value = null
-  if (categoryTouched) return
-  const key = foldText(text.trim())
-  const match = key ? suggestions.value.find((item) => foldText(item.description.trim()) === key) : null
-  if (match?.categoryId && finance.categoryById.value.has(match.categoryId)) {
-    categoryId.value = match.categoryId
-    void nextTick(() => (categoryTouched = false))
-  }
-})
+/** A categoria que o app escolheria agora (histórico, dicionário, padrão). */
+const suggestion = computed(() => finance.suggestCategory({ description: description.value.replace(/(^|\s)#\S*/g, ' '), kind: kind.value }))
+watch(
+  suggestion,
+  (next) => {
+    if (!manual.value) categoryId.value = next?.id ?? null
+  },
+  { immediate: true },
+)
+const categoryTag = computed(() => (manual.value || !suggestion.value || categoryId.value !== suggestion.value.id ? null : suggestion.value.source === 'default' ? 'padrão' : 'automática'))
 
-function chooseCategory(id: string) {
+function chooseCategory(id: string | null) {
+  manual.value = true
   categoryId.value = id
 }
 
@@ -98,7 +97,8 @@ function reset() {
   amountText.value = ''
   description.value = ''
   notes.value = ''
-  categoryId.value = null
+  manual.value = false
+  categoryId.value = suggestion.value?.id ?? null
   pending.value = false
   repeat.value = false
   endMode.value = 'never'
@@ -107,7 +107,6 @@ function reset() {
   amountError.value = null
   descriptionError.value = null
   formKey.value++
-  void nextTick(() => (categoryTouched = false))
 }
 
 const shortDate = (iso: ISODate) => (iso === today.value ? '' : ` (${formatDateBR(iso)})`)
@@ -118,8 +117,10 @@ function submit() {
   const hashed = finance.takeHashCategory(description.value)
   if (hashed.categoryId) {
     description.value = hashed.text
-    if (!categoryId.value) categoryId.value = hashed.categoryId
+    if (!manual.value) chooseCategory(hashed.categoryId)
   }
+  // Uma categoria do app sugerida que ainda não está nas Finanças entra nelas
+  const category = finance.ensureCategory(categoryId.value)
   if (amount === null) amountError.value = amountText.value.trim() ? 'Valor inválido. Exemplos: 52,30 ou 1.234,56.' : `Digite o valor ${income.value ? 'da entrada' : 'do gasto'}.`
   if (!description.value.trim()) descriptionError.value = income.value ? 'Dê um nome à entrada (ex.: Salário, Freela).' : 'Dê um nome ao gasto (ex.: Mercado, Uber, Cinema).'
   else if (repeat.value && endMode.value === 'date' && (!endDate.value || endDate.value < date.value)) descriptionError.value = 'Escolha a data final (depois da primeira).'
@@ -132,7 +133,7 @@ function submit() {
       kind: kind.value,
       description: description.value,
       amount,
-      categoryId: categoryId.value,
+      categoryId: category,
       notes: notes.value,
       remind: !income.value && pending.value,
       frequency: frequency.value,
@@ -153,7 +154,7 @@ function submit() {
       description: description.value,
       amount,
       date: day,
-      categoryId: categoryId.value,
+      categoryId: category,
       notes: notes.value,
       remind: !income.value && pending.value,
       pending: pending.value,
@@ -244,9 +245,8 @@ defineExpose({ focusAmount, start })
     <p v-if="amountError || descriptionError" class="error" role="alert">{{ amountError ?? descriptionError }}</p>
     <p v-else-if="parsed !== null" class="preview">{{ formatMoney(parsed) }}</p>
 
-    <FinanceCategoryPicker v-model="categoryId" compact />
-
     <div class="options">
+      <FinanceCategoryPicker v-model="categoryId" compact :tag="categoryTag" @picked="chooseCategory" />
       <label v-if="!(income && repeat)" class="option" :data-tip="income ? 'Fica como prevista até você confirmar que recebeu' : 'Fica pendente até você confirmar o pagamento, com aviso no dia'">
         <input v-model="pending" type="checkbox" data-field="remind" />
         <AppIcon :name="income ? 'clock' : 'bell'" :size="14" />
@@ -391,7 +391,8 @@ defineExpose({ focusAmount, start })
 .options {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 16px;
+  align-items: center;
+  gap: 8px 16px;
 }
 .option {
   display: inline-flex;

@@ -1,12 +1,11 @@
 /**
  * Categorias das Notas na interface: o diálogo de criar/editar (um só, mostrado
- * pela página das Notas) e o submenu "Categoria" usado na aba e na lista lateral.
+ * pela página das Notas) e o "Categoria…" do menu da aba e da lista lateral.
  */
 import { reactive } from 'vue'
 import { requestCategoryRemoval } from '~/composables/useCategoryActions'
-import { separator, type MenuItemSpec } from '~/composables/useContextMenu'
-import { paletteVar } from '~/lib/colors'
-import { useCategoriesStore } from '~/stores/categories'
+import { NOTE_NAME_PREFIX, pickCategory } from '~/composables/useCategoryPicker'
+import type { MenuItemSpec } from '~/composables/useContextMenu'
 import { useNotesStore, type QuickNote } from '~/stores/notes'
 
 /** Arrastar uma nota (aba ou item da lista) leva o id dela neste tipo. */
@@ -30,57 +29,34 @@ export function useCategoryDialog() {
 }
 
 /**
- * Submenu "Categoria" de uma nota: escolher, tirar ou criar uma categoria nova. As
- * categorias do app que ainda não estão nas Notas ficam em "Outras categorias" (escolher
- * uma cria a pasta dela aqui).
+ * "Categoria…" no menu de uma nota (aba e lista lateral): abre o seletor de categorias
+ * (1.7.2: busca, criar pelo nome, as outras categorias do app) perto do menu.
  */
 export function categorySubmenu(note: QuickNote): MenuItemSpec {
-  const notes = useNotesStore()
-  const others = useCategoriesStore().availableFor('notes')
-  const current = notes.categoryOf(note)
-  return {
-    label: 'Categoria',
-    submenu: [
-      { id: 'category:', label: 'Sem categoria', type: 'radio', checked: !current },
-      ...notes.state.categories.map((category) => ({
-        id: `category:${category.name}`,
-        label: category.name,
-        type: 'radio' as const,
-        checked: current === category,
-        swatch: paletteVar(category.color),
-      })),
-      ...(others.length
-        ? [
-            separator,
-            {
-              label: 'Outras categorias',
-              submenu: others.map((category) => ({ id: `category-attach:${category.id}`, label: category.name, swatch: paletteVar(category.color) })),
-            },
-          ]
-        : []),
-      separator,
-      { id: 'category-new', label: 'Nova categoria…' },
-    ],
-  }
+  const current = useNotesStore().categoryOf(note)
+  return { id: 'category-pick', label: 'Categoria…', hint: current?.name }
 }
 
-/** Trata a escolha feita no submenu "Categoria" (true = era uma escolha dele). */
+/** Trata a escolha "Categoria…" do menu (true = era ela). */
 export function handleCategoryChoice(choice: string | null, note: QuickNote): boolean {
-  if (choice === 'category-new') {
-    useCategoryDialog().openCreate(note.id)
-    return true
-  }
-  if (choice?.startsWith('category-attach:')) {
-    const notes = useNotesStore()
-    void notes.attachCategory(choice.slice('category-attach:'.length)).then((category) => {
-      if (category) void notes.moveToCategory(note.id, category.name)
-    })
-    return true
-  }
-  if (!choice?.startsWith('category:')) return false
-  const name = choice.slice('category:'.length)
-  void useNotesStore().moveToCategory(note.id, name || null)
+  if (choice !== 'category-pick') return false
+  void pickNoteCategory(note)
   return true
+}
+
+async function pickNoteCategory(note: QuickNote): Promise<void> {
+  const notes = useNotesStore()
+  const current = notes.categoryOf(note)
+  const picked = await pickCategory({
+    module: 'notes',
+    selected: [current ? (current.id ?? `${NOTE_NAME_PREFIX}${current.name}`) : null],
+    title: 'Categoria da nota',
+  })
+  if (!picked) return
+  const id = picked[0] ?? null
+  const name = id === null ? null : id.startsWith(NOTE_NAME_PREFIX) ? id.slice(NOTE_NAME_PREFIX.length) : (notes.state.categories.find((category) => category.id === id)?.name ?? null)
+  if (id !== null && name === null) return
+  if ((current?.name ?? null) !== name) await notes.moveToCategory(note.id, name)
 }
 
 /**

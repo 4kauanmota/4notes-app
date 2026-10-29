@@ -33,7 +33,7 @@ const { today } = useToday()
 
 const period = ref<Period | null>(periodOf('month', today.value, timer.state.settings.weekStart))
 const search = ref('')
-const categoryChoice = ref('all')
+const categoryChoice = ref<(string | null)[]>([])
 const status = ref<'all' | SessionStatus>('all')
 const groupBy = ref<'day' | 'category' | 'activity'>('day')
 const sort = ref<'recent' | 'oldest' | 'longest'>('recent')
@@ -46,9 +46,7 @@ const GROUPS = [
   { value: 'activity' as const, label: 'Atividade' },
 ]
 
-const categoryFilter = computed<CategoryFilter>(() =>
-  categoryChoice.value === 'all' ? undefined : categoryChoice.value === 'none' ? null : categoryChoice.value,
-)
+const categoryFilter = computed<CategoryFilter>(() => categoryChoice.value)
 const fold = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('pt-BR')
 
 const filtered = computed(() => {
@@ -135,11 +133,11 @@ const totals = computed(() => ({
   count: filtered.value.length,
   ms: filtered.value.reduce((sum, session) => sum + session.duration * 1000, 0),
 }))
-const hasFilters = computed(() => !!search.value.trim() || categoryChoice.value !== 'all' || status.value !== 'all')
+const hasFilters = computed(() => !!search.value.trim() || categoryChoice.value.length > 0 || status.value !== 'all')
 
 function clearFilters() {
   search.value = ''
-  categoryChoice.value = 'all'
+  categoryChoice.value = []
   status.value = 'all'
 }
 
@@ -216,11 +214,7 @@ defineExpose({ shiftPeriod: (delta: number) => navRef.value?.shift(delta) })
           <AppIcon name="search" :size="15" />
           <input v-model="search" class="search-input" placeholder="Buscar atividade ou observação" aria-label="Buscar no histórico" />
         </label>
-        <select v-model="categoryChoice" class="select sm" aria-label="Categoria">
-          <option value="all">Todas as categorias</option>
-          <option value="none">Sem categoria</option>
-          <option v-for="category in timer.state.categories" :key="category.id" :value="category.id">{{ category.name }}</option>
-        </select>
+        <CategorySelect v-model="categoryChoice" module="timer" multiple size="sm" label="Filtrar por categoria" data-filter="category" />
         <select v-model="status" class="select sm" aria-label="Situação">
           <option value="all">Todas as situações</option>
           <option value="completed">Concluídas</option>

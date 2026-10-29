@@ -27,6 +27,7 @@ import { Decoration, EditorView, keymap, ViewPlugin, WidgetType, type Command, t
 import { ICONS, iconSvg } from '../icons'
 import { BLOCK_EDITOR_CLASS, BlockEditor, type BlockEditorHost } from './block-editor'
 import { editorHost } from './host'
+import { canFormat, formatCode } from './format-code'
 import { isTextBlockInfo, languageLabel } from './languages'
 
 export interface CodeBlock {
@@ -127,6 +128,55 @@ export function setBlockLanguage(view: EditorView, at: number, info: string): vo
   view.dispatch({ changes: { from, to: block.openTo, insert: value }, userEvent: 'input.code', annotations: fenceEdit.of(true) })
 }
 
+/**
+ * Formata o código do bloco pela linguagem dele (1.7.2, format-code.ts). Sem linguagem,
+ * pergunta qual antes. Erro de sintaxe ou linguagem sem formatador: avisa e não mexe.
+ * Uma transação só: Ctrl+Z (o histórico da nota) desfaz.
+ */
+export async function formatBlock(view: EditorView, at: number): Promise<void> {
+  const host = view.state.facet(editorHost)
+  let block = codeBlockAt(view.state, at)
+  if (!block || isTextBlock(block)) return
+  if (!block.info.trim()) {
+    const info = await host?.chooseLanguage?.(block.info)
+    if (!info?.trim() || isTextBlockInfo(info)) {
+      if (info && isTextBlockInfo(info)) setBlockLanguage(view, at, info)
+      return
+    }
+    setBlockLanguage(view, block.from, info)
+    block = codeBlockAt(view.state, block.from)
+    if (!block) return
+  }
+  const from = block.from
+  const code = view.state.sliceDoc(block.codeFrom, block.codeTo)
+  const result = await formatCode(code, block.info)
+  if (!result.ok) {
+    host?.notify(result.reason)
+    return
+  }
+  // O bloco mudou enquanto formatava (você continuou digitando): não passa por cima
+  const current = codeBlockAt(view.state, from)
+  if (!current || view.state.sliceDoc(current.codeFrom, current.codeTo) !== code) return
+  if (!result.changed) {
+    host?.notify('O código já está formatado.')
+    return
+  }
+  replaceBlockCode(view, current.from, result.code)
+  host?.notify(`Código formatado (${result.language})`, () => undo(view))
+}
+
+/** Depois de colar código: oferece formatar (ou escolher a linguagem, se não foi reconhecida). */
+export function offerFormatting(view: EditorView, code: string, language: string): void {
+  const host = view.state.facet(editorHost)
+  if (!host?.notifyAction) return
+  const run = () => {
+    const block = codeBlocks(view.state).find((item) => view.state.sliceDoc(item.codeFrom, item.codeTo) === code)
+    if (block) void formatBlock(view, block.from)
+  }
+  if (language && canFormat(language)) host.notifyAction(`Código colado como ${languageLabel(language)}.`, { label: 'Formatar', run })
+  else if (!language.trim()) host.notifyAction('Código colado sem linguagem reconhecida.', { label: 'Escolher linguagem', run })
+}
+
 // ── Desenho ──────────────────────────────────────────────────────────────────
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string) => {
@@ -140,6 +190,8 @@ const ACTIONS = [
   { action: 'expand', icon: 'expand', tip: 'Abrir em tela cheia' },
   { action: 'remove', icon: 'trash', tip: 'Remover bloco de código' },
 ] as const
+
+const FORMAT_ACTION = { action: 'format', icon: 'sparkle', tip: 'Formatar código (Shift+Alt+F)' } as const
 
 const TEXT_ACTIONS = [
   { action: 'copy', icon: 'copy', tip: 'Copiar texto' },
@@ -160,7 +212,9 @@ function header(info: string): HTMLElement {
   label.append(languageLabel(info))
   label.insertAdjacentHTML('beforeend', iconSvg('chevron-down', 12))
   const actions = el('span', 'cm-codeblock-actions')
-  for (const { action, icon, tip } of text ? TEXT_ACTIONS : ACTIONS) {
+  // Formatar (1.7.2): só nas linguagens com formatador (sem linguagem: pergunta qual antes)
+  const formattable = !text && (canFormat(info) || !info.trim())
+  for (const { action, icon, tip } of text ? TEXT_ACTIONS : formattable ? [FORMAT_ACTION, ...ACTIONS] : ACTIONS) {
     const button = el('button', 'cm-codeblock-btn')
     button.type = 'button'
     button.dataset.action = action
@@ -318,6 +372,12 @@ function blockHost(view: EditorView, wrap: HTMLElement): BlockEditorHost {
     },
     undo: () => undo(view),
     redo: () => redo(view),
+    format() {
+      const block = blockOf(view, wrap)
+      if (!block || isTextBlock(block)) return false
+      void formatBlock(view, block.from)
+      return true
+    },
     exit(side) {
       const block = blockOf(view, wrap)
       if (!block) return
@@ -639,6 +699,8 @@ function runAction(view: EditorView, block: CodeBlock, action: string, button: H
   } else if (action === 'remove') {
     removeBlock(view, block)
     host?.notify(isTextBlock(block) ? 'Bloco de texto removido' : 'Bloco de código removido', () => undo(view))
+  } else if (action === 'format') {
+    void formatBlock(view, block.from)
   } else if (action === 'language') {
     const at = block.from
     void host?.chooseLanguage?.(block.info).then((info) => {

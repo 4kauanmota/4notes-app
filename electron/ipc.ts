@@ -19,6 +19,7 @@ import { getConfig, updateConfig } from './config'
 import { copyDataDir, createWorkspace, dataDirStatus, inspectFolder, prepareDataDir } from './data-dir'
 import { exportPdf, exportText, revealExport } from './export'
 import { AppError, copyImage, fileExists, listFiles, makeDir, readFile, renameFile, revealFile, saveImage, trashFile, writeFile } from './files'
+import { bankAccounts, bankItem, bankStatus, bankTransactions, configureBank, forgetBank } from './bank'
 import { adoptIntoLibrary, listLibrary, removeFromLibrary, uploadToLibrary } from './library'
 import { fetchLinkMeta, findBrowserSources, pickBookmarksFile, readBrowserBookmarks, saveDataIcon } from './links'
 import { APP_ORIGIN } from './protocol'
@@ -169,6 +170,23 @@ export function registerIpc(context: IpcContext): void {
   handle(IPC.linksBrowsers, () => findBrowserSources())
   handle(IPC.linksReadBrowser, (_event, id: unknown) => readBrowserBookmarks(id))
   handle(IPC.linksPickFile, (event) => pickBookmarksFile(BrowserWindow.fromWebContents(event.sender)))
+
+  // ── Bancos (Meu Pluggy, 1.7.2): a mensagem do erro vai sem o nome técnico ──
+  const bank =
+    <T,>(fn: (...args: any[]) => Promise<T>) =>
+    async (_event: Electron.IpcMainInvokeEvent, ...args: any[]): Promise<T> => {
+      try {
+        return await fn(...args)
+      } catch (error) {
+        throw new Error(error instanceof Error ? error.message : String(error))
+      }
+    }
+  handle(IPC.bankStatus, bank(bankStatus))
+  handle(IPC.bankConfigure, bank(configureBank))
+  handle(IPC.bankForget, bank(forgetBank))
+  handle(IPC.bankItem, bank(bankItem))
+  handle(IPC.bankAccounts, bank(bankAccounts))
+  handle(IPC.bankTransactions, bank(bankTransactions))
 
   // ── Sistema ──
   handle(IPC.launchAtLogin, () => launchAtLogin())

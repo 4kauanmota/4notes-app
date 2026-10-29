@@ -1,23 +1,19 @@
 ## Novidades
-- **Contas a pagar**: marque "Me lembre de pagar" ao registrar um gasto e ele fica pendente até você confirmar o pagamento (com o dia em que foi pago). Pendente, pago e vencido aparecem diferentes no histórico e na nova área **Contas**, que reúne as vencidas, as próximas e o histórico dos pagamentos. Com o app aberto, as contas do dia e as vencidas aparecem num aviso (no Windows, também como aviso do sistema) e com um número no ícone das Finanças.
-- **Recorrências**: aluguel, assinaturas, salário. Ative "Repetir" ao registrar (diária, semanal, mensal ou anual, até você encerrar ou até uma data). Cada ocorrência tem data e situação próprias e nunca é considerada paga só porque a data chegou. Ao mudar o valor, a frequência ou a data, você escolhe se vale só para a próxima ou também para as futuras; encerrar ou excluir mantém o histórico dos pagamentos. Meses curtos e anos bissextos são tratados (todo dia 31 cai no último dia do mês).
-- **Entradas e saldo**: registre salário e outras entradas (uma vez ou recorrentes). O Painel mostra o **saldo realizado** (só o que entrou e o que foi pago de verdade) e o **saldo projetado** (depois das contas pendentes, vencidas e das próximas, e das entradas previstas), além do que ficou comprometido. Informe o saldo da conta num dia para o cálculo partir dele; sem isso, o saldo aparece marcado como estimativa.
-- **Importar extrato** (CSV ou OFX): o app descobre as colunas, as datas e os centavos, mostra uma prévia para você revisar e corrigir, sugere categorias pelas descrições parecidas, deixa desmarcados os possíveis duplicados e confirma como paga a conta pendente que aparece no extrato. O arquivo é lido só no aparelho e não é guardado.
-- **# para categorias**: em qualquer nota (e na descrição das tarefas), "#" lista as categorias do app e cria uma nova sem sair do texto. A menção fica ligada à categoria de verdade: renomear ou juntar com outra mantém o vínculo, e um clique abre a categoria com os registros dela. Nas Finanças, "#Mercado" na descrição escolhe a categoria do lançamento, e nas observações vira uma menção.
-- **Cor do marca-texto**: o marca-texto agora tem paleta de cores, ao lado da cor do texto.
+- **Nova seleção de categorias**: em todos os módulos, o campo de categoria abre uma busca. Digite para filtrar (sem se preocupar com acentos), escolha com ↑ ↓ e Enter, ou crie uma categoria pelo nome sem abrir outra janela. As categorias do módulo aparecem primeiro e depois as outras do app. Nos menus do botão direito, "Categoria…" abre a mesma busca.
+- **Filtros com várias categorias**: o Histórico e o Painel das Finanças e o Histórico e as Estatísticas do Timer filtram por mais de uma categoria de uma vez.
+- **Categoria automática nas Finanças**: o app escolhe, entre as suas categorias, a que combina com o lançamento. "iFood" vai para a sua categoria de alimentação ("Alimentação", "Comida", "Food"…), "Uber" para transporte, "Netflix" para assinaturas. Vale ao registrar, ao importar extrato e ao buscar no banco, aparece marcada como "automática" e dá para trocar antes de salvar. O app nunca cria uma categoria sozinho.
+- **Categoria padrão**: em Configurações › Módulos › Finanças, escolha a categoria dos gastos que a categoria automática não reconhecer.
+- **Conexão com bancos (Meu Pluggy)**: conecte os seus bancos pelo Open Finance e as transações entram sozinhas nos Lançamentos, sem duplicar e com Desfazer. "Buscar no banco" busca na hora, e o app também busca sozinho uma vez por dia. O 4notes não pede nem guarda a senha do banco. O passo a passo está em Configurações › Módulos › Finanças › Conexões bancárias e em `docs/CONEXAO-BANCARIA.md`.
+- **Recolher e expandir código**: setas na margem dos blocos de código recolhem objetos, JSON, funções e blocos aninhados, como num editor de código. Recolher só esconde na tela.
+- **Guias de indentação**: linhas verticais discretas mostram os níveis de recuo do código.
+- **Formatar código**: ao colar código, o aviso oferece "Formatar" (ou "Escolher linguagem", quando ela não foi reconhecida). O botão ✦ no bloco, o botão "Formatar" na tela cheia e Shift+Alt+F fazem o mesmo. Funciona com JavaScript, TypeScript, JSON, CSS, SCSS, LESS, HTML, Vue, YAML, Markdown e GraphQL, mantendo o estilo do código (recuo, aspas, ponto e vírgula). Código com erro de sintaxe e linguagens sem formatador seguro (Python, GDScript…) ficam como estão. Ctrl+Z desfaz.
 
 ## Melhorias
-- **Configurações › Categorias**: a lista de categorias agora fica nas Configurações, compacta e com busca enquanto você digita, pensada para centenas de categorias. Os detalhes, onde cada uma é usada e as menções abrem só quando você pede.
-- O tema claro/escuro e as categorias saíram do menu lateral (e do "Mais" no celular): os dois ficam nas Configurações.
-- As Tarefas mostram o ícone (ou a foto) de cada categoria, o mesmo de todo o app.
-- As observações das Finanças abrem e fecham, com a formatação das notas.
-- Nova opção nas Notas: "Selecionar a nota aberta na lista". Desligada, a lista lateral não abre pastas nem muda o destaque ao trocar de aba.
-- Ao excluir uma nota, as imagens que só ela usava saem da biblioteca depois que o "Desfazer" some. Imagens usadas em outro lugar continuam.
-
-## Correções
-- A cor do texto agora funciona dentro de listas (com marcadores, numeradas e de tarefas) e fica só no trecho selecionado.
+- A fonte dos blocos de código ficou um pouco menor, para caber mais num trecho longo.
+- "Ou use uma categoria que já existe" nos diálogos de nova categoria virou uma lista que filtra pelo nome digitado.
 
 ## Observações
-- As Finanças guardam os novos dados no mesmo `finance/finance.json` (entradas em `incomes`, recorrências em `recurrences`). Um gasto comum continua no formato da 1.7.0.
-- Se você usa o mesmo workspace num aparelho com a 1.7.0, atualize os dois: a versão antiga não conhece as entradas nem as recorrências e pode apagá-las ao salvar.
-- No celular, os lembretes aparecem com o app aberto (aviso e número no ícone); o Android não recebe aviso do sistema.
+- A conexão com bancos depende de um serviço externo (a Pluggy): é opcional, fica desligada até você configurar e os dados passam pela Pluggy. Ela não foi testada contra a Pluggy de verdade durante o desenvolvimento; o primeiro uso real é o seu.
+- As credenciais da Pluggy ficam só no aparelho (no Windows, criptografadas pelo sistema). Em outro aparelho, informe de novo; os bancos e as contas escolhidas vêm pelo workspace.
+- Formatar código usa o Prettier, carregado só quando você formata (nada sai do aparelho).
+- Atualize o computador e o celular para a 1.7.2. Uma configuração das Finanças mudada num aparelho ainda na 1.7.1 apaga a categoria padrão e os bancos conectados do workspace.

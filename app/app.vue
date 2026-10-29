@@ -142,6 +142,7 @@ function reload() {
     <DialogHost />
     <ToastHost />
     <ContextMenuHost />
+    <CategoryPickerHost v-if="app.state.phase === 'ready'" />
     <TooltipHost />
   </div>
 </template>

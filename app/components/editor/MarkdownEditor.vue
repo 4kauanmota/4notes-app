@@ -353,6 +353,9 @@ const appHost: EditorHost = {
   notify: (message, undo) => {
     showToast({ message, icon: 'check', action: undo ? { label: 'Desfazer', run: undo } : undefined })
   },
+  notifyAction: (message, action) => {
+    showToast({ message, icon: 'code', action, duration: 7000 })
+  },
   mentions: props.mentions,
   // Getter: a configuração "Título na primeira linha" pode mudar com a nota aberta
   get titleFirstLine() {

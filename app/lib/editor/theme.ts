@@ -51,7 +51,7 @@ export const editorTheme = EditorView.theme({
   '.cm-md-codeblock': {
     backgroundColor: 'var(--surface-3)',
     fontFamily: 'var(--font-mono)',
-    fontSize: '0.88em',
+    fontSize: 'var(--code-font-size, 0.8em)',
     // Margens laterais (não verticais) não atrapalham o editor: alinha com o cartão do bloco
     margin: '0 calc(var(--editor-padding-x, 28px) - 14px)',
     paddingLeft: '14px !important',
@@ -399,17 +399,23 @@ export const codeHighlight = HighlightStyle.define([
  * (&.cm-editor), que valem mais.
  */
 export const blockEditorTheme = EditorView.theme({
-  '&.cm-editor': { backgroundColor: 'transparent', color: 'var(--text)', fontSize: '0.88em' },
+  // Código um pouco menor que o texto (1.7.2: 0,8em), para caber mais num trecho longo
+  '&.cm-editor': { backgroundColor: 'transparent', color: 'var(--text)', fontSize: 'var(--code-font-size, 0.8em)' },
   '&.cm-editor.cm-focused': { outline: 'none' },
   '&.cm-editor .cm-scroller': {
     maxHeight: 'var(--codeblock-max-height, 360px)',
     overflow: 'auto',
     fontFamily: 'var(--font-mono)',
-    lineHeight: '1.72',
+    lineHeight: '1.65',
     cursor: 'text',
   },
   '&.cm-editor .cm-content': { maxWidth: 'none', width: 'auto', minWidth: '100%', padding: '6px 0 8px', caretColor: 'var(--primary)', tabSize: '4' },
-  '&.cm-editor .cm-line': { padding: '0 14px' },
+  '&.cm-editor .cm-line': { padding: '0 14px', '--guides-left': '14px' },
+  // A margem das setas de recolher (code-structure.ts): o código continua alinhado com o texto da nota
+  '&.cm-editor .cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--text-3)' },
+  '&.cm-editor .cm-foldGutter .cm-gutterElement': { width: '16px', paddingLeft: '4px' },
+  '&.cm-editor .cm-gutters + .cm-content': { minWidth: '0' },
+  '&.cm-editor .cm-gutters + .cm-content .cm-line': { paddingLeft: '0', '--guides-left': '0px' },
   // A seleção e o cursor são desenhados pelo editor (drawSelection). O editor da nota
   // mostraria a seleção e o cursor nativos de um campo focado dentro dele (este): não.
   '&.cm-editor .cm-content .cm-line ::selection, &.cm-editor .cm-content .cm-line::selection': { backgroundColor: 'transparent !important' },
@@ -423,11 +429,12 @@ export const blockEditorTheme = EditorView.theme({
 
 /** Editor de código em tela cheia (CodeFullscreen.vue). */
 export const codeEditorTheme = EditorView.theme({
-  '&': { height: '100%', fontSize: '14px', color: 'var(--text)', backgroundColor: 'var(--surface)' },
+  '&': { height: '100%', fontSize: '13px', color: 'var(--text)', backgroundColor: 'var(--surface)' },
   '&.cm-focused': { outline: 'none' },
-  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.65' },
+  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.6' },
   '.cm-content': { padding: '14px 0 40vh', caretColor: 'var(--primary)' },
-  '.cm-line': { padding: '0 20px 0 12px' },
+  '.cm-line': { padding: '0 20px 0 12px', '--guides-left': '12px' },
+  '.cm-foldGutter .cm-gutterElement': { width: '18px' },
   // Quebra de linhas (line-wrap.ts): a continuação de uma linha quebrada começa no recuo dela
   '.cm-lineWrapping .cm-wrapIndent': { paddingLeft: 'calc(12px + var(--wrap-indent))', textIndent: 'calc(-1 * var(--wrap-indent))' },
   '.cm-gutters': { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: 'none', borderRight: '1px solid var(--border)' },

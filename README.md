@@ -6,7 +6,7 @@
 
 **Notes, tasks, mind maps, links, a timer and expenses in a single app — 100% local, on your computer and on your phone.**
 
-![Version](https://img.shields.io/badge/version-1.7.1-7c5cf0?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.7.2-7c5cf0?style=flat-square)
 ![Windows](https://img.shields.io/badge/Windows-Electron_44-7c5cf0?style=flat-square&logo=electron&logoColor=white)
 ![Android](https://img.shields.io/badge/Android_7+-Capacitor_8-fdcf3f?style=flat-square&logo=android&logoColor=black)
 ![Nuxt](https://img.shields.io/badge/Nuxt_4-Vue_3-00dc82?style=flat-square&logo=nuxt.js&logoColor=white)
@@ -54,7 +54,7 @@ What sets it apart:
 | 🧠 | **Mind Map** (_Mapa Mental_) | Multiple maps; each node is a permanent note. Connections by dragging, multi-note selection and a "Reorganize" (_Reorganizar_) that avoids crossings. |
 | 🔗 | **Links** | Paste an address and the site's title and icon arrive on their own. Categories, search and import of browser bookmarks. |
 | ⏱️ | **Timer** | Stopwatch, countdown timer and Pomodoro, with a filterable history and statistics with charts and period comparison. |
-| 💰 | **Finances** (_Finanças_) | Expenses and income, bills with a payment reminder, recurring entries (rent, subscriptions, salary), realized and projected balance, bank statement import (CSV/OFX), and a dashboard with charts and period comparison. |
+| 💰 | **Finances** (_Finanças_) | Expenses and income, automatic categories, bills with a payment reminder, recurring entries (rent, subscriptions, salary), realized and projected balance, bank statement import (CSV/OFX), optional bank connection (Meu Pluggy, Open Finance), and a dashboard with charts and period comparison. |
 
 Modules can be **enabled, disabled and reordered** (by dragging in the side menu). Disabling only removes the module from the menu: no data is deleted.
 
@@ -72,6 +72,8 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 - **Folders by title** (only in the list; the files don't change): `4notes 1.1.1` and `4notes 1.2.0` show up as **4notes › 1.1.1, 1.2.0**. A folder's **+** creates a note that already starts with the folder's title, and its **clock** (or **Abrir a mais recente** — _Open the newest_ — in its context menu) opens the folder's newest note without having to look for it.
 - **Automatic category by title** (optional, off by default): a new note goes on its own to the category that already has notes starting with the same title.
 - **Versions**: in a note such as `4notes 1.4.1`, discreet buttons open the previous version (**‹ 1.4.0**) and the next one (**1.4.2 ›**), when they exist.
+- **Code blocks like a code editor**: arrows in the margin **fold and unfold** objects, JSON, functions and nested blocks (languages without that information, such as GDScript, fold by indentation; folding only hides lines on screen), and subtle **indentation guides** show each level. The code font is slightly smaller, so long snippets fit better.
+- **Format code**: after pasting code, the toast offers **Formatar** (_Format_), or **Escolher linguagem** (_Choose language_) when the language wasn't recognized. The ✦ button on the block, **Formatar** in full screen and `Shift+Alt+F` do the same. It uses Prettier (loaded only when you format, nothing leaves the device) for JavaScript, TypeScript, JSON, CSS, SCSS, LESS, HTML, Vue, YAML, Markdown and GraphQL, keeping the code's own style (indent size, quotes, semicolons). Code with a syntax error and languages without a safe formatter (Python, GDScript…) are left as they are; `Ctrl+Z` undoes it.
 - **Full screen for blocks**: a text or code block opens in full screen from its card. **Quebrar linhas** (_Wrap lines_, button in the header or `Alt+Z`) fits long lines to the window width instead of scrolling sideways — only on screen: the block's content gets no real line breaks. In code, a wrapped line continues at its own indentation. Off by default for code and on for text (as before); the choice is remembered per workspace.
 - **Export** from the context menu: **TXT** (text only, no formatting) or **PDF** (as it looks on screen, with images and highlighted code).
 - Notes **without a category** ask, when you close the tab, whether you want to keep or delete them; notes in a category close right away, already saved.
@@ -144,6 +146,8 @@ Modules can be **enabled, disabled and reordered** (by dragging in the side menu
 Three areas: **Lançamentos** (_Entries_: register, history, import), **Contas** (_Bills_) and **Painel** (_Dashboard_).
 
 - **Quick entry**: choose **Gasto** (expense) or **Entrada** (income), type the amount and the description and press `Enter`; the date starts as today. Category and notes (_Observações_, collapsible, with the notes editor) are optional, in the same form. The amount accepts `52,30`, `52.30` or `1.234,56`, and is shown in Brazilian reais (`R$ 1.234,56`).
+- **Automatic category**: the app picks, among the categories you already have, the one that fits: first what you did before with a similar description, then a dictionary of merchants and words (`iFood` goes to your food category, whether it is called "Alimentação", "Comida" or "Food"; Uber to transport; Netflix to subscriptions), then the **default category** (_Categoria padrão_, Settings › Modules › Finances). It applies when registering, importing a statement and fetching from the bank, is marked as "automática" and can be changed before saving. It never creates a category.
+- **Bank connection** (optional, **Meu Pluggy**): connect your banks through Open Finance (you authorize in the bank's own app; 4notes never sees your password), add them in Settings › Modules › Finances › Conexões bancárias with your Pluggy Client ID/Secret (kept only on the device, encrypted by the system on Windows) and each bank's Item ID, and pick the accounts. **Buscar no banco** (_Fetch from the bank_) brings new transactions straight into the entries, with the automatic category, no duplicates (each one keeps its transaction id) and **Undo**; it also runs once a day when the app opens. Pending bank transactions wait for the next fetch, a card bill payment is skipped when the card is connected, and matching manual entries are linked instead of duplicated. Setup, costs and limitations: [docs/CONEXAO-BANCARIA.md](docs/CONEXAO-BANCARIA.md) (in Portuguese).
 - **`#` categories**: `Feira #Mercado` in the description picks (or creates) the category and leaves `Feira` as the text; in the notes, `#` inserts a category mention linked by id.
 - **Me lembre de pagar** (_Remind me to pay_): the expense stays **pending** until you confirm the payment, which records the day it was paid. States: pending, paid and overdue. With the app open, bills due today or overdue show a reminder (and, on Windows, a system notification), plus a badge on the module icon.
 - **Recurring entries** (_Repetir_): daily, weekly, monthly or yearly, until you stop it or until a date. Occurrences up to today become real entries with their own id (recurrence + scheduled date, so reopening the app or syncing never duplicates them), date and status, and stay pending until confirmed; later ones are forecasts. Changing the amount, frequency or next date asks whether it applies to **the next one only** or **the next and future ones**; stopping or deleting keeps the payment history. Short months and leap years are handled from the first date (the 31st falls on the last day of shorter months).
@@ -163,7 +167,7 @@ Three areas: **Lançamentos** (_Entries_: register, history, import), **Contas**
 | :-: | --- | --- |
 | ✍️ | **Visual Markdown editor** | Formatting toolbar when you select text, with text color and highlight color palettes (both also inside lists); lists that renumber themselves; clickable checklists; text blocks and code blocks from the toolbar (the block's name switches between text and code and picks the language, with syntax highlighting); language detected when pasting code; pasted images; `Ctrl+D` to edit several occurrences. |
 | 🔁 | **Mentions (`@` and `#`)** | Notes and tasks mention notes, maps, tasks, saved links, Timer records and finance entries with `@`. `#` mentions an app category (or creates one) in any note, task description and finance notes; the mention is linked by id, follows renames and merges, and opens the category with its records. One click opens the item in its module; renaming in the app fixes the mentions. |
-| 🏷️ | **Shared categories** | One list of categories for the whole app. Create a category in any module and reuse it in the others. **Settings › Categories** (_Configurações › Categorias_) is a compact, search-as-you-type list built for hundreds of categories; opening one shows where it is used (each module's records on demand), its `#` mentions, and lets you edit the name, color, icon or photo everywhere at once, use it in another module, merge two categories and delete one, moving its records to another category or leaving them without one. Nothing is lost. |
+| 🏷️ | **Shared categories** | One list of categories for the whole app. Create a category in any module and reuse it in the others. Every category field opens the same **search-first picker**: type to filter (accents don't matter), choose with `↑` `↓` `Enter`, or create one from the typed name without another dialog; the module's categories come first, then the rest of the app's. Category filters (Finances and Timer) accept several categories at once. **Settings › Categories** (_Configurações › Categorias_) is a compact, search-as-you-type list built for hundreds of categories; opening one shows where it is used (each module's records on demand), its `#` mentions, and lets you edit the name, color, icon or photo everywhere at once, use it in another module, merge two categories and delete one, moving its records to another category or leaving them without one. Nothing is lost. |
 | 🧹 | **Clear formatting** | **Limpar formatação** (_Clear formatting_) shows up in the formatting toolbar only when the selection has formatting to remove, and removes it only inside the selection. |
 | 🖼️ | **Image library** | Every uploaded image goes to `attachments/` to be reused in notes, tasks, finance notes and categories, with no duplicate copies. Images left unused by a deleted note are cleaned up safely. |
 | 🗂️ | **Workspaces** | Create as many as you want, each with its own data and settings (a new workspace starts with the default settings). The workspace name appears in the top-left corner. |
@@ -181,6 +185,8 @@ Three areas: **Lançamentos** (_Entries_: register, history, import), **Contas**
 | --- | --- | --- |
 | Interface | **Nuxt 4** (SPA, `ssr: false`) + **Vue 3** | Screens, components, file-based routes and state with `reactive()` (no Pinia). |
 | Editor | **CodeMirror 6** + `@codemirror/language-data` | Markdown editor with live formatting and colors for dozens of languages. |
+| Code formatting | **Prettier 3** (standalone, loaded on demand) | Formats code blocks (JavaScript, TypeScript, JSON, CSS, HTML, Vue, YAML, Markdown, GraphQL), entirely on the device. |
+| Bank connection | **Meu Pluggy** API (optional) | Reads bank transactions through Open Finance; no 4notes server, credentials only on the device. |
 | Desktop | **Electron 44** + **electron-builder** | Native window, file access through IPC and an NSIS installer for Windows. |
 | Mobile | **Capacitor 8** | Android app with the same interface in a WebView and a small native plugin in Java. |
 | Updates | **electron-updater** + GitHub Releases | Windows updates; Android uses the GitHub API and a custom plugin. |
@@ -498,6 +504,8 @@ Each module's shortcuts are also in its tutorial (`F1`). On macOS, `Ctrl` become
 | `Ctrl+F` | Find in the note |
 | `Ctrl+D` | Also select the next occurrence (edits them all together) |
 | `Alt+Z` | Wrap lines (block in full screen) |
+| `Shift+Alt+F` | Format the code block |
+| `Ctrl+Shift+[` / `Ctrl+Shift+]` | Fold / unfold (in code) |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | Bold / italic / underline |
 | `Ctrl+Shift+X` / `Ctrl+Shift+H` | Strikethrough / highlight |
 | `Ctrl+E` | Inline code |
@@ -547,7 +555,7 @@ npm test             # unit tests (Vitest)
 npm run typecheck    # strict TypeScript in the interface and in Electron
 ```
 
-The tests live in [`tests/`](tests/) (33 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order and folders on top), line wrapping in full screen, note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones), Finances (amounts, history, dashboard numbers and comparison; recurring entries with short months and leap years, no duplicates, next-only and future changes, bills and payment confirmation, realized and projected balance, CSV/OFX statement parsing, category suggestions and duplicate detection), `#` category mentions (renames and merges), the cleanup of images left by a deleted note, shared categories (the 1.6 migration, renaming, merging and deleting across all modules, files from an older version), temporary and fixed tabs, and updates.
+The tests live in [`tests/`](tests/) (37 files) and cover the pure rules, without Vue and without disk: dates and recurrence, titles and file names, formatting and hidden Markdown, lists, code detection, text and code blocks and `Ctrl+D`, categories and folders by title (with the newest-first order and folders on top), line wrapping in full screen, note versions, export, mentions across modules, the map (graph and layout), links and browser bookmarks (Chromium, Firefox/Zen, HTML), the image library, modules, synced settings (each workspace with its own), the Android layer over an in-memory disk, screen sizes, the full-width rule of the module screens, Timer (in several time zones), Finances (amounts, history, dashboard numbers and comparison; recurring entries with short months and leap years, no duplicates, next-only and future changes, bills and payment confirmation, realized and projected balance, CSV/OFX statement parsing, category suggestions and duplicate detection; the automatic category and its merchant dictionary; the bank connection against a fake Pluggy server: authentication, cursor pages, expired keys, the import plan, no duplicates, Undo), the category picker search and multi-category filters, code folding, indentation guides and code formatting, `#` category mentions (renames and merges), the cleanup of images left by a deleted note, shared categories (the 1.6 migration, renaming, merging and deleting across all modules, files from an older version), temporary and fixed tabs, and updates.
 
 ---
 
@@ -570,6 +578,7 @@ The tests live in [`tests/`](tests/) (33 files) and cover the pure rules, withou
 ├── tests/                  Unit tests (Vitest)
 ├── build/                  Icons and the installer script (installer.nsh)
 ├── docs/ARQUITETURA.md     Detailed technical documentation (in Portuguese)
+├── docs/CONEXAO-BANCARIA.md  Bank connection (Meu Pluggy): setup, costs, data and limits (in Portuguese)
 ├── capacitor.config.ts     Android app configuration
 ├── electron-builder.yml    Installer configuration
 └── nuxt.config.ts          Nuxt configuration (SPA)

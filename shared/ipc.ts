@@ -14,6 +14,7 @@
 
 import type { BookmarkFolder, BrowserSource } from './bookmarks'
 import type { UpdateCheck, UpdateInstallResult } from './updates'
+import type { BankAccount, BankItem, BankTransaction, PluggyCredentials, TransactionQuery } from './pluggy'
 
 export type { BookmarkFolder, BookmarkLink, BookmarkNode, BrowserSource } from './bookmarks'
 export type { UpdateCheck, UpdateInfo, UpdateInstallResult } from './updates'
@@ -207,6 +208,15 @@ export interface TitleBarColors {
   symbolColor: string
 }
 
+/** Conexão com bancos (1.7.2, shared/pluggy.ts): o que a interface sabe das credenciais (o segredo nunca volta para ela). */
+export interface BankStatus {
+  /** Client ID e Client Secret guardados neste aparelho. */
+  configured: boolean
+  clientId: string | null
+  /** O segredo está criptografado pelo sistema (Windows/macOS); false = só no armazenamento do app (Android). */
+  secure: boolean
+}
+
 export interface FourNotesApi {
   bootstrap: BootstrapInfo
   app: {
@@ -303,6 +313,20 @@ export interface FourNotesApi {
     runTextAction(action: TextMenuAction, word?: string): Promise<void>
   }
   /**
+   * Conexão com bancos pelo Meu Pluggy (1.7.2, shared/pluggy.ts). O Client Secret fica só
+   * no aparelho e os pedidos à API saem daqui (no computador, pelo processo principal).
+   */
+  bank?: {
+    status(): Promise<BankStatus>
+    /** Guarda o Client ID/Secret depois de testar na Pluggy (erro = recusado; nada é guardado). */
+    configure(credentials: PluggyCredentials): Promise<BankStatus>
+    /** Apaga as credenciais deste aparelho. */
+    forget(): Promise<BankStatus>
+    item(id: string): Promise<BankItem>
+    accounts(itemId: string): Promise<BankAccount[]>
+    transactions(query: TransactionQuery): Promise<BankTransaction[]>
+  }
+  /**
    * Atualizações pelo GitHub Releases (shared/updates.ts). Ausente = esta plataforma não
    * se atualiza sozinha.
    */
@@ -360,6 +384,12 @@ export const IPC = {
   openExternal: 'shell:open-external',
   textMenu: 'menu:text',
   textMenuAction: 'menu:text-action',
+  bankStatus: 'bank:status',
+  bankConfigure: 'bank:configure',
+  bankForget: 'bank:forget',
+  bankItem: 'bank:item',
+  bankAccounts: 'bank:accounts',
+  bankTransactions: 'bank:transactions',
   updatesCheck: 'updates:check',
   updatesInstall: 'updates:install',
   updatesProgress: 'updates:progress',

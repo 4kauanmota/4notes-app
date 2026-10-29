@@ -23,6 +23,12 @@ const notify = computed({
   set: (value: boolean) => finance.updateSettings({ notify: value }),
 })
 
+/** Categoria dos gastos que a categoria automática não reconhece (1.7.2). */
+const defaultCategory = computed({
+  get: () => (finance.state.settings.defaultCategory && finance.categoryById.value.has(finance.state.settings.defaultCategory) ? finance.state.settings.defaultCategory : null),
+  set: (value: string | null) => finance.updateSettings({ defaultCategory: value }),
+})
+
 const WEEK_STARTS: { value: '0' | '1'; label: string }[] = [
   { value: '1', label: 'Segunda' },
   { value: '0', label: 'Domingo' },
@@ -30,6 +36,12 @@ const WEEK_STARTS: { value: '0' | '1'; label: string }[] = [
 </script>
 
 <template>
+  <SettingRow
+    label="Categoria padrão"
+    help="Vai para os gastos que a categoria automática não reconhece (ao registrar, importar extrato e buscar no banco). Você pode trocar antes de salvar."
+  >
+    <CategorySelect v-model="defaultCategory" module="finance" size="sm" none-label="Nenhuma" label="Categoria padrão" data-setting="default-category" />
+  </SettingRow>
   <SettingRow
     v-if="systemNotices"
     label="Aviso do sistema das contas"
@@ -40,4 +52,5 @@ const WEEK_STARTS: { value: '0' | '1'; label: string }[] = [
   <SettingRow label="A semana começa no" help="Usado no período por semana, no gráfico por semana e na comparação com a semana anterior.">
     <UiSegmented v-model="weekStart" size="sm" :options="WEEK_STARTS" aria-label="A semana começa no" />
   </SettingRow>
+  <BankSettings />
 </template>

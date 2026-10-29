@@ -192,12 +192,14 @@ export interface Aggregate {
 }
 
 /** Filtro de categoria: undefined = todas; null = sem categoria. */
-export type CategoryFilter = string | null | undefined
+/** undefined (ou lista vazia) = todas; null = sem categoria; lista = qualquer uma delas (1.7.2, filtro de várias). */
+export type CategoryFilter = string | null | undefined | readonly (string | null)[]
 
 export function matchesCategory(session: TimerSession, filter: CategoryFilter, known?: ReadonlySet<string>): boolean {
   if (filter === undefined) return true
   // Categoria que não existe mais conta como "sem categoria"
   const category = session.categoryId && (!known || known.has(session.categoryId)) ? session.categoryId : null
+  if (Array.isArray(filter)) return !filter.length || filter.includes(category)
   return category === filter
 }
 

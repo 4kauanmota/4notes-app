@@ -96,6 +96,14 @@ const api: FourNotesApi = {
     },
     runTextAction: (action, word) => ipcRenderer.invoke(IPC.textMenuAction, action, word),
   },
+  bank: {
+    status: () => ipcRenderer.invoke(IPC.bankStatus),
+    configure: (credentials) => ipcRenderer.invoke(IPC.bankConfigure, credentials),
+    forget: () => ipcRenderer.invoke(IPC.bankForget),
+    item: (id) => ipcRenderer.invoke(IPC.bankItem, id),
+    accounts: (itemId) => ipcRenderer.invoke(IPC.bankAccounts, itemId),
+    transactions: (query) => ipcRenderer.invoke(IPC.bankTransactions, query),
+  },
   updates: {
     check: () => ipcRenderer.invoke(IPC.updatesCheck),
     install: () => ipcRenderer.invoke(IPC.updatesInstall),

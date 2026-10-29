@@ -98,12 +98,12 @@ describe('gastos', () => {
 
   it('abrir a menção de um gasto: vai para o mês dele e tira os filtros que o escondem', () => {
     finance.state.search = 'outra coisa'
-    finance.state.category = 'mercado'
+    finance.state.categoryFilter = ['mercado']
     const cafe = finance.state.expenses.find((item) => item.description === 'Café')!
     finance.updateExpense(cafe.id, { date: '2026-08-15' })
     expect(finance.revealExpense(cafe.id)).toBe(true)
     expect(finance.state.search).toBe('')
-    expect(finance.state.category).toBeUndefined()
+    expect(finance.state.categoryFilter).toEqual([])
     expect(finance.state.period).toMatchObject({ kind: 'month', from: '2026-08-01', to: '2026-08-31' })
     expect(finance.state.reveal?.id).toBe(cafe.id)
   })

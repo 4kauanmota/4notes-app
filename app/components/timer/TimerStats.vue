@@ -41,7 +41,7 @@ const nowRef = useNow()
 
 const weekStart = computed(() => timer.state.settings.weekStart)
 const period = ref<Period>(periodOf('week', today.value, timer.state.settings.weekStart))
-const categoryChoice = ref('all')
+const categoryChoice = ref<(string | null)[]>([])
 const view = ref<'summary' | 'detailed'>('summary')
 const overlay = ref(false)
 const showTable = ref(false)
@@ -54,9 +54,7 @@ const VIEWS = [
 /** "Agora" para os cálculos (o relógio do Timer quando está contando; senão, a cada 30 s). */
 const now = computed(() => Math.max(nowRef.value, timer.state.now))
 
-const categoryFilter = computed<CategoryFilter>(() =>
-  categoryChoice.value === 'all' ? undefined : categoryChoice.value === 'none' ? null : categoryChoice.value,
-)
+const categoryFilter = computed<CategoryFilter>(() => categoryChoice.value)
 const options = computed(() => ({ category: categoryFilter.value, knownCategories: timer.knownCategoryIds.value }))
 const sessions = computed(() => timer.state.sessions)
 
@@ -194,11 +192,7 @@ defineExpose({ shiftPeriod: (delta: number) => navRef.value?.shift(delta) })
     <div class="filters">
       <PeriodNav ref="navRef" v-model="period" :week-start="weekStart" :today="today" />
       <div class="filters-side">
-        <select v-model="categoryChoice" class="select sm" aria-label="Categoria">
-          <option value="all">Todas as categorias</option>
-          <option value="none">Sem categoria</option>
-          <option v-for="category in timer.state.categories" :key="category.id" :value="category.id">{{ category.name }}</option>
-        </select>
+        <CategorySelect v-model="categoryChoice" module="timer" multiple size="sm" label="Filtrar por categoria" data-filter="category" />
         <UiSegmented v-model="view" :options="VIEWS" size="sm" aria-label="Visão" />
       </div>
     </div>

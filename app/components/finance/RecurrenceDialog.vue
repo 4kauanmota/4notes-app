@@ -40,6 +40,8 @@ const pastAsDone = ref(true)
 const error = ref<string | null>(null)
 const showAll = ref(false)
 const descriptionInput = ref<{ focus: () => void }>()
+/** Criando: a categoria escolhida à mão (ou com "#"); senão, a automática (1.7.2). */
+const manualCategory = ref(false)
 
 const income = computed(() => kind.value === 'income')
 const next = computed(() => (recurrence.value ? finance.nextOccurrence(recurrence.value) : null))
@@ -64,6 +66,7 @@ watch(
       description.value = ''
       amountText.value = ''
       categoryId.value = null
+      manualCategory.value = false
       frequency.value = 'monthly'
       date.value = today.value
       endMode.value = 'never'
@@ -92,6 +95,19 @@ watch(
 
 const parsed = computed(() => parseAmount(amountText.value))
 
+/** Criando uma recorrência: a categoria automática pela descrição (histórico, dicionário, padrão). */
+const suggestion = computed(() => (creating.value ? finance.suggestCategory({ description: description.value.replace(/(^|\s)#\S*/g, ' '), kind: kind.value }) : null))
+watch(suggestion, (value) => {
+  if (creating.value && !manualCategory.value) categoryId.value = value?.id ?? null
+})
+const categoryTag = computed(() =>
+  !creating.value || manualCategory.value || !suggestion.value || categoryId.value !== suggestion.value.id ? null : suggestion.value.source === 'default' ? 'padrão' : 'automática',
+)
+function chooseCategory(id: string | null) {
+  manualCategory.value = true
+  categoryId.value = id
+}
+
 /** Começando no passado: quantas já passaram (podem entrar como pagas). */
 const pastCount = computed(() => {
   if (!creating.value || !date.value || date.value >= today.value) return 0
@@ -116,8 +132,9 @@ function validate(): boolean {
   const hashed = finance.takeHashCategory(description.value)
   if (hashed.categoryId) {
     description.value = hashed.text
-    categoryId.value = hashed.categoryId
+    chooseCategory(hashed.categoryId)
   }
+  categoryId.value = finance.ensureCategory(categoryId.value)
   if (parsed.value === null) error.value = 'Valor inválido. Exemplos: 52,30 ou 1.234,56.'
   else if (!description.value.trim()) error.value = income.value ? 'Dê um nome (ex.: Salário).' : 'Dê um nome (ex.: Aluguel, Netflix).'
   else if (!/^\d{4}-\d{2}-\d{2}$/.test(date.value)) error.value = creating.value ? 'Escolha a data da primeira.' : 'Escolha a data da próxima.'
@@ -229,7 +246,7 @@ function openEntry(id: string) {
         :placeholder="income ? 'Ex.: Salário  (# categoria)' : 'Ex.: Aluguel, Netflix, Academia  (# categoria)'"
         label="Descrição"
         field="recurrence-description"
-        @category="(id) => (categoryId = id)"
+        @category="chooseCategory"
         @input="error = null"
       />
 
@@ -261,7 +278,7 @@ function openEntry(id: string) {
       <p v-if="endMode === 'date'" class="hint">Nenhuma ocorrência depois dessa data.</p>
 
       <span class="field-label gap">Categoria</span>
-      <FinanceCategoryPicker v-model="categoryId" compact />
+      <FinanceCategoryPicker v-model="categoryId" compact :tag="categoryTag" @picked="chooseCategory" />
 
       <label v-if="!income" class="option gap">
         <input v-model="remind" type="checkbox" data-field="recurrence-remind" />

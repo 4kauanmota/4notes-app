@@ -8,8 +8,8 @@
  *   sozinhos; dá para trocar em "Colunas".
  * - Gasto ou entrada vem do sinal do valor, conforme o tipo do extrato (conta: negativo
  *   = gasto; fatura do cartão: positivo = gasto), e dá para trocar em cada linha.
- * - Categorias sugeridas (pela descrição de lançamentos parecidos ou pelo nome da
- *   categoria no texto) aparecem marcadas; "#" na descrição escolhe outra.
+ * - Categoria automática (1.7.2, lib/finance/categorize.ts): pelo que você já fez, por um
+ *   dicionário de estabelecimentos ou a categoria padrão; aparece marcada e dá para trocar.
  * - Possíveis duplicados (mesmo id do banco, ou mesmo valor em data próxima) ficam
  *   desmarcados para você decidir; uma conta pendente que aparece no extrato é
  *   confirmada como paga em vez de virar outro lançamento.
@@ -20,7 +20,6 @@ import { formatDateBR, isISODate, type ISODate } from '~/lib/dates'
 import { formatAmountInput, formatMoney, parseAmount } from '~/lib/finance/format'
 import { MAX_DESCRIPTION, type EntryKind } from '~/lib/finance/model'
 import {
-  categorySuggester,
   csvTable,
   DATE_ORDERS,
   decodeStatement,
@@ -55,8 +54,8 @@ interface PreviewRow {
   amountText: string
   kind: EntryKind
   categoryId: string | null
-  /** A categoria veio da sugestão (e ainda não foi trocada). */
-  suggested: boolean
+  /** A categoria veio da categoria automática (e ainda não foi trocada): "automática" ou "padrão". */
+  suggested: 'auto' | 'default' | null
   externalId: string | null
   duplicate: { id: string; label: string; certain: boolean; pending: boolean } | null
   /** Confirmar o pagamento da conta pendente em vez de criar outro lançamento. */
@@ -138,13 +137,13 @@ function parse(): StatementRow[] {
 
 /** Monta a prévia: gasto/entrada pelo sinal, categoria sugerida e duplicados. */
 function build(parsed: StatementRow[]) {
-  const suggest = categorySuggester(finance.state.expenses, finance.state.categories)
   const findDuplicate = duplicateFinder(finance.state.expenses)
   rows.value = parsed.map((row, index) => {
     const amount = row.amount
     const kind = amount !== null ? kindOf(amount, sign.value) : 'expense'
     const absolute = amount !== null ? Math.abs(amount) : null
-    const categoryId = row.description ? suggest(row.description, kind) : null
+    const suggestion = finance.suggestCategory({ description: row.description, kind })
+    const categoryId = suggestion?.id ?? null
     const match = row.date && absolute ? findDuplicate({ date: row.date, amount: absolute, kind, externalId: row.externalId, description: row.description }) : null
     const pending = !!match && match.entry.status === 'pending'
     const valid = !!row.date && !!absolute
@@ -157,7 +156,7 @@ function build(parsed: StatementRow[]) {
       amountText: absolute ? formatAmountInput(absolute) : '',
       kind,
       categoryId,
-      suggested: !!categoryId,
+      suggested: suggestion ? (suggestion.source === 'default' ? 'default' : 'auto') : null,
       externalId: row.externalId,
       duplicate: match
         ? {
@@ -235,9 +234,9 @@ function toggleAll(value: boolean) {
   for (const row of rows.value) row.include = value && !rowError(row)
 }
 
-function setCategory(row: PreviewRow, value: string) {
+function setCategory(row: PreviewRow, value: string | null) {
   row.categoryId = value || null
-  row.suggested = false
+  row.suggested = null
 }
 
 function flipKind(row: PreviewRow) {
@@ -251,7 +250,8 @@ function submit() {
     date: row.date as ISODate,
     description: row.description,
     amount: amountOf(row)!,
-    categoryId: row.categoryId,
+    // Uma categoria do app sugerida que ainda não está nas Finanças entra nelas
+    categoryId: finance.ensureCategory(row.categoryId),
     externalId: row.externalId,
     confirms: row.confirms && row.duplicate?.pending ? row.duplicate.id : null,
   }))
@@ -399,11 +399,15 @@ function submit() {
               <input v-model="row.amountText" class="input amount" inputmode="decimal" aria-label="Valor" />
             </div>
             <div class="cell-cat">
-              <select class="select sm" :value="row.categoryId ?? ''" aria-label="Categoria" @change="setCategory(row, ($event.target as HTMLSelectElement).value)">
-                <option value="">Sem categoria</option>
-                <option v-for="category in finance.state.categories" :key="category.id" :value="category.id">{{ category.name }}</option>
-              </select>
-              <span v-if="row.suggested && row.categoryId" class="flag suggested">sugerida</span>
+              <CategorySelect
+                :model-value="row.categoryId"
+                module="finance"
+                size="sm"
+                class="row-category"
+                label="Categoria"
+                :tag="row.suggested && row.categoryId ? (row.suggested === 'default' ? 'padrão' : 'automática') : null"
+                @update:model-value="(value) => setCategory(row, value as string | null)"
+              />
             </div>
           </div>
           <button v-if="rows.length > limit" type="button" class="btn btn-sm more" @click="limit += PAGE">Mostrar mais ({{ rows.length - limit }})</button>
@@ -651,6 +655,9 @@ h2 {
   align-items: center;
   gap: 5px;
   cursor: pointer;
+}
+.row-category {
+  width: 100%;
 }
 .flag.suggested {
   align-self: flex-start;

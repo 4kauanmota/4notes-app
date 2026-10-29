@@ -83,3 +83,8 @@ html[data-touch] .select {
 html[data-touch] .kbd-hint {
   display: none;
 }
+
+/* Blocos de código no toque (1.7.2): as setas de recolher ficam sempre à vista (não há "passar o mouse") */
+html[data-touch] .cm-fold-marker.open {
+  opacity: 0.6;
+}

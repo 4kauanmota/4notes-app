@@ -9,10 +9,10 @@
 import { computed, nextTick, onActivated, onDeactivated, onUnmounted, reactive, ref, watch } from 'vue'
 import LinkQuickAdd from '~/components/links/LinkQuickAdd.vue'
 import LinksSidebar from '~/components/links/LinksSidebar.vue'
-import { separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
+import { pickCategory } from '~/composables/useCategoryPicker'
+import { separator, showContextMenu } from '~/composables/useContextMenu'
 import { useLayoutSize } from '~/composables/useLayoutSize'
 import { useShortcuts } from '~/composables/useShortcuts'
-import { paletteVar } from '~/lib/colors'
 import { droppedText, isExternalLinkDrag } from '~/lib/links/drag'
 import type { LinkSort, SavedLink } from '~/lib/links/model'
 import { canReveal, modKeyLabel } from '~/lib/platform'
@@ -178,24 +178,12 @@ async function linkMenu(link: SavedLink, event: MouseEvent) {
   // Pelo botão "⋯": o menu abre embaixo dele; pelo clique direito: onde está o mouse
   const anchor = event.type === 'click' ? (event.currentTarget as Element | null) : null
   const current = links.folderOf(link)
-  const moveTo: MenuItemSpec[] = [
-    { id: 'move:', label: 'Sem categoria', type: 'radio', checked: !current },
-    ...links.state.folders.map((item) => ({
-      id: `move:${item.id}`,
-      label: item.name,
-      type: 'radio' as const,
-      checked: current?.id === item.id,
-      swatch: paletteVar(item.color),
-    })),
-    separator,
-    { id: 'move-new', label: 'Nova categoria…' },
-  ]
   const choice = await showContextMenu(
     [
       { id: 'open', label: 'Abrir no navegador', hint: 'Enter' },
       { id: 'copy', label: 'Copiar endereço', hint: `${mod}+C` },
       { id: 'edit', label: 'Editar…', hint: 'F2' },
-      { label: 'Mover para', submenu: moveTo },
+      { id: 'move', label: 'Categoria…', hint: current?.name },
       { id: 'mentions', label: 'Ver menções' },
       { id: 'refresh', label: 'Atualizar título e ícone', enabled: !links.state.fetching.has(link.id) },
       separator,
@@ -210,8 +198,11 @@ async function linkMenu(link: SavedLink, event: MouseEvent) {
   else if (choice === 'mentions') showMentionsOf(savedLinkSubject(link))
   else if (choice === 'refresh') links.refreshLink(link.id)
   else if (choice === 'delete') links.deleteLink(link.id)
-  else if (choice === 'move-new') openFolderDialog(null, link.id)
-  else if (choice.startsWith('move:')) links.moveLink(link.id, choice.slice(5) || null)
+  else if (choice === 'move') {
+    // O seletor de categorias (1.7.2), perto de onde o menu estava
+    const picked = await pickCategory({ module: 'links', selected: [current?.id ?? null], title: 'Categoria do link' })
+    if (picked) links.moveLink(link.id, picked[0] ?? null)
+  }
 }
 
 // ── Diálogos ────────────────────────────────────────────────────────────────

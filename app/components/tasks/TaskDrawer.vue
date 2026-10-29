@@ -29,7 +29,6 @@ const mentionButton = ref<HTMLButtonElement>()
 const picker = ref<MentionPickerControls>()
 /** Lista aberta pelo botão "Mencionar". */
 const pickerFromButton = ref(false)
-const categoryDialogOpen = ref(false)
 const shake = ref(false)
 
 const DEFAULT_RULE: RecurrenceDraft = { interval: 1, unit: 'week', basis: 'schedule' }
@@ -309,24 +308,7 @@ defineExpose({
 
         <div class="field">
           <span class="field-label">Categoria</span>
-          <div class="cat-chips">
-            <button type="button" class="cat-chip" :class="{ active: !categoryId }" @click="categoryId = null">
-              <CategoryDot :color="null" :size="8" /> Sem categoria
-            </button>
-            <button
-              v-for="category in tasks.state.categories"
-              :key="category.id"
-              type="button"
-              class="cat-chip"
-              :class="{ active: categoryId === category.id }"
-              :style="{ '--c': `var(--cat-${category.color})` }"
-              @click="categoryId = category.id"
-            >
-              <SharedCategoryIcon :id="category.id" :color="category.color" :name="category.name" :size="16" /> {{ category.name }}
-            </button>
-            <OtherCategoryChips module="tasks" @pick="(id) => (categoryId = tasks.attachCategory(id)?.id ?? categoryId)" />
-            <button type="button" class="cat-chip add" @click="categoryDialogOpen = true"><AppIcon name="plus" :size="12" /> Nova</button>
-          </div>
+          <CategorySelect v-model="categoryId" module="tasks" class="task-category" label="Categoria da tarefa" />
         </div>
 
         <section class="advanced" :class="{ open: advancedOpen }">
@@ -391,7 +373,6 @@ defineExpose({
       </footer>
     </aside>
   </Transition>
-  <CategoryDialog :open="categoryDialogOpen" @close="categoryDialogOpen = false" @saved="(category) => (categoryId = category.id)" />
   <MentionPicker
     v-if="open && titleQuery !== null && titleInput"
     ref="picker"
@@ -514,10 +495,9 @@ defineExpose({
   min-height: 96px;
   overflow-y: visible;
 }
-.cat-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.task-category {
+  align-self: flex-start;
+  min-width: 200px;
 }
 .cat-chip {
   display: inline-flex;
@@ -536,11 +516,6 @@ defineExpose({
 }
 .cat-chip:hover {
   border-color: var(--border-strong);
-  color: var(--text);
-}
-.cat-chip.active {
-  border-color: var(--c, var(--primary));
-  background: color-mix(in srgb, var(--c, var(--primary)) 14%, var(--surface));
   color: var(--text);
 }
 .cat-chip.add {

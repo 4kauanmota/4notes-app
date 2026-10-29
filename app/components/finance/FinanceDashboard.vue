@@ -51,8 +51,8 @@ const period = computed<Period>({
   get: () => finance.state.dashboardPeriod ?? periodOf('month', today.value, weekStart.value),
   set: (value) => (finance.state.dashboardPeriod = value),
 })
-const categoryChoice = ref('all')
-const categoryFilter = computed(() => (categoryChoice.value === 'all' ? undefined : categoryChoice.value === 'none' ? null : categoryChoice.value))
+const categoryChoice = ref<(string | null)[]>([])
+const categoryFilter = computed(() => categoryChoice.value)
 
 /** Os gastos pagos (no dia do pagamento) com o filtro de categoria (o período é aplicado em cada conta). */
 const paid = computed(() => paidExpenses(finance.state.expenses))
@@ -206,11 +206,7 @@ defineExpose({ shiftPeriod: (delta: number) => navRef.value?.shift(delta) })
   <div class="dashboard">
     <div class="filters">
       <PeriodNav ref="navRef" v-model="period" :week-start="weekStart" :today="today" />
-      <select v-model="categoryChoice" class="select sm" aria-label="Categoria" data-filter="dashboard-category">
-        <option value="all">Todas as categorias</option>
-        <option value="none">Sem categoria</option>
-        <option v-for="category in finance.state.categories" :key="category.id" :value="category.id">{{ category.name }}</option>
-      </select>
+      <CategorySelect v-model="categoryChoice" module="finance" multiple size="sm" label="Filtrar por categoria" data-filter="dashboard-category" />
     </div>
 
     <div v-if="!hasAnything" class="dash-empty">

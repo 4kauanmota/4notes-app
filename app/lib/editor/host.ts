@@ -94,6 +94,8 @@ export interface EditorHost {
   chooseLanguage?(current: string): Promise<string | null>
   /** Aviso rápido; `undo` mostra o botão "Desfazer". */
   notify(message: string, undo?: () => void): void
+  /** Aviso com uma ação (ex.: "Formatar" depois de colar código, 1.7.2). */
+  notifyAction?(message: string, action: { label: string; run: () => void }): void
   /** Menções a itens dos módulos (@) e a categorias (#). Sem isso, links para notas aparecem como links comuns. */
   mentions?: MentionHost
   /** A primeira linha de uma nota vazia já começa como título (# ). Lido a cada nota vazia (pode mudar). */

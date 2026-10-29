@@ -12,8 +12,10 @@ import { errorCode, errorMessage, workspaceNameProblem, type BootstrapInfo, type
 import { choiceDialog, confirmDialog, promptDialog } from '~/composables/useDialog'
 import { applyWorkspaceTheme } from '~/composables/useTheme'
 import { notifyError, showToast } from '~/composables/useToasts'
+import { syncToday } from '~/composables/useToday'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 import type { ModuleId } from '~/lib/modules'
+import { useBankStore } from './bank'
 import { useCategoriesStore } from './categories'
 import { useFinanceStore } from './finance'
 import { useLinksStore } from './links'
@@ -83,6 +85,7 @@ async function releaseImages(paths: string[]): Promise<void> {
 let imagesWatched = false
 
 async function loadModules(): Promise<void> {
+  syncToday()
   installMentionTracking()
   if (!imagesWatched) {
     imagesWatched = true
@@ -98,6 +101,8 @@ async function loadModules(): Promise<void> {
   // Depois dos módulos: as categorias compartilhadas são conciliadas com as listas deles
   // (na primeira vez, é a passagem da 1.6: ver stores/categories.ts)
   await categories.load()
+  // Bancos conectados (1.7.2): a busca automática do dia, em segundo plano
+  useBankStore().scheduleAutoSync()
 }
 
 /** Guarda o último módulo aberto (só depois de carregar o workspace). */

@@ -73,11 +73,12 @@ export interface Expense {
   updatedAt: string
 }
 
-/** Um extrato importado (o arquivo em si não é guardado). */
+/** Um extrato importado (o arquivo em si não é guardado) ou uma busca no banco (1.7.2: "bank"). */
 export interface ImportBatch {
   id: string
+  /** Nome do arquivo, ou do banco. */
   file: string
-  format: 'csv' | 'ofx'
+  format: 'csv' | 'ofx' | 'bank'
   importedAt: string
   count: number
 }
@@ -191,7 +192,7 @@ function normalizeImport(raw: unknown, now: string): ImportBatch | null {
   return {
     id: batchId,
     file: str(raw.file).slice(0, 255),
-    format: raw.format === 'ofx' ? 'ofx' : 'csv',
+    format: raw.format === 'ofx' || raw.format === 'bank' ? raw.format : 'csv',
     importedAt: str(raw.importedAt, now),
     count: typeof raw.count === 'number' && raw.count >= 0 ? Math.round(raw.count) : 0,
   }
@@ -312,7 +313,16 @@ export const foldText = (text: string) =>
     .toLocaleLowerCase('pt-BR')
 
 /** Filtro de categoria: undefined = todas; null = sem categoria; texto = essa categoria. */
-export type ExpenseCategoryFilter = string | null | undefined
+/** undefined (ou lista vazia) = todas; null = sem categoria; lista = qualquer uma delas (1.7.2, filtro de várias). */
+export type ExpenseCategoryFilter = string | null | undefined | readonly (string | null)[]
+
+/** O lançamento passa no filtro de categoria? */
+export function matchesExpenseCategory(expense: Expense, filter: ExpenseCategoryFilter, known?: ReadonlySet<string>): boolean {
+  if (filter === undefined) return true
+  const category = effectiveCategory(expense, known)
+  if (Array.isArray(filter)) return !filter.length || filter.includes(category)
+  return category === filter
+}
 
 export interface ExpenseFilter {
   /** Período (datas do calendário, inclusive); null = todos. */
@@ -340,7 +350,7 @@ export function filterExpenses(expenses: readonly Expense[], filter: ExpenseFilt
     if (filter.from && expense.date < filter.from) return false
     if (filter.to && expense.date > filter.to) return false
     if (filter.kind && expense.kind !== filter.kind) return false
-    if (filter.category !== undefined && effectiveCategory(expense, filter.knownCategories) !== filter.category) return false
+    if (!matchesExpenseCategory(expense, filter.category, filter.knownCategories)) return false
     if (words.length) {
       const haystack = foldText(`${expense.description} ${expense.notes}`)
       if (!words.every((word) => haystack.includes(word))) return false

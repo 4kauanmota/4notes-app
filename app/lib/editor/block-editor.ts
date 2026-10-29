@@ -13,6 +13,7 @@
  *   (desfazer, a tela cheia, o arquivo mudado por fora) voltam para cá.
  * - ↑/← no começo e ↓/→ no fim saem do bloco para a nota; Esc também (para depois do
  *   bloco). Backspace num bloco vazio remove o bloco. Ctrl+F abre a busca da nota.
+ * - Código (1.7.2): setas para recolher e expandir e guias de indentação (code-structure.ts).
  */
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
@@ -20,6 +21,7 @@ import { bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/
 import { highlightSelectionMatches } from '@codemirror/search'
 import { Annotation, Compartment, EditorSelection, EditorState, Prec, type Extension, type Transaction } from '@codemirror/state'
 import { drawSelection, EditorView, keymap, type Command } from '@codemirror/view'
+import { codeFoldingSupport, indentGuides } from './code-structure'
 import { minimalChange } from './diff'
 import { findLanguage, isTextBlockInfo } from './languages'
 import { plainMultipleSelections } from './multi-select'
@@ -38,6 +40,8 @@ export interface BlockEditorHost {
   /** Backspace no começo de um bloco vazio. */
   removeEmpty(): void
   openSearch(): boolean
+  /** Shift+Alt+F: formatar o código (1.7.2). */
+  format?(): boolean
 }
 
 /** Mudança que veio da nota (não volta para ela). */
@@ -134,6 +138,7 @@ export class BlockEditor {
         { key: 'Mod-y', run: () => this.host.redo(), preventDefault: true },
         { key: 'Mod-Shift-z', run: () => this.host.redo(), preventDefault: true },
         { key: 'Mod-f', run: () => this.host.openSearch(), preventDefault: true },
+        { key: 'Shift-Alt-f', run: () => this.host.format?.() ?? false, preventDefault: true },
       ]),
     )
     const sync = EditorView.updateListener.of((update) => {
@@ -168,6 +173,9 @@ export class BlockEditor {
       keymap.of([...closeBracketsKeymap, ...defaultKeymap, indentWithTab]),
       this.language.of([]),
       syntaxHighlighting(codeHighlight),
+      // 1.7.2: setas para recolher/expandir e guias de indentação
+      codeFoldingSupport(),
+      indentGuides(),
       EditorView.contentAttributes.of({ 'aria-label': 'Código', spellcheck: 'false' }),
     ]
   }

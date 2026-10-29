@@ -6,22 +6,17 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { displayHost } from '~/lib/links/model'
-import { useCategoriesStore } from '~/stores/categories'
 import { useLinksStore } from '~/stores/links'
 import { savedLinkSubject, showMentionsOf } from '~/stores/mentions'
 
 const props = defineProps<{ open: boolean; linkId: string | null }>()
 const emit = defineEmits<{ close: [] }>()
 const links = useLinksStore()
-const shared = useCategoriesStore()
-
-/** Categorias do app que ainda não estão nos Links (escolher uma a coloca aqui). */
-const others = computed(() => shared.availableFor('links'))
 
 const title = ref('')
 const url = ref('')
-/** '' = sem categoria. */
-const folderId = ref('')
+/** null = sem categoria (o seletor já coloca nos Links uma categoria de fora). */
+const folderId = ref<string | null>(null)
 const error = ref<string | null>(null)
 const titleInput = ref<HTMLInputElement>()
 /** Último título vindo do link (para saber se você mexeu no campo). */
@@ -37,7 +32,7 @@ watch(
     if (!open || !link.value) return
     title.value = syncedTitle = link.value.title
     url.value = link.value.url
-    folderId.value = links.folderOf(link.value)?.id ?? ''
+    folderId.value = links.folderOf(link.value)?.id ?? null
     error.value = null
     await nextTick()
     titleInput.value?.focus()
@@ -114,14 +109,8 @@ function remove() {
       <input id="link-edit-url" v-model="url" class="input mono" spellcheck="false" autocomplete="off" @input="error = null" />
       <Transition name="fade"><p v-if="error" class="error">{{ error }}</p></Transition>
 
-      <label class="field-label gap" for="link-edit-folder">Categoria</label>
-      <select id="link-edit-folder" v-model="folderId" class="select">
-        <option value="">Sem categoria</option>
-        <option v-for="folder in links.state.folders" :key="folder.id" :value="folder.id">{{ folder.name }}</option>
-        <optgroup v-if="others.length" label="Outras categorias do app">
-          <option v-for="category in others" :key="category.id" :value="category.id">{{ category.name }}</option>
-        </optgroup>
-      </select>
+      <span class="field-label gap">Categoria</span>
+      <CategorySelect v-model="folderId" module="links" class="link-category" label="Categoria do link" />
 
       <div class="actions">
         <button type="button" class="btn btn-danger-ghost delete-btn" @click="remove"><AppIcon name="trash" :size="15" /> Excluir</button>
@@ -187,5 +176,8 @@ h2 {
 .mentions-btn {
   margin-right: auto;
   padding-left: 10px;
+}
+.link-category {
+  width: 100%;
 }
 </style>

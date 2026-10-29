@@ -21,6 +21,7 @@ import { confirmDialog } from '~/composables/useDialog'
 import { notifyError, showToast } from '~/composables/useToasts'
 import { useToday } from '~/composables/useToday'
 import { dueReminders, upcoming, type UpcomingItem } from '~/lib/finance/bills'
+import { createCategorizer, type CategorizeInput, type CategorySuggestion } from '~/lib/finance/categorize'
 import type { PaletteColor } from '~/lib/colors'
 import type { CategorySource } from '~/lib/category-source'
 import { addDays, addMonths, formatDateBR, formatShortDate, isISODate, type ISODate } from '~/lib/dates'
@@ -145,8 +146,8 @@ const state = reactive({
   period: null as Period | null,
   /** Período do painel (sempre um período). */
   dashboardPeriod: null as Period | null,
-  /** undefined = todas as categorias; null = sem categoria. */
-  category: undefined as string | null | undefined,
+  /** Filtro de categorias do histórico (1.7.2: várias); vazio = todas, null = sem categoria. */
+  categoryFilter: [] as (string | null)[],
   /** Histórico: gastos, entradas ou os dois. */
   kind: 'all' as EntryKind | 'all',
   search: '',
@@ -258,7 +259,7 @@ function adopt(data: { categories: FinanceCategory[]; expenses: Expense[]; recur
   state.recurrences = data.recurrences
   state.imports = data.imports
   state.openingBalance = data.openingBalance
-  if (state.category && !data.categories.some((category) => category.id === state.category)) state.category = undefined
+  state.categoryFilter = state.categoryFilter.filter((id) => id === null || data.categories.some((category) => category.id === id))
   if (state.editing && !data.expenses.some((expense) => expense.id === state.editing)) state.editing = null
   if (state.editingRecurrence && !state.editingRecurrence.startsWith('new:') && !data.recurrences.some((item) => item.id === state.editingRecurrence)) state.editingRecurrence = null
   materialize()
@@ -627,7 +628,7 @@ function revealExpense(id: string): boolean {
   setTab('expenses')
   state.search = ''
   if (state.kind !== 'all' && state.kind !== expense.kind) state.kind = 'all'
-  if (state.category !== undefined && state.category !== (expense.categoryId && categoryById.value.has(expense.categoryId) ? expense.categoryId : null)) state.category = undefined
+  if (state.categoryFilter.length && !state.categoryFilter.includes(expense.categoryId && categoryById.value.has(expense.categoryId) ? expense.categoryId : null)) state.categoryFilter = []
   if (state.period && (expense.date < state.period.from || expense.date > state.period.to)) state.period = periodOf('month', expense.date, state.settings.weekStart)
   state.reveal = { id, seq: (state.reveal?.seq ?? 0) + 1 }
   return true
@@ -850,7 +851,7 @@ function setOpeningBalance(value: OpeningBalance | null): boolean {
  * pendente (`confirms`) confirmam essa conta em vez de criar outra. O arquivo não é
  * guardado: fica o nome dele e quando foi importado. Com Desfazer.
  */
-function importEntries(rows: ImportRow[], origin: { file: string; format: 'csv' | 'ofx' }): { added: number; confirmed: number } | null {
+function importEntries(rows: ImportRow[], origin: { file: string; format: 'csv' | 'ofx' | 'bank' }): { added: number; confirmed: number } | null {
   if (!guard() || !rows.length) return null
   const now = new Date().toISOString()
   const batch: ImportBatch = { id: createId('x'), file: origin.file.slice(0, 255), format: origin.format, importedAt: now, count: 0 }
@@ -892,7 +893,7 @@ function importEntries(rows: ImportRow[], origin: { file: string; format: 'csv' 
   state.imports.push(batch)
   changed()
   showToast({
-    message: `Extrato importado: ${added} ${added === 1 ? 'lançamento' : 'lançamentos'}${confirmed ? ` e ${confirmed} ${confirmed === 1 ? 'conta confirmada' : 'contas confirmadas'}` : ''}.`,
+    message: `${origin.format === 'bank' ? `Do banco (${origin.file})` : 'Extrato importado'}: ${added} ${added === 1 ? 'lançamento' : 'lançamentos'}${confirmed ? ` e ${confirmed} ${confirmed === 1 ? 'conta confirmada' : 'contas confirmadas'}` : ''}.`,
     icon: 'check',
     tone: 'success',
     duration: 8000,
@@ -913,6 +914,21 @@ function importEntries(rows: ImportRow[], origin: { file: string; format: 'csv' 
     },
   })
   return { added, confirmed }
+}
+
+/** Lançamentos seus que são uma transação do banco: guardam o id dela (a próxima busca não traz de novo). */
+function linkExternalIds(links: { entryId: string; externalId: string }[]): number {
+  if (!links.length || !guard()) return 0
+  const byId = new Map(links.map((link) => [link.entryId, link.externalId]))
+  let count = 0
+  state.expenses = state.expenses.map((entry) => {
+    const externalId = byId.get(entry.id)
+    if (!externalId || entry.externalId === externalId) return entry
+    count++
+    return { ...entry, externalId, updatedAt: new Date().toISOString() }
+  })
+  if (count) changed()
+  return count
 }
 
 function importName(id: string | null): string | null {
@@ -988,6 +1004,32 @@ function systemNotice(title: string, body: string): void {
 
 const shared = useCategoriesStore()
 
+// ── Categoria automática (1.7.2) ────────────────────────────────────────────
+
+/** Sugere a categoria (das que você já tem) a partir do histórico, de um dicionário e da categoria padrão (lib/finance/categorize.ts). */
+const categorizer = computed(() => {
+  const members = new Set(state.categories.map((category) => category.id))
+  const candidates = [
+    ...state.categories.map((category) => ({ id: category.id, name: shared.findCategory(category.id)?.name ?? category.name, member: true })),
+    ...shared.state.categories.filter((category) => !members.has(category.id)).map((category) => ({ id: category.id, name: category.name, member: false })),
+  ]
+  return createCategorizer(state.expenses, candidates, { defaultCategory: state.settings.defaultCategory })
+})
+
+function suggestCategory(input: CategorizeInput): CategorySuggestion | null {
+  if (!input.description.trim() && !input.hints?.some(Boolean)) {
+    const fallback = state.settings.defaultCategory
+    return input.kind === 'expense' && fallback && shared.findCategory(fallback) ? { id: fallback, source: 'default' } : null
+  }
+  return categorizer.value(input)
+}
+
+/** A categoria sugerida pronta para gravar: uma do app que ainda não está nas Finanças entra nelas. */
+function ensureCategory(id: string | null): string | null {
+  if (!id || categoryById.value.has(id)) return id
+  return attachCategory(id)?.id ?? null
+}
+
 function attachShared(category: SharedCategory): FinanceCategory {
   const existing = categoryById.value.get(category.id)
   if (existing) return existing
@@ -1037,7 +1079,7 @@ function detachCategory(id: string): void {
   state.categories = state.categories.filter((category) => category.id !== id)
   state.expenses = state.expenses.map((expense) => (expense.categoryId === id ? { ...expense, categoryId: null } : expense))
   for (const recurrence of state.recurrences) if (recurrence.categoryId === id) recurrence.categoryId = null
-  if (state.category === id) state.category = undefined
+  state.categoryFilter = state.categoryFilter.filter((item) => item !== id)
   scheduleSave()
 }
 
@@ -1061,7 +1103,7 @@ function remapCategory(fromId: string, to: SharedCategory): void {
   } else if (used) {
     attachShared(to)
   }
-  if (state.category === fromId) state.category = to.id
+  if (state.categoryFilter.includes(fromId)) state.categoryFilter = [...new Set(state.categoryFilter.map((item) => (item === fromId ? to.id : item)))]
   scheduleSave()
 }
 
@@ -1139,6 +1181,9 @@ export function useFinanceStore() {
     horizonEnd,
     reminders,
     categorySource,
+    suggestCategory,
+    ensureCategory,
+    linkExternalIds,
     categoryById,
     knownCategoryIds,
     findExpense,

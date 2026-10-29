@@ -6,15 +6,22 @@ import { computed, readonly, ref } from 'vue'
 import { addDays, todayISO } from '~/lib/dates'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 
-const fake = hasDesktopApi() ? desktop().bootstrap.fakeToday : null
-const today = ref(fake ?? todayISO())
+/**
+ * Data simulada dos testes automatizados. Lida a cada vez: no celular, a plataforma é
+ * instalada depois que este arquivo já foi carregado (1.7.2: antes, a data simulada
+ * só valia no computador).
+ */
+const fakeToday = () => (hasDesktopApi() ? desktop().bootstrap.fakeToday : null)
+const today = ref(fakeToday() ?? todayISO())
 const tomorrow = computed(() => addDays(today.value, 1))
 
 function check() {
-  if (fake) return
-  const now = todayISO()
+  const now = fakeToday() ?? todayISO()
   if (now !== today.value) today.value = now
 }
+
+/** Confere o dia agora (ao abrir o workspace). */
+export const syncToday = check
 
 if (typeof window !== 'undefined') {
   setInterval(check, 30_000)

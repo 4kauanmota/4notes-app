@@ -16,13 +16,17 @@
  * workspace, uma para código (padrão: desligada) e outra para texto (padrão: ligada).
  */
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, indentWithTab, undo } from '@codemirror/commands'
 import { bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { CodeEditRequest } from '~/lib/editor/host'
+import { showToast } from '~/composables/useToasts'
+import { codeFoldingSupport, indentGuides } from '~/lib/editor/code-structure'
+import { minimalChange } from '~/lib/editor/diff'
+import { canFormat, formatCode } from '~/lib/editor/format-code'
 import { findLanguage, isTextBlockInfo, languageLabel } from '~/lib/editor/languages'
 import { lineWrap } from '~/lib/editor/line-wrap'
 import { plainMultipleSelections } from '~/lib/editor/multi-select'
@@ -67,6 +71,39 @@ function close(): boolean {
   return true
 }
 
+// ── Formatar (1.7.2) ────────────────────────────────────────────────────────
+
+/** Linguagem com formatador (format-code.ts). */
+const formattable = !isText && canFormat(props.request.info)
+const formatting = ref(false)
+
+function formatNow(): boolean {
+  if (!view || !formattable) return false
+  if (!formatting.value) void runFormat()
+  return true
+}
+
+async function runFormat(): Promise<void> {
+  const current = view
+  if (!current) return
+  formatting.value = true
+  const code = current.state.doc.toString()
+  try {
+    const result = await formatCode(code, props.request.info)
+    // Fechou ou o código mudou enquanto formatava: não passa por cima
+    if (view !== current || current.state.doc.toString() !== code) return
+    if (!result.ok) showToast({ message: result.reason, icon: 'alert' })
+    else if (!result.changed) showToast({ message: 'O código já está formatado.', icon: 'check' })
+    else {
+      current.dispatch({ changes: minimalChange(code, result.code), userEvent: 'input.format', scrollIntoView: true })
+      showToast({ message: `Código formatado (${result.language})`, icon: 'check', action: { label: 'Desfazer', run: () => void (view && undo(view)) } })
+    }
+  } finally {
+    formatting.value = false
+    if (view === current) current.focus()
+  }
+}
+
 const applyChanges = EditorView.updateListener.of((update) => {
   if (update.docChanged) props.request.apply(update.state.doc.toString())
 })
@@ -74,6 +111,9 @@ const applyChanges = EditorView.updateListener.of((update) => {
 function codeExtensions(): Extension[] {
   return [
     lineNumbers(),
+    // 1.7.2: setas para recolher/expandir e guias de indentação
+    codeFoldingSupport(),
+    indentGuides(),
     highlightActiveLineGutter(),
     highlightActiveLine(),
     history(),
@@ -85,7 +125,16 @@ function codeExtensions(): Extension[] {
     highlightSelectionMatches(),
     search({ top: true }),
     // Esc fecha a busca (se aberta) e, depois, a tela cheia; Alt+Z quebra as linhas
-    keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab, { key: 'Escape', run: close }, { key: 'Alt-z', run: toggleWrap }]),
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...historyKeymap,
+      indentWithTab,
+      { key: 'Escape', run: close },
+      { key: 'Alt-z', run: toggleWrap },
+      { key: 'Shift-Alt-f', run: formatNow, preventDefault: true },
+    ]),
     wrapping.of(lineWrap(wrap.value, true)),
     language.of([]),
     syntaxHighlighting(codeHighlight),
@@ -158,6 +207,18 @@ function copy(): void {
           @click="onWrapClick"
         >
           <AppIcon name="wrap" :size="15" /><span class="cf-label"> Quebrar linhas</span>
+        </button>
+        <button
+          v-if="formattable"
+          class="btn btn-ghost btn-sm"
+          type="button"
+          data-format-code
+          :disabled="formatting"
+          aria-label="Formatar código"
+          data-tip="Formatar código (Shift+Alt+F)"
+          @click="formatNow"
+        >
+          <AppIcon name="sparkle" :size="15" /><span class="cf-label"> Formatar</span>
         </button>
         <button class="btn btn-ghost btn-sm" type="button" :aria-label="copied ? 'Copiado' : 'Copiar'" @click="copy">
           <AppIcon :name="copied ? 'check' : 'copy'" :size="15" /><span class="cf-label"> {{ copied ? 'Copiado' : 'Copiar' }}</span>

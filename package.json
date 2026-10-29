@@ -1,8 +1,8 @@
 {
   "name": "4notes",
   "productName": "4notes",
-  "version": "1.7.1",
-  "version": "1.7.1",
+  "version": "1.7.2",
+  "version": "1.7.2",
   "description": "Aplicativo pessoal de notas, tarefas, mapa mental, links e timer — 100% local, no computador (Windows) e no celular (Android).",
   "author": "Kauan",
   "license": "UNLICENSED",
@@ -57,6 +57,7 @@
     "electron-updater": "^6.8.9",
     "esbuild": "^0.28.2",
     "nuxt": "^4.5.2",
+    "prettier": "^3.9.10",
     "typescript": "~6.0.3",
     "vitest": "^5.0.3",
     "vue": "^3.5.43",

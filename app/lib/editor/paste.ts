@@ -3,7 +3,8 @@
  *  - imagens (print da tela, arquivo de imagem) são salvas em attachments/ do
  *    workspace e entram na nota como ![](…);
  *  - um endereço web colado sobre um texto selecionado transforma o texto em link;
- *  - código vira um bloco ```linguagem (Ctrl+Shift+V cola como texto puro);
+ *  - código vira um bloco ```linguagem (Ctrl+Shift+V cola como texto puro), e o aviso
+ *    oferece formatar (1.7.2);
  *  - qualquer outro texto (comum, listas, trechos longos) entra como texto — nunca
  *    num bloco de texto (esse só pela barra de formatação, text-blocks.ts).
  */
@@ -11,6 +12,7 @@ import { syntaxTree } from '@codemirror/language'
 import type { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { detectCode, normalizeCode } from './code-detect'
+import { offerFormatting } from './code-blocks'
 import { relativeTo } from '../files/workspace-path'
 import { editorHost } from './host'
 import { normalizeLinkUrl, setLink } from './formatting'
@@ -125,6 +127,8 @@ function insertCode(view: EditorView, text: string, language: string): void {
   const code = normalizeCode(text)
   const fence = code.includes('```') ? '~~~' : '```'
   insertBlock(view, `${fence}${language}\n${code}\n${fence}`)
+  // 1.7.2: "Formatar" (ou "Escolher linguagem") no aviso
+  offerFormatting(view, code, language)
 }
 
 const imageFiles = (list: FileList | undefined | null) => [...(list ?? [])].filter((file) => file.type.startsWith('image/'))
