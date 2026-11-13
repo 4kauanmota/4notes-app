@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { codeBlockPreview, codeBlocks, isTextBlock } from '~/lib/editor/code-blocks'
 import { fenceFromVsCodeMode, findLanguage, isTextBlockInfo, languageLabel } from '~/lib/editor/languages'
 import { multipleSelections, plainMultipleSelections, selectNextOccurrence } from '~/lib/editor/multi-select'
-import { canWrapInTextBlock, codeBlockChange, textBlockChange } from '~/lib/editor/text-blocks'
+import { canWrapInTextBlock, codeBlockChange, smartBlockChange, textBlockChange } from '~/lib/editor/text-blocks'
 import { noteToPlainText } from '~/lib/notes/export'
 
 function stateOf(doc: string, selection: EditorSelection | { anchor: number; head?: number }, extensions: Extension[] = []) {
@@ -273,5 +273,29 @@ describe('Ctrl+D: próxima ocorrência', () => {
     const ed = editor('foo foo', { anchor: 0, head: 3 })
     ed.view.dispatch({ selection: EditorSelection.create([EditorSelection.range(0, 3), EditorSelection.range(4, 7)], 1) })
     expect(ed.selected).toEqual([[4, 7]])
+  })
+})
+
+describe('um botão só para blocos (1.7.3)', () => {
+  const smart = (doc: string, from = 0, to = doc.length) => {
+    const state = stateOf(doc, { anchor: from, head: to })
+    const spec = smartBlockChange(state, 'notes')
+    return spec ? state.update(spec).state.doc.toString() : null
+  }
+
+  it('código reconhecido vira bloco de código na linguagem dele', () => {
+    const js = 'const total = itens.length;\nfunction somar(a, b) { return a + b }'
+    expect(smart(js)).toBe(`\`\`\`javascript\n${js}\n\`\`\`\n`)
+    expect(smart('{"nome": "4notes", "versao": 3}')).toBe('```json\n{"nome": "4notes", "versao": 3}\n```\n')
+  })
+
+  it('texto comum (e listas) vira bloco de texto', () => {
+    expect(smart('Uma frase qualquer.\nOutra frase aqui.')).toBe('```text\nUma frase qualquer.\nOutra frase aqui.\n```\n')
+    expect(smart('- item um\n- item dois')).toBe('```text\n• item um\n• item dois\n```\n')
+  })
+
+  it('o código vem sem as marcações escondidas', () => {
+    const doc = '**const** x = 1;\nconsole.log(x);'
+    expect(smart(doc)).toBe('```javascript\nconst x = 1;\nconsole.log(x);\n```\n')
   })
 })

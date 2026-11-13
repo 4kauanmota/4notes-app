@@ -21,12 +21,10 @@ import { entryState, filterExpenses, groupByDay, SORT_LABELS, sortExpenses, stat
 import type { UpcomingItem } from '~/lib/finance/bills'
 import { weekdayName } from '~/lib/timer/stats'
 import { expenseSubject, showMentionsOf } from '~/stores/mentions'
-import { useBankStore } from '~/stores/bank'
 import { useFinanceStore } from '~/stores/finance'
 
 const emit = defineEmits<{ add: []; import: [] }>()
 const finance = useFinanceStore()
-const bank = useBankStore()
 const today = finance.today
 
 const searchInput = ref<HTMLInputElement>()
@@ -209,17 +207,6 @@ defineExpose({
       <div class="toolbar-top">
         <PeriodNav ref="navRef" v-model="period" :week-start="finance.state.settings.weekStart" :today="today" allow-all all-label="Todos os lançamentos" />
         <span class="toolbar-actions">
-          <button
-            v-if="finance.state.settings.bank.connections.length"
-            type="button"
-            class="btn btn-sm import-btn"
-            data-action="bank-sync"
-            :disabled="bank.state.syncing"
-            data-tip="Busca as transações novas dos bancos conectados"
-            @click="bank.sync({ manual: true })"
-          >
-            <AppIcon name="refresh" :size="14" /> {{ bank.state.syncing ? 'Buscando…' : 'Buscar no banco' }}
-          </button>
           <button type="button" class="btn btn-sm import-btn" data-action="import-statement" @click="emit('import')">
             <AppIcon name="upload" :size="14" /> Importar extrato
           </button>

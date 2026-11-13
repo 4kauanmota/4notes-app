@@ -9,6 +9,7 @@
 //    em http://127.0.0.1:3141 e o Electron abre essa URL (com hot reload).
 
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 /** "usuario/repositorio" das atualizações (package.json → "updates"."github") — o app Android lê daqui. */
 const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { updates?: { github?: string } }
@@ -54,6 +55,15 @@ export default defineNuxtConfig({
 
   typescript: {
     strict: true,
+  },
+
+  // Leitor de PDF (pdf.js, 1.7.3): fontes padrão, mapas de caracteres, perfis de cor e o
+  // WebAssembly, servidos pelo próprio app (nada vem da internet)
+  nitro: {
+    publicAssets: ['cmaps', 'standard_fonts', 'wasm', 'iccs'].map((dir) => ({
+      dir: fileURLToPath(new URL(`./node_modules/pdfjs-dist/${dir}`, import.meta.url)),
+      baseURL: `/pdfjs/${dir}`,
+    })),
   },
 
   vite: {

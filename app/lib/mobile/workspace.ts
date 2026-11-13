@@ -10,7 +10,7 @@
  * .4notes/trash/ do workspace) e o armazenamento não diferencia maiúsculas
  * ("nota.md" e "Nota.md" são o mesmo arquivo).
  */
-import { ATTACHMENTS_DIR, fileStamp, IMAGE_EXTENSIONS, IMAGE_FILE, MAX_IMAGE_BYTES, normalizeText, TRASH_DIR } from '#shared/files'
+import { ATTACHMENTS_DIR, documentCandidate, documentFileName, DOCUMENT_FILES_DIR, fileStamp, IMAGE_EXTENSIONS, IMAGE_FILE, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, normalizeText, TRASH_DIR } from '#shared/files'
 import type { FileEntry, ListOptions } from '#shared/ipc'
 import { base64ToBytes, bytesToBase64 } from '#shared/files'
 import { basenameFs, cleanPath, dirnameFs, FsError, joinFs, type FsDriver } from './fs'
@@ -183,6 +183,30 @@ export class WorkspaceFiles {
       return `${ATTACHMENTS_DIR}/${name}`
     }
     throw new FsError('EEXIST', 'Não foi possível criar um nome para a imagem.')
+  }
+
+  /** Documentos (1.7.3): grava em documents/arquivos/ com um nome livre ("contrato (2).pdf"). */
+  async saveDocument(name: unknown, data: unknown): Promise<FileEntry> {
+    if (typeof name !== 'string' || !name.trim()) throw new FsError('EINVAL', 'Nome inválido.')
+    if (!(data instanceof Uint8Array)) throw new FsError('EINVAL', 'Arquivo inválido.')
+    if (data.byteLength > MAX_DOCUMENT_BYTES) throw new FsError('EFBIG', 'O arquivo é grande demais (máximo de 200 MB).')
+    const dir = this.resolve(DOCUMENT_FILES_DIR)
+    await this.fs.mkdir(dir)
+    const { base, extension } = documentFileName(name)
+    for (let attempt = 1; attempt < 1000; attempt++) {
+      const file = documentCandidate(base, extension, attempt)
+      // (o armazenamento do Android não diferencia maiúsculas: o stat acha "Contrato.pdf" por "contrato.pdf")
+      if (await this.fs.stat(joinFs(dir, file))) continue
+      await this.fs.writeBase64(joinFs(dir, file), bytesToBase64(data))
+      return this.entry(joinFs(dir, file), false)
+    }
+    throw new FsError('EEXIST', 'Não foi possível criar um nome para o arquivo.')
+  }
+
+  /** O documento em bytes (só dentro de documents/). */
+  async readDocument(relativePath: unknown): Promise<Uint8Array | null> {
+    if (typeof relativePath !== 'string' || !/^documents\//.test(relativePath)) throw new FsError('EACCES', 'Só arquivos dos Documentos.')
+    return this.readBytes(relativePath)
   }
 
   /** Grava uma imagem colada em attachments/ com um nome único (imagem-AAAAMMDD-HHMMSS.png). */

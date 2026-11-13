@@ -21,6 +21,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import { codeBlockPreview } from './code-blocks'
+import { tablePreview } from './tables'
 import { contextMenuTracking, formattingKeymap, livePreview } from './formatting'
 import { hiddenMarkupEditing } from './hidden-markup'
 import { editorHost, type EditorHost } from './host'
@@ -206,6 +207,7 @@ export function buildExtensions(callbacks: EditorCallbacks, options: EditorOptio
     hiddenMarkupEditing,
     listEditing,
     codeBlockPreview,
+    tablePreview,
     imagePreview,
     pasteHandling,
     options.host ? editorHost.of(options.host) : [],

@@ -84,6 +84,8 @@ if (!app.requestSingleInstanceLock()) {
     registerWorkspaceProtocol(() => getConfig().dataDir)
     registerIpc({ devServerUrl, isDev })
     await refreshDataDirStatus()
+    // 1.7.3: a conexão com bancos (Meu Pluggy, 1.7.2) saiu; as credenciais guardadas saem junto
+    fs.promises.rm(path.join(app.getPath('userData'), 'bank.json'), { force: true }).catch(() => undefined)
 
     openMainWindow()
 

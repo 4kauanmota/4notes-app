@@ -22,6 +22,7 @@ import { moduleById } from '~/lib/modules'
 import { useAppStore } from '~/stores/app'
 import { useCategoriesStore, type CategoryRecord } from '~/stores/categories'
 import { useLinksStore } from '~/stores/links'
+import { useDocumentsStore } from '~/stores/documents'
 import { categorySubject, findMentionPlaces, openMentionPath, type MentionPlace } from '~/stores/mentions'
 import { useModulesStore } from '~/stores/modules'
 
@@ -29,6 +30,7 @@ const ui = useCategoryUi()
 const shared = useCategoriesStore()
 const modules = useModulesStore()
 const links = useLinksStore()
+const documents = useDocumentsStore()
 const app = useAppStore()
 const { isCompact } = useLayoutSize()
 
@@ -223,13 +225,23 @@ const NOUNS: Record<CategoryModuleId, [string, string]> = {
   tasks: ['tarefa', 'tarefas'],
   timer: ['sessão', 'sessões'],
   finance: ['lançamento', 'lançamentos'],
+  documents: ['documento', 'documentos'],
 }
 const countLabel = (module: CategoryModuleId, count: number) => `${count} ${NOUNS[module][count === 1 ? 0 : 1]}`
-const RECORD_ICONS: Record<CategoryModuleId, string> = { notes: 'notes', links: 'link', tasks: 'task-open', timer: 'timer', finance: 'wallet' }
+const RECORD_ICONS: Record<CategoryModuleId, string> = { notes: 'notes', links: 'link', tasks: 'task-open', timer: 'timer', finance: 'wallet', documents: 'documents' }
 
 /** Abre o registro no módulo dele (as Configurações fecham). */
 function openRecord(module: CategoryModuleId, record: CategoryRecord) {
   app.closeSettings()
+  if (module === 'documents') {
+    // Os documentos não são mencionáveis: abre o documento no módulo dele
+    const show = async () => {
+      await navigateTo('/documents')
+      documents.open(record.id)
+    }
+    if (modules.requireModule('documents', () => void show())) void show()
+    return
+  }
   if (module !== 'links') return openMentionPath(record.path)
   // Um link salvo é mostrado na lista dos Links (a menção abriria o site)
   const show = async () => {

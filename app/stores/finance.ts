@@ -50,7 +50,7 @@ import {
   type Recurrence,
 } from '~/lib/finance/recurrence'
 import { financeRepository as repo } from '~/lib/finance/repository'
-import { DEFAULT_FINANCE_SETTINGS, normalizeFinanceSettings, type FinanceSettings } from '~/lib/finance/settings'
+import { DEFAULT_FINANCE_SETTINGS, hasLegacyBank, normalizeFinanceSettings, type FinanceSettings } from '~/lib/finance/settings'
 import { hasDesktopApi, isAndroid } from '~/lib/platform'
 import { readDeviceState, writeDeviceState } from '~/lib/storage/device-state'
 import { DATA_PATHS } from '~/lib/storage/paths'
@@ -248,7 +248,10 @@ function updateSettings(patch: Partial<FinanceSettings>): void {
 }
 
 onSettingsChange((changed) => {
-  if (changed.has('finance')) state.settings = normalizeFinanceSettings(settingsSection('finance'))
+  if (!changed.has('finance')) return
+  const raw = settingsSection('finance')
+  state.settings = normalizeFinanceSettings(raw)
+  if (hasLegacyBank(raw)) updateSettingsSection('finance', { ...state.settings })
 })
 
 // ── Carregamento ────────────────────────────────────────────────────────────
@@ -267,7 +270,10 @@ function adopt(data: { categories: FinanceCategory[]; expenses: Expense[]; recur
 
 async function load(): Promise<void> {
   try {
-    state.settings = normalizeFinanceSettings(settingsSection('finance'))
+    const rawSettings = settingsSection('finance')
+    state.settings = normalizeFinanceSettings(rawSettings)
+    // 1.7.3: os bancos da conexão removida saem do settings.json (os lançamentos ficam)
+    if (hasLegacyBank(rawSettings)) updateSettingsSection('finance', { ...state.settings })
     const view = readDeviceState('finance') ?? {}
     if (TABS.includes(view.tab as FinanceTab)) state.tab = view.tab as FinanceTab
     if (SORTS.includes(view.sort as ExpenseSort)) state.sort = view.sort as ExpenseSort
@@ -851,7 +857,7 @@ function setOpeningBalance(value: OpeningBalance | null): boolean {
  * pendente (`confirms`) confirmam essa conta em vez de criar outra. O arquivo não é
  * guardado: fica o nome dele e quando foi importado. Com Desfazer.
  */
-function importEntries(rows: ImportRow[], origin: { file: string; format: 'csv' | 'ofx' | 'bank' }): { added: number; confirmed: number } | null {
+function importEntries(rows: ImportRow[], origin: { file: string; format: 'csv' | 'ofx' }): { added: number; confirmed: number } | null {
   if (!guard() || !rows.length) return null
   const now = new Date().toISOString()
   const batch: ImportBatch = { id: createId('x'), file: origin.file.slice(0, 255), format: origin.format, importedAt: now, count: 0 }
@@ -893,7 +899,7 @@ function importEntries(rows: ImportRow[], origin: { file: string; format: 'csv' 
   state.imports.push(batch)
   changed()
   showToast({
-    message: `${origin.format === 'bank' ? `Do banco (${origin.file})` : 'Extrato importado'}: ${added} ${added === 1 ? 'lançamento' : 'lançamentos'}${confirmed ? ` e ${confirmed} ${confirmed === 1 ? 'conta confirmada' : 'contas confirmadas'}` : ''}.`,
+    message: `Extrato importado: ${added} ${added === 1 ? 'lançamento' : 'lançamentos'}${confirmed ? ` e ${confirmed} ${confirmed === 1 ? 'conta confirmada' : 'contas confirmadas'}` : ''}.`,
     icon: 'check',
     tone: 'success',
     duration: 8000,
@@ -914,21 +920,6 @@ function importEntries(rows: ImportRow[], origin: { file: string; format: 'csv' 
     },
   })
   return { added, confirmed }
-}
-
-/** Lançamentos seus que são uma transação do banco: guardam o id dela (a próxima busca não traz de novo). */
-function linkExternalIds(links: { entryId: string; externalId: string }[]): number {
-  if (!links.length || !guard()) return 0
-  const byId = new Map(links.map((link) => [link.entryId, link.externalId]))
-  let count = 0
-  state.expenses = state.expenses.map((entry) => {
-    const externalId = byId.get(entry.id)
-    if (!externalId || entry.externalId === externalId) return entry
-    count++
-    return { ...entry, externalId, updatedAt: new Date().toISOString() }
-  })
-  if (count) changed()
-  return count
 }
 
 function importName(id: string | null): string | null {
@@ -1017,7 +1008,7 @@ const categorizer = computed(() => {
 })
 
 function suggestCategory(input: CategorizeInput): CategorySuggestion | null {
-  if (!input.description.trim() && !input.hints?.some(Boolean)) {
+  if (!input.description.trim()) {
     const fallback = state.settings.defaultCategory
     return input.kind === 'expense' && fallback && shared.findCategory(fallback) ? { id: fallback, source: 'default' } : null
   }
@@ -1183,7 +1174,6 @@ export function useFinanceStore() {
     categorySource,
     suggestCategory,
     ensureCategory,
-    linkExternalIds,
     categoryById,
     knownCategoryIds,
     findExpense,

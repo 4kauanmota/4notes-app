@@ -15,8 +15,8 @@ import { notifyError, showToast } from '~/composables/useToasts'
 import { syncToday } from '~/composables/useToday'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 import type { ModuleId } from '~/lib/modules'
-import { useBankStore } from './bank'
 import { useCategoriesStore } from './categories'
+import { useDocumentsStore } from './documents'
 import { useFinanceStore } from './finance'
 import { useLinksStore } from './links'
 import { flushMentionUpdates, installMentionTracking } from './mentions'
@@ -56,6 +56,7 @@ const mindmap = useMindmapStore()
 const links = useLinksStore()
 const timer = useTimerStore()
 const finance = useFinanceStore()
+const documents = useDocumentsStore()
 const modules = useModulesStore()
 const categories = useCategoriesStore()
 
@@ -95,14 +96,12 @@ async function loadModules(): Promise<void> {
   await loadSettings()
   applyWorkspaceTheme(settingsSection('theme'))
   // Todos os módulos carregam (ativos ou não): desativar só tira o módulo do menu
-  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), timer.load(), finance.load(), modules.load()])
+  const results = await Promise.allSettled([notes.load(), tasks.load(), mindmap.load(), links.load(), timer.load(), finance.load(), documents.load(), modules.load()])
   const failure = results.find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined
   if (failure) throw failure.reason
   // Depois dos módulos: as categorias compartilhadas são conciliadas com as listas deles
   // (na primeira vez, é a passagem da 1.6: ver stores/categories.ts)
   await categories.load()
-  // Bancos conectados (1.7.2): a busca automática do dia, em segundo plano
-  useBankStore().scheduleAutoSync()
 }
 
 /** Guarda o último módulo aberto (só depois de carregar o workspace). */
@@ -114,7 +113,7 @@ export function rememberModule(module: ModuleId): void {
 export async function flushEverything(): Promise<void> {
   // Primeiro as menções que ainda estavam para ser corrigidas (elas mexem nas notas)
   await flushMentionUpdates().catch((error) => console.warn('[4notes] Falha ao atualizar menções:', error))
-  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), timer.flush(), finance.flush(), categories.flush(), flushSettings()])
+  await Promise.allSettled([notes.flushAll(), tasks.flush(), mindmap.flushAll(), links.flush(), timer.flush(), finance.flush(), documents.flush(), categories.flush(), flushSettings()])
 }
 
 let focusTimer: ReturnType<typeof setTimeout> | null = null
@@ -128,7 +127,7 @@ function refreshWorkspace(): void {
     void refreshSettings()
     void mindmap.refreshFromDisk()
     // As categorias por último: elas conciliam com o que os módulos acabaram de reler
-    void Promise.allSettled([notes.refreshFromDisk(), tasks.refreshFromDisk(), links.refreshFromDisk(), timer.refreshFromDisk(), finance.refreshFromDisk()]).then(() =>
+    void Promise.allSettled([notes.refreshFromDisk(), tasks.refreshFromDisk(), links.refreshFromDisk(), timer.refreshFromDisk(), finance.refreshFromDisk(), documents.refreshFromDisk()]).then(() =>
       categories.refreshFromDisk(),
     )
   }, 200)

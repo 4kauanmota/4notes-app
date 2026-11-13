@@ -73,7 +73,10 @@ export interface Expense {
   updatedAt: string
 }
 
-/** Um extrato importado (o arquivo em si não é guardado) ou uma busca no banco (1.7.2: "bank"). */
+/**
+ * Um extrato importado (o arquivo em si não é guardado). "bank" veio da conexão com bancos
+ * da 1.7.2 (removida na 1.7.3): continua sendo lido, para os arquivos não mudarem.
+ */
 export interface ImportBatch {
   id: string
   /** Nome do arquivo, ou do banco. */

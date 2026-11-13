@@ -2,7 +2,8 @@
 /**
  * Barra de formatação que aparece sobre o texto selecionado (como no Notion).
  * Só mostra botões e avisa o que foi clicado — quem aplica é o MarkdownEditor
- * (inclusive o "Bloco de texto" e o "Bloco de código", que transformam a seleção num bloco).
+ * (inclusive o "Bloco de texto", que transforma a seleção num bloco; código reconhecido
+ * vira bloco de código, 1.7.3).
  * O mousedown é cancelado para o editor não perder o foco nem a seleção (menos no
  * campo do endereço do link, que precisa do foco para receber o texto).
  *
@@ -50,8 +51,8 @@ const emit = defineEmits<{
   'close-link': []
   clear: []
   'text-block': []
-  'code-block': []
   image: []
+  table: []
   'open-url': [url: string]
 }>()
 
@@ -248,17 +249,6 @@ function pickHighlight(color: string | null) {
         <AppIcon name="text-block" :size="16" :stroke="1.9" />
       </button>
       <button
-        v-if="textBlock"
-        class="fmt-btn"
-        data-format="code-block"
-        data-tip="Bloco de código"
-        data-tip-pos="top"
-        aria-label="Bloco de código"
-        @click="emit('code-block')"
-      >
-        <AppIcon name="code-block" :size="16" :stroke="1.9" />
-      </button>
-      <button
         class="fmt-btn"
         :class="{ on: !!active.link }"
         data-format="link"
@@ -271,6 +261,9 @@ function pickHighlight(color: string | null) {
       </button>
       <button v-if="docked" class="fmt-btn" data-format="image" aria-label="Inserir imagem" @click="emit('image')">
         <AppIcon name="image" :size="16" :stroke="1.9" />
+      </button>
+      <button v-if="docked" class="fmt-btn" data-format="table" aria-label="Inserir tabela" @click="emit('table')">
+        <AppIcon name="table" :size="16" :stroke="1.9" />
       </button>
       <button v-if="clearable" class="fmt-btn" data-format="clear" data-tip="Limpar formatação" data-tip-pos="top" aria-label="Limpar formatação" @click="emit('clear')">
         <AppIcon name="clear-format" :size="16" :stroke="1.9" />

@@ -77,6 +77,17 @@ export interface MentionHost {
   categories?: CategoryMentionHost
 }
 
+/** Um item de menu (o app desenha com o visual dele; ver useContextMenu). */
+export interface HostMenuItem {
+  id?: string
+  label?: string
+  type?: 'normal' | 'separator' | 'checkbox' | 'radio'
+  checked?: boolean
+  enabled?: boolean
+  danger?: boolean
+  submenu?: HostMenuItem[]
+}
+
 export interface EditorHost {
   /** Identifica o documento aberto (para não colar uma imagem na nota errada depois de salvar). */
   docKey(): string
@@ -92,6 +103,10 @@ export interface EditorHost {
   openCode(request: CodeEditRequest): void
   /** Escolher a linguagem de um bloco de código (null = cancelado). */
   chooseLanguage?(current: string): Promise<string | null>
+  /** Abre um menu (abaixo de `anchor`, ou onde está o mouse) e devolve o id escolhido (1.7.3: tabelas). */
+  menu?(items: HostMenuItem[], anchor?: Element | null): Promise<string | null>
+  /** Tamanho de uma tabela nova (null = cancelado, 1.7.3). */
+  chooseTableSize?(): Promise<{ columns: number; rows: number } | null>
   /** Aviso rápido; `undo` mostra o botão "Desfazer". */
   notify(message: string, undo?: () => void): void
   /** Aviso com uma ação (ex.: "Formatar" depois de colar código, 1.7.2). */

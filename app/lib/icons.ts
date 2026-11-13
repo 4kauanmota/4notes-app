@@ -148,6 +148,13 @@ export const ICONS: Record<string, string> = {
   chart: '<path d="M4 20h16"/><path d="M7 16.5v-5M12 16.5V6.5M17 16.5v-8"/>',
   'arrow-up': '<path d="M12 19V5M6 11l6-6 6 6"/>',
   'arrow-down': '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  table: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/>',
+  sum: '<path d="M17 5H7l5.5 7L7 19h10"/>',
+  'file-text': '<path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5M9 12.5h6M9 15.5h6"/>',
+  pen: '<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/>',
+  eraser: '<path d="M8.5 19.5 4 15a1.8 1.8 0 0 1 0-2.5l8.5-8.5a1.8 1.8 0 0 1 2.5 0l5 5a1.8 1.8 0 0 1 0 2.5l-8 8z"/><path d="M8.5 19.5H20M9 9.5l6 6"/>',
+  documents: '<path d="M9 3.5h6.5L20 8v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-12.5a2 2 0 0 1 2-2z"/><path d="M15.5 3.5V8H20"/><path d="M4 7v12a2 2 0 0 0 2 2h9"/>',
+  hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.9-2.6L3.5 14a1.6 1.6 0 0 1 2.5-2L8 14"/>',
 }
 
 /** SVG completo de um ícone, para montar elementos fora do Vue. */

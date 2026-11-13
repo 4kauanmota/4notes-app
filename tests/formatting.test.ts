@@ -476,3 +476,29 @@ describe('cor do marca-texto (1.7.1)', () => {
     expect(findElements(hand.state, 0, hand.text.length).map((el) => el.color)).toEqual(['yellow', '#123456'])
   })
 })
+
+describe('código na linha só com o texto (1.7.3)', () => {
+  const code = (doc: string, word: string) => {
+    const e = select(doc, word)
+    toggleFormat(e.view, 'code')
+    return e.text
+  }
+
+  it('as marcações de dentro do trecho saem (negrito, itálico, sublinhado, cor, link)', () => {
+    expect(code('Texto **negrito** e *it* fim', 'negrito** e *it')).toBe('Texto `negrito e it` fim')
+    expect(code('a <u>sub</u> <span style="color: red">cor</span> b', 'sub</u> <span style="color: red">cor')).toBe('a `sub cor` b')
+    expect(code('ver [site](https://x.com) agora', 'ver [site](https://x.com) agora')).toBe('`ver site agora`')
+  })
+
+  it('um formato cortado fecha antes ou reabre depois; o que envolve o trecho fica', () => {
+    expect(code('Texto **negrito forte** fim', 'forte** fim')).toBe('Texto **negrito** `forte fim`')
+    expect(code('A *um dois* B', 'A *um')).toBe('`A um` *dois* B')
+    expect(code('**const x = 1**', 'const x = 1')).toBe('**`const x = 1`**')
+  })
+
+  it('negrito e itálico continuam como antes', () => {
+    const e = select('a *b* c', 'a *b* c')
+    toggleFormat(e.view, 'bold')
+    expect(e.text).toBe('**a *b* c**')
+  })
+})

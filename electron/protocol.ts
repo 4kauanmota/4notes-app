@@ -35,6 +35,8 @@ const MIME_TYPES: Record<string, string> = {
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
   '.txt': 'text/plain; charset=utf-8',
+  // Leitor de PDF (pdf.js, 1.7.3): o decodificador de imagens dos PDFs
+  '.wasm': 'application/wasm',
 }
 
 /** Precisa ser chamado ANTES de `app.whenReady()`. */
@@ -62,7 +64,8 @@ function contentSecurityPolicy(html: string): string {
     .map(([, , body]) => `'sha256-${crypto.createHash('sha256').update(body ?? '').digest('base64')}'`)
   return [
     "default-src 'self'",
-    `script-src 'self' ${inlineScripts.join(' ')}`.trim(),
+    // 'wasm-unsafe-eval': só o WebAssembly do leitor de PDF (imagens JPEG 2000 e JBIG2), nada de eval
+    `script-src 'self' 'wasm-unsafe-eval' ${inlineScripts.join(' ')}`.trim(),
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: ${WORKSPACE_SCHEME}:`,
     "font-src 'self' data:",

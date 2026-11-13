@@ -17,6 +17,7 @@ import { historyViewOf } from '~/lib/editor/block-editor'
 import { contextMenuPosition, linkAtContextMenu, removeLink, selectLinkAt } from '~/lib/editor/formatting'
 import { editorHost } from '~/lib/editor/host'
 import { insertImageFromLibrary, isInsideCode } from '~/lib/editor/paste'
+import { insertTableFromMenu, tableAt } from '~/lib/editor/tables'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
 import type { TextMenuRequest } from '#shared/ipc'
 import { openMenu, separator, showContextMenu, type MenuItemSpec } from '~/composables/useContextMenu'
@@ -287,6 +288,8 @@ async function onTextMenu(request: TextMenuRequest): Promise<void> {
     // Imagem da biblioteca (fora dos blocos de código)
     if (imageTarget?.view.state.facet(editorHost)?.pickImage && !isInsideCode(imageTarget.view.state, imageTarget.pos)) {
       items.push(separator, { id: 'insert-image', label: 'Inserir imagem…' })
+      // Tabela (1.7.3): no texto (fora de blocos e de outra tabela)
+      if (imageTarget.view.state.facet(editorHost)?.chooseTableSize && !tableAt(imageTarget.view.state, imageTarget.pos)) items.push({ id: 'insert-table', label: 'Inserir tabela…' })
     }
   } else if (request.hasSelection) {
     items.push({ id: 'copy', label: 'Copiar', hint: `${mod}+C` })
@@ -315,6 +318,7 @@ async function onTextMenu(request: TextMenuRequest): Promise<void> {
   if (choice === 'learn') return api.menu.runTextAction('learn', request.misspelledWord)
   if (choice === 'open-link' && request.linkURL) return void api.shell.openExternal(request.linkURL)
   if (choice === 'insert-image' && imageTarget) return void insertImageFromLibrary(imageTarget.view, imageTarget.pos)
+  if (choice === 'insert-table' && imageTarget) return void insertTableFromMenu(imageTarget.view, imageTarget.pos)
   if (editorLink && choice.startsWith('link-')) {
     const { view, link } = editorLink
     const url = link.url ?? ''

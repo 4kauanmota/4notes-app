@@ -21,6 +21,7 @@ import { requestDeleteCategory as requestDeleteNoteCategory } from '~/composable
 import { CATEGORY_MODULE_LABELS, suggestSharedColor, type CategoryModuleId } from '~/lib/categories/model'
 import type { PaletteColor } from '~/lib/colors'
 import { useCategoriesStore } from '~/stores/categories'
+import { useDocumentsStore } from '~/stores/documents'
 import { useFinanceStore } from '~/stores/finance'
 import { useLinksStore } from '~/stores/links'
 import { useNotesStore } from '~/stores/notes'
@@ -216,6 +217,18 @@ export function pickerSource(module: CategoryModuleId): PickerSource {
         remove: (id) => finance.requestDeleteCategory(id),
       }
     }
+    case 'documents': {
+      const documents = useDocumentsStore()
+      return {
+        module,
+        members: () => documents.state.categories.map(optionOf),
+        others,
+        attach: async (id) => documents.attachCategory(id)?.id ?? null,
+        create: async (name) => documents.addCategory(name, newColor())?.id ?? null,
+        move: (id, delta) => documents.moveCategory(id, delta),
+        remove: (id) => documents.requestDeleteCategory(id),
+      }
+    }
     case 'links': {
       const links = useLinksStore()
       return {
@@ -257,6 +270,6 @@ export function pickerSource(module: CategoryModuleId): PickerSource {
 /** Nome do módulo, para os títulos dos grupos do seletor ("Nas Finanças"). */
 export function moduleGroupLabel(module: CategoryModuleId): string {
   const label = CATEGORY_MODULE_LABELS[module]
-  if (module === 'links') return `Nos ${label}`
+  if (module === 'links' || module === 'documents') return `Nos ${label}`
   return module === 'timer' ? `No ${label}` : `Nas ${label}`
 }

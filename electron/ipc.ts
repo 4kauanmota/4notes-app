@@ -19,7 +19,7 @@ import { getConfig, updateConfig } from './config'
 import { copyDataDir, createWorkspace, dataDirStatus, inspectFolder, prepareDataDir } from './data-dir'
 import { exportPdf, exportText, revealExport } from './export'
 import { AppError, copyImage, fileExists, listFiles, makeDir, readFile, renameFile, revealFile, saveImage, trashFile, writeFile } from './files'
-import { bankAccounts, bankItem, bankStatus, bankTransactions, configureBank, forgetBank } from './bank'
+import { openDocument, readDocument, saveDocument } from './documents'
 import { adoptIntoLibrary, listLibrary, removeFromLibrary, uploadToLibrary } from './library'
 import { fetchLinkMeta, findBrowserSources, pickBookmarksFile, readBrowserBookmarks, saveDataIcon } from './links'
 import { APP_ORIGIN } from './protocol'
@@ -151,6 +151,11 @@ export function registerIpc(context: IpcContext): void {
   handle(IPC.imagesCopy, (_event, from: unknown, to: unknown) => copyImage(requireDataDir(), from, to))
   handle(IPC.attachmentsSaveImage, (_event, data: unknown, mime: unknown) => saveImage(requireDataDir(), data, mime))
 
+  // ── Documentos (1.7.3) ──
+  handle(IPC.documentsSave, (_event, name: unknown, data: unknown) => saveDocument(requireDataDir(), name, data))
+  handle(IPC.documentsRead, (_event, file: unknown) => readDocument(requireDataDir(), file))
+  handle(IPC.documentsOpen, (_event, file: unknown) => openDocument(requireDataDir(), file))
+
   // ── Biblioteca de imagens ──
   handle(IPC.libraryList, () => listLibrary(requireDataDir()))
   handle(IPC.libraryUpload, (event) => uploadToLibrary(requireDataDir(), BrowserWindow.fromWebContents(event.sender)))
@@ -170,23 +175,6 @@ export function registerIpc(context: IpcContext): void {
   handle(IPC.linksBrowsers, () => findBrowserSources())
   handle(IPC.linksReadBrowser, (_event, id: unknown) => readBrowserBookmarks(id))
   handle(IPC.linksPickFile, (event) => pickBookmarksFile(BrowserWindow.fromWebContents(event.sender)))
-
-  // ── Bancos (Meu Pluggy, 1.7.2): a mensagem do erro vai sem o nome técnico ──
-  const bank =
-    <T,>(fn: (...args: any[]) => Promise<T>) =>
-    async (_event: Electron.IpcMainInvokeEvent, ...args: any[]): Promise<T> => {
-      try {
-        return await fn(...args)
-      } catch (error) {
-        throw new Error(error instanceof Error ? error.message : String(error))
-      }
-    }
-  handle(IPC.bankStatus, bank(bankStatus))
-  handle(IPC.bankConfigure, bank(configureBank))
-  handle(IPC.bankForget, bank(forgetBank))
-  handle(IPC.bankItem, bank(bankItem))
-  handle(IPC.bankAccounts, bank(bankAccounts))
-  handle(IPC.bankTransactions, bank(bankTransactions))
 
   // ── Sistema ──
   handle(IPC.launchAtLogin, () => launchAtLogin())

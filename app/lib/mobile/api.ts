@@ -33,11 +33,10 @@ import * as library from '#shared/library'
 import { fetchLinkMetaWith, iconFileBase, sniffImage, validLinkUrl, type Fetched, type IconFormat } from '#shared/link-meta'
 import { confirmDialog } from '~/composables/useDialog'
 import { pickFolder } from '~/composables/useFolderPicker'
-import { readLocalValue, writeLocalValue } from '~/lib/storage/device-state'
+import { readLocalValue, removeLocalValue, writeLocalValue } from '~/lib/storage/device-state'
 import { createWorkspace, copyDataDir, dataDirStatus, inspectFolder, prepareDataDir } from './data-dir'
 import { cleanPath, dirnameFs, FsError, isInside, joinFs, type FsDriver } from './fs'
 import type { FourNotesNative } from './native'
-import { createMobileBank } from './bank'
 import { createMobileUpdates, type UpdaterNative } from './updates'
 import { pickFiles } from './pick-files'
 import { WorkspaceFiles } from './workspace'
@@ -222,6 +221,10 @@ export async function createMobileApi(options: MobileOptions): Promise<FourNotes
     void SystemBars.setStyle({ style: dark ? SystemBarsStyle.Dark : SystemBarsStyle.Light }).catch(() => undefined)
   }
 
+  // 1.7.3: a conexão com bancos (Meu Pluggy, 1.7.2) saiu; as credenciais guardadas saem junto
+  removeLocalValue('bank-credentials')
+  removeLocalValue('test-pluggy-url')
+
   const savedTheme = readLocalValue('theme')
   const notSupported = () => Promise.reject(new FsError('ENOTSUP', 'Não disponível no celular.'))
   const noLaunch: LaunchAtLogin = { supported: false, enabled: false, reason: 'platform' }
@@ -239,7 +242,6 @@ export async function createMobileApi(options: MobileOptions): Promise<FourNotes
 
   return {
     bootstrap,
-    bank: createMobileBank({ test: options.test }),
     updates: options.updater
       ? createMobileUpdates({ repository: options.updatesRepository ?? '', version: options.version, native: options.updater, test: options.test })
       : undefined,
@@ -308,6 +310,10 @@ export async function createMobileApi(options: MobileOptions): Promise<FourNotes
     },
     attachments: {
       saveImage: async (data, mime) => requireWorkspace().saveImage(data, mime),
+    },
+    documents: {
+      save: async (name, data) => requireWorkspace().saveDocument(name, data),
+      read: async (path) => requireWorkspace().readDocument(path),
     },
     library: {
       list: async () => library.listLibrary(libraryIo()),

@@ -1,9 +1,11 @@
 // Somente para os testes automatizados (FOURNOTES_TEST=1): expõe os stores na janela
 // para que os testes consigam inspecionar o estado. Não faz nada no uso normal.
+import { EditorView } from '@codemirror/view'
 import { handleBack } from '~/composables/useBackButton'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 import { useAppStore } from '~/stores/app'
 import { useCategoriesStore } from '~/stores/categories'
+import { useDocumentsStore } from '~/stores/documents'
 import { useFinanceStore } from '~/stores/finance'
 import { useLinksStore } from '~/stores/links'
 import { useMindmapStore } from '~/stores/mindmap'
@@ -23,10 +25,13 @@ export default defineNuxtPlugin(() => {
     links: useLinksStore(),
     timer: useTimerStore(),
     finance: useFinanceStore(),
+    documents: useDocumentsStore(),
     categories: useCategoriesStore(),
     modules: useModulesStore(),
     settings: useSettingsStore(),
     /** O "voltar" do Android (devolve false se não havia nada para voltar). */
     back: handleBack,
+    /** Os editores na tela (CodeMirror), para os testes escolherem um trecho do texto. */
+    editors: () => [...document.querySelectorAll<HTMLElement>('.cm-editor')].map((element) => EditorView.findFromDOM(element)).filter(Boolean),
   }
 })

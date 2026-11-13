@@ -109,12 +109,6 @@ describe('categorizador', () => {
     expect(suggest({ description: 'farmácia do bairro', kind: 'expense' })).toEqual({ id: 'pix', source: 'name' })
   })
 
-  it('pistas extras (estabelecimento, categoria do banco) ajudam', () => {
-    const suggest = createCategorizer([], candidates)
-    expect(suggest({ description: 'PAG*JOSE', kind: 'expense', hints: ['Food and drinks'] })?.id).toBe('food')
-    expect(suggest({ description: 'COMPRA 1234', kind: 'expense', hints: ['Gas stations'] })?.id).toBe('car')
-  })
-
   it('categoria padrão só quando nada combina, e só para gastos', () => {
     const suggest = createCategorizer([], candidates, { defaultCategory: 'home' })
     expect(suggest({ description: 'Coisa qualquer', kind: 'expense' })).toEqual({ id: 'home', source: 'default' })

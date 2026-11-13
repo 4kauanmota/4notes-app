@@ -191,6 +191,21 @@ function applyToSegment(state: EditorState, seg: Segment, elements: FormatElemen
   const inner: ChangeSpec[] = []
   const after: ChangeSpec[] = []
   for (const el of merge) inner.push({ from: el.from, to: el.openTo }, { from: el.closeFrom, to: el.to })
+  if (format === 'code') {
+    // Dentro de `código` o Markdown não formata: as marcações escondidas do trecho apareceriam
+    // como texto ("**", "<u>", o endereço do link). Fica só o texto visível, como no bloco de
+    // código; um formato cortado pelo trecho fecha antes dele ou reabre depois (1.7.3).
+    for (const el of elements) {
+      if (el.format === 'code' || el.to <= seg.from || el.from >= seg.to) continue
+      // O formato envolve o trecho todo: `código` fica dentro dele (**`x`** é negrito)
+      if (el.openTo <= seg.from && seg.to <= el.closeFrom) continue
+      const { left, right } = splitAround(state, elements, el, seg)
+      if (seg.from <= el.openTo || left === null) inner.push({ from: el.from, to: el.openTo })
+      else before.push({ from: left, insert: state.sliceDoc(el.closeFrom, el.to) })
+      if (el.closeFrom <= seg.to || right === null) inner.push({ from: el.closeFrom, to: el.to })
+      else after.push({ from: right, insert: state.sliceDoc(el.from, el.openTo) })
+    }
+  }
   for (const el of recolor) {
     const { left, right } = splitAround(state, elements, el, seg)
     if (left !== null) before.push({ from: left, insert: state.sliceDoc(el.closeFrom, el.to) })

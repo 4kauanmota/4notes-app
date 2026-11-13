@@ -1,17 +1,17 @@
 /**
  * Os módulos do 4notes num lugar só: nome, ícone, rota, atalho e o tutorial.
  *
- * O menu lateral, as Configurações (módulos ativos), os atalhos Ctrl+1…6 e os
+ * O menu lateral, as Configurações (módulos ativos), os atalhos Ctrl+1…7 e os
  * Tutoriais leem esta lista. Para criar um módulo novo, basta acrescentá-lo aqui
  * (o tutorial é obrigatório) — ele aparece em todos esses lugares.
  *
  * Também ficam aqui as regras puras das preferências dos módulos (quais estão
  * ativos, em que ordem e como aparecem no menu), guardadas em .4notes/app.json
  * (stores/modules.ts). A ordem de MODULES é a ordem padrão do menu; os atalhos
- * Ctrl+1…6 continuam presos a cada módulo, qualquer que seja a ordem.
+ * Ctrl+1…7 continuam presos a cada módulo, qualquer que seja a ordem.
  */
 
-export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links' | 'timer' | 'finance'
+export type ModuleId = 'notes' | 'tasks' | 'mindmap' | 'links' | 'timer' | 'finance' | 'documents'
 
 /** Um atalho mostrado no tutorial. "Mod" vira Ctrl (Windows/Linux) ou ⌘ (macOS). */
 export interface TutorialShortcut {
@@ -63,7 +63,8 @@ export const MODULES: readonly ModuleDefinition[] = [
       purpose: 'Anotações rápidas em abas, como um Bloco de Notas organizado. Cada nota é um arquivo .md no seu workspace.',
       features: [
         'Clique numa nota: abre na aba temporária (em itálico). Duplo clique: aba fixa.',
-        'Selecione um texto para formatar: negrito, listas, link, bloco de texto ou de código…',
+        'Selecione um texto para formatar: negrito, listas, link, bloco de texto…',
+        'Bloco de texto num trecho de código (ou JSON) já vira bloco de código, na linguagem dele.',
         'Cole prints e código: viram imagem e bloco de código.',
         'Blocos de código e de texto: copiar, remover e tela cheia (com “Quebrar linhas”).',
         'No código, as setas recolhem e expandem trechos; linhas finas mostram os níveis.',
@@ -74,6 +75,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         '@ menciona notas, mapas, tarefas, links e registros do Timer; clique na menção para abrir.',
         '# menciona uma categoria (ou cria uma nova); clique para ver os registros dela.',
         'Cor do texto e cor do marca-texto (A e marcador na barra) funcionam também em listas.',
+        'Tabelas: botão direito › “Inserir tabela…”; colunas de número somam na linha Total.',
         'Arraste as abas para mudar a ordem.',
       ],
       contextMenu: [
@@ -82,7 +84,8 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Nota na lista: “Abrir em aba fixa”.',
         'Categoria: nova nota nela, editar, recolher, excluir.',
         'Pasta: abrir a nota mais recente dela ou criar uma nota já dentro dela.',
-        'Texto: inserir imagem, corretor, abrir/editar/remover link.',
+        'Texto: inserir imagem, inserir tabela, corretor, abrir/editar/remover link.',
+        'Célula da tabela: inserir, mover e remover linha; tipo, total e posição da coluna.',
       ],
       tips: [
         'A primeira linha é o título — e o nome do arquivo.',
@@ -102,8 +105,13 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Excluir manda o arquivo para a Lixeira (no celular, para .4notes/trash).',
         'Imagens que só a nota excluída usava saem da biblioteca quando o Desfazer some.',
         'Recolher um trecho de código só esconde na tela: o arquivo não muda.',
+        '“Código” na barra deixa só o texto: negrito, cor e links do trecho saem.',
         'Formatar não muda o que o código faz; Python, GDScript e outras ficam como estão.',
         'Código com erro de sintaxe não é formatado: o aviso diz a linha.',
+        'Na tabela, ▾ no cabeçalho escolhe Texto ou Número e se a coluna soma no Total.',
+        'Tab anda pelas células (na última, cria uma linha); Esc volta para o texto.',
+        'Célula vazia ou com texto numa coluna de número fica fora da soma.',
+        'A tabela é Markdown comum: abre igual no Obsidian, com a linha Total.',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Nova nota' },
@@ -129,6 +137,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Num link, toque nele e depois em ↗ na barra para abrir no navegador.',
         'Toque prolongado numa nota, aba ou categoria abre o menu (categoria, exportar…).',
         'Toque prolongado numa pasta: abrir a nota mais recente ou criar uma nota nela.',
+        'Tabela: o botão de tabela na barra de formatação; ⋯ embaixo dela mexe em linhas e colunas.',
       ],
     },
   },
@@ -340,7 +349,6 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Painel: saldo realizado e projetado, e os gráficos dos gastos pagos.',
         'Importar extrato (CSV ou OFX): prévia, categorias sugeridas e duplicados marcados.',
         'Categoria automática: “iFood” vai para a sua de alimentação; dá para trocar antes.',
-        'Bancos conectados (Meu Pluggy): “Buscar no banco” traz as transações, sem duplicar.',
         'Lançamentos podem ser mencionados com @ nas notas e nas tarefas; “Ver menções” mostra onde.',
       ],
       contextMenu: [
@@ -360,11 +368,6 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Os lembretes aparecem com o app aberto (e no Windows, como aviso do sistema).',
         '# nas observações menciona uma categoria.',
         'Categoria padrão para o que não for reconhecido: Configurações › Módulos › Finanças.',
-        'Conectar bancos: Configurações › Módulos › Finanças › Conexões bancárias.',
-        'A senha do banco nunca passa pelo 4notes: você autoriza no próprio banco.',
-        'Com o cartão conectado, o pagamento da fatura não entra (as compras já entram).',
-        'Transações ainda pendentes no banco entram na próxima busca.',
-        'Busca no banco errada? O aviso tem Desfazer (só o que veio daquela busca sai).',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Novo lançamento (vai para o valor)' },
@@ -378,6 +381,53 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Toque num lançamento para abrir; toque prolongado: pagar, categoria, excluir.',
         'O número vermelho em Contas são as vencidas.',
         'No celular, o teclado numérico abre no campo do valor.',
+      ],
+    },
+  },
+  {
+    id: 'documents',
+    label: 'Docs',
+    name: 'Documentos',
+    icon: 'documents',
+    route: '/documents',
+    key: '7',
+    description: 'Guarde, organize e leia seus documentos (PDF, imagens, texto), com anotações nos PDFs.',
+    tutorial: {
+      purpose: 'Um lugar para guardar documentos pessoais, organizar por categoria e ler sem sair do app.',
+      features: [
+        '“Importar” (ou arraste arquivos para a tela) guarda uma cópia no workspace.',
+        'PDF, imagens e textos abrem aqui; outros formatos abrem no programa do sistema.',
+        'Categorias à esquerda: escolha uma para ver só os documentos dela.',
+        'Marque vários documentos para mudar a categoria ou excluir todos de uma vez.',
+        'No PDF: caneta, marca-texto, texto e borracha, por cima do documento.',
+        'Selecione um texto do PDF e use “Marcar” para destacar o trecho.',
+        'As anotações ficam salvas sozinhas; o PDF original não muda.',
+      ],
+      contextMenu: [
+        'Documento: abrir, renomear, categoria, Explorador, excluir.',
+        'Categoria: editar, mover para cima/baixo, excluir.',
+      ],
+      tips: [
+        'Os arquivos ficam em documents/arquivos/ do workspace; as anotações, em documents/anotacoes/.',
+        'Excluir manda o arquivo e as anotações para a Lixeira.',
+        'Importar o mesmo arquivo de novo cria outra cópia (“nome (2).pdf”).',
+        'Na barra do PDF, ‹ e › desfazem e refazem a última anotação.',
+        'A borracha apaga o traço inteiro em que você passar.',
+        'As categorias são as do app: a mesma pode ser usada nas Notas, nas Finanças…',
+      ],
+      shortcuts: [
+        { keys: ['Mod', 'O'], label: 'Importar documentos' },
+        { keys: ['Mod', 'F'], label: 'Buscar documentos' },
+        { keys: ['Esc'], label: 'Fechar o documento' },
+        { keys: ['Mod', 'Z'], label: 'Desfazer a anotação (no PDF)' },
+        { keys: ['Mod', 'Y'], label: 'Refazer a anotação' },
+        { keys: ['Mod', '+ / -'], label: 'Aproximar / afastar o documento' },
+        { keys: ['V / P / H / T / E'], label: 'Selecionar, caneta, marca-texto, texto, borracha' },
+      ],
+      touch: [
+        'Toque num documento para abrir; ‹ volta para a lista.',
+        'Com a caneta ou o marca-texto, o dedo desenha; em “Selecionar”, o dedo rola.',
+        'Toque prolongado num documento: renomear, categoria, excluir.',
       ],
     },
   },

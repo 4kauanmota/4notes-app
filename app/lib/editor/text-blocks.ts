@@ -3,10 +3,10 @@
  * formatação). É sempre manual — nada vira bloco de texto sozinho (colar continua
  * criando bloco só para código reconhecido, ver paste.ts).
  *
- * Bloco de código (1.6.3): o botão "Bloco de código", ao lado, faz o mesmo com uma
- * cerca de código — ```linguagem, com a linguagem reconhecida pelo conteúdo
- * (code-detect.ts) ou sem linguagem. O nome no cabeçalho do bloco troca a linguagem
- * e também o tipo (texto ↔ código), em qualquer um dos dois.
+ * Um botão só (1.7.3): o "Bloco de código" da 1.6.3 saiu da barra. Quando o trecho é
+ * código (o mesmo reconhecimento de quando você cola: JavaScript, JSON, GDScript…),
+ * o bloco já nasce de código, na linguagem reconhecida; senão, é um bloco de texto. O
+ * nome no cabeçalho do bloco troca a linguagem e também o tipo (texto ↔ código).
  *
  * - O bloco guarda o texto como ele aparece na tela, sem nenhum tratamento: sem
  *   linguagem, sem cores, sem mexer na indentação. A formatação escondida (negrito,
@@ -25,7 +25,7 @@ import { EditorSelection, type EditorState, type Line, type TransactionSpec } fr
 import type { EditorView } from '@codemirror/view'
 import { noteToPlainText } from '../notes/export'
 import { codeBlocks } from './code-blocks'
-import { guessLanguage } from './code-detect'
+import { detectCode, guessLanguage } from './code-detect'
 import { findElements, hasContent, hasHiddenMarkup, type FormatElement } from './elements'
 import { balancedSlice } from './hidden-markup'
 import { editorHost } from './host'
@@ -124,6 +124,30 @@ export function textBlockChange(state: EditorState, noteDir: string): Transactio
 }
 
 /**
+ * O botão "Bloco" da barra (1.7.3): código reconhecido vira bloco de código na linguagem
+ * dele (JSON também numa linha só); o resto, bloco de texto.
+ */
+export function smartBlockChange(state: EditorState, noteDir: string): TransactionSpec | null {
+  return blockChange(state, noteDir, (content) => {
+    const detected = detectCode(content)
+    if (detected) return detected.language
+    return isJsonValue(content) ? 'json' : TEXT_BLOCK_INFO
+  })
+}
+
+/** Um objeto ou uma lista JSON (também numa linha só, que o colar não reconhece). */
+function isJsonValue(text: string): boolean {
+  const trimmed = text.trim()
+  if (!/^[[{][\s\S]*[\]}]$/.test(trimmed)) return false
+  try {
+    const value: unknown = JSON.parse(trimmed)
+    return typeof value === 'object' && value !== null
+  } catch {
+    return false
+  }
+}
+
+/**
  * O mesmo, para um bloco de código: a linguagem é a reconhecida pelo conteúdo
  * (JavaScript, Python, GDScript…) ou nenhuma — troca-se depois pelo cabeçalho do bloco.
  */
@@ -210,19 +234,10 @@ function blockChange(state: EditorState, noteDir: string, infoFor: (content: str
   }
 }
 
-/** Botão "Bloco de texto" da barra de formatação. */
+/** Botão "Bloco de texto" da barra de formatação (código reconhecido vira bloco de código). */
 export function wrapInTextBlock(view: EditorView): boolean {
   const host = view.state.facet(editorHost)
-  const spec = textBlockChange(view.state, host?.assetBase() ?? 'notes')
-  if (!spec) return false
-  view.dispatch(spec)
-  return true
-}
-
-/** Botão "Bloco de código" da barra de formatação. */
-export function wrapInCodeBlock(view: EditorView): boolean {
-  const host = view.state.facet(editorHost)
-  const spec = codeBlockChange(view.state, host?.assetBase() ?? 'notes')
+  const spec = smartBlockChange(view.state, host?.assetBase() ?? 'notes')
   if (!spec) return false
   view.dispatch(spec)
   return true

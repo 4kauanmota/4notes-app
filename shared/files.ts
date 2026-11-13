@@ -8,7 +8,7 @@
  */
 
 /** Pastas que todo workspace tem (e que mostram que uma pasta já tem dados do 4notes). */
-export const DATA_FOLDERS = ['notes', 'tasks', 'mindmap', 'links', 'timer', 'finance', 'categories', 'attachments', '.4notes'] as const
+export const DATA_FOLDERS = ['notes', 'tasks', 'mindmap', 'links', 'timer', 'finance', 'documents', 'categories', 'attachments', '.4notes'] as const
 
 /** Pasta das imagens do workspace (a biblioteca de imagens). */
 export const ATTACHMENTS_DIR = 'attachments'
@@ -94,6 +94,36 @@ export function libraryName(fileName: string): { base: string; extension: string
       .slice(0, 60)
       .replace(/[. ]+$/, '') || 'imagem'
   return { base: RESERVED.test(base) ? `${base}_` : base, extension: extension === 'jpeg' ? 'jpg' : extension }
+}
+
+// ── Documentos (1.7.3) ──────────────────────────────────────────────────────
+
+/** Pasta dos arquivos do módulo Documentos (o índice e as anotações ficam em documents/). */
+export const DOCUMENT_FILES_DIR = 'documents/arquivos'
+
+/** Tamanho máximo de um documento importado. */
+export const MAX_DOCUMENT_BYTES = 200 * 1024 * 1024
+
+/** Nome do documento na pasta a partir do nome original ("Contrato: 2026.PDF" → "Contrato 2026", "pdf"). */
+export function documentFileName(fileName: string): { base: string; extension: string } {
+  const name = fileName.split(/[\\/]/).pop() ?? fileName
+  const extension = extensionOf(name).replace(/[^a-z0-9]/g, '').slice(0, 10)
+  const withoutExtension = extension ? name.slice(0, name.lastIndexOf('.')) : name
+  const base =
+    withoutExtension
+      .normalize('NFC')
+      .replace(/[<>:"/\\|?*\u0000-\u001f\u007f#%]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^\.+/, '')
+      .slice(0, 80)
+      .replace(/[. ]+$/, '') || 'documento'
+  return { base: RESERVED.test(base) ? `${base}_` : base, extension }
+}
+
+/** "contrato.pdf", "contrato (2).pdf"… (o primeiro nome livre). */
+export function documentCandidate(base: string, extension: string, attempt: number): string {
+  return `${base}${attempt > 1 ? ` (${attempt})` : ''}${extension ? `.${extension}` : ''}`
 }
 
 // ── base64 ──────────────────────────────────────────────────────────────────

@@ -43,7 +43,8 @@ import { stripImages } from '~/lib/editor/markup'
 import type { CodeEditRequest, EditorHost, MentionHost } from '~/lib/editor/host'
 import { refreshMentions } from '~/lib/editor/mentions'
 import { buildExtensions, minimalChange, type CursorInfo } from '~/lib/editor/setup'
-import { canWrapInTextBlock, wrapInCodeBlock, wrapInTextBlock } from '~/lib/editor/text-blocks'
+import { insertTableFromMenu } from '~/lib/editor/tables'
+import { canWrapInTextBlock, wrapInTextBlock } from '~/lib/editor/text-blocks'
 import { desktop, hasDesktopApi } from '~/lib/platform'
 
 const props = defineProps<{
@@ -198,9 +199,8 @@ const applyColor = (color: PaletteColor | null) => run((v) => (color ? toggleFor
 /** Cor do marca-texto (1.7.1): "default" = o padrão (==), uma cor da paleta, ou null = tirar. */
 const applyHighlight = (color: string | null) => run((v) => (color ? toggleFormat(v, 'highlight', color) : clearHighlight(v)))
 const applyLine = (format: LineFormat) => run((v) => toggleLineFormat(v, format))
-/** "Bloco de texto": a seleção vira um bloco (só por aqui — nada vira bloco de texto sozinho). */
+/** "Bloco de texto": a seleção vira um bloco (só por aqui; código reconhecido vira bloco de código). */
 const applyTextBlock = () => run(wrapInTextBlock)
-const applyCodeBlock = () => run(wrapInCodeBlock)
 
 // ── Links (o endereço é editado na própria barra) ───────────────────────────
 
@@ -241,6 +241,10 @@ function openActiveLink(url: string): void {
 }
 
 /** Toque: imagem da biblioteca (no desktop fica no botão direito do texto). */
+function insertTableHere(): void {
+  if (view) insertTableFromMenu(view)
+}
+
 function insertImage(): void {
   if (!view) return
   insertImageFromLibrary(view)
@@ -315,6 +319,29 @@ async function chooseLanguage(current: string): Promise<string | null> {
   return typed === null ? null : typed
 }
 
+/** Tamanho de uma tabela nova (1.7.3): "colunas × linhas", como "2 × 4". */
+async function chooseTableSize(): Promise<{ columns: number; rows: number } | null> {
+  const parse = (text: string) => {
+    const match = /^\s*(\d{1,3})\s*[x×*]\s*(\d{1,3})\s*$/i.exec(text)
+    return match ? { columns: Number(match[1]), rows: Number(match[2]) } : null
+  }
+  const typed = await promptDialog({
+    title: 'Inserir tabela',
+    label: 'Colunas × linhas (ex.: 2 × 4)',
+    value: '2 × 3',
+    confirmLabel: 'Inserir',
+    icon: 'table',
+    validate: (text) => {
+      const size = parse(text)
+      if (!size) return 'Escreva as colunas e as linhas, como 2 × 4.'
+      if (size.columns < 1 || size.columns > 20) return 'De 1 a 20 colunas.'
+      if (size.rows < 1 || size.rows > 500) return 'De 1 a 500 linhas.'
+      return null
+    },
+  })
+  return typed === null ? null : parse(typed)
+}
+
 // ── Ligação com o app (imagens, código em tela cheia, avisos) ─────────────────
 
 const codeRequest = shallowRef<CodeEditRequest | null>(null)
@@ -350,6 +377,8 @@ const appHost: EditorHost = {
     codeRequest.value = request
   },
   chooseLanguage,
+  menu: (items, anchor) => showContextMenu(items as MenuItemSpec[], anchor),
+  chooseTableSize,
   notify: (message, undo) => {
     showToast({ message, icon: 'check', action: undo ? { label: 'Desfazer', run: undo } : undefined })
   },
@@ -526,8 +555,8 @@ defineExpose({
       @close-link="closeLink"
       @clear="run(clearFormatting)"
       @text-block="applyTextBlock"
-      @code-block="applyCodeBlock"
       @image="insertImage"
+      @table="insertTableHere"
       @open-url="openActiveLink"
     />
     <CodeFullscreen v-if="codeRequest" :request="codeRequest" @close="closeCode" />

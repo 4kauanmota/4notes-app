@@ -34,8 +34,6 @@ export interface CategoryCandidate {
 export interface CategorizeInput {
   description: string
   kind: EntryKind
-  /** Outras pistas: nome do estabelecimento, categoria dada pelo banco… */
-  hints?: readonly (string | null | undefined)[]
 }
 
 export type SuggestionSource = 'history' | 'keyword' | 'name' | 'default'
@@ -52,7 +50,7 @@ interface Topic {
   kind: EntryKind | 'both'
   /** Nomes de categoria que representam o assunto. */
   names: string[]
-  /** Termos que reconhecem o assunto (estabelecimentos, palavras, categorias dos bancos em inglês). */
+  /** Termos que reconhecem o assunto (estabelecimentos e palavras). */
   terms: string[]
   /** Assunto mais geral para quando você não tem uma categoria deste. */
   parent?: string
@@ -75,187 +73,135 @@ export const TOPICS: readonly Topic[] = [
     id: 'restaurante',
     kind: 'expense',
     names: ['restaurante', 'restaurantes', 'comer fora', 'bares e restaurantes', 'lanches', 'lanche', 'eating out'],
-    terms: [
-      'restaurante', 'restaurant', 'lanchonete', 'lanche', 'lanches', 'hamburgueria', 'churrascaria', 'pizzaria', 'pizza', 'sushi',
-      'temakeria', 'cafeteria', 'padaria', 'panificadora', 'sorveteria', 'acai', 'boteco', 'choperia', 'pastelaria', 'almoco',
-      'jantar', 'cafe da manha', 'mcdonalds', 'mc donalds', 'mcdonald s', 'burger king', 'burguer king', 'subway', 'habibs',
-      'habib s', 'giraffas', 'outback', 'madero', 'spoleto', 'starbucks', 'kfc', 'popeyes', 'dominos', 'domino s', 'pizza hut',
-      'bobs', 'bob s', 'china in box', 'coco bambu', 'jeronimo', 'cacau show', 'kopenhagen', 'eating out', 'fast food',
-    ],
+    terms: ['restaurante', 'restaurant', 'lanchonete', 'lanche', 'lanches', 'hamburgueria', 'churrascaria', 'pizzaria', 'pizza', 'sushi', 'temakeria', 'cafeteria', 'padaria', 'panificadora', 'sorveteria', 'acai', 'boteco', 'choperia', 'pastelaria', 'almoco', 'jantar', 'cafe da manha', 'mcdonalds', 'mc donalds', 'mcdonald s', 'burger king', 'burguer king', 'subway', 'habibs', 'habib s', 'giraffas', 'outback', 'madero', 'spoleto', 'starbucks', 'kfc', 'popeyes', 'dominos', 'domino s', 'pizza hut', 'bobs', 'bob s', 'china in box', 'coco bambu', 'jeronimo', 'cacau show', 'kopenhagen', 'eating out', 'fast food'],
     parent: 'alimentacao',
   },
   {
     id: 'mercado',
     kind: 'expense',
     names: ['mercado', 'supermercado', 'supermercados', 'compras de mercado', 'feira', 'hortifruti', 'groceries', 'grocery', 'despensa'],
-    terms: [
-      'supermercado', 'supermercados', 'hipermercado', 'mercearia', 'hortifruti', 'sacolao', 'atacarejo', 'atacadao', 'assai',
-      'carrefour', 'pao de acucar', 'gpa', 'sams club', 'makro', 'zaffari', 'angeloni', 'condor', 'savegnago', 'guanabara',
-      'prezunic', 'verdemar', 'super nosso', 'supernosso', 'mart minas', 'villefort', 'apoio mineiro', 'bh supermercados',
-      'epa supermercados', 'bretas', 'comper', 'fort atacadista', 'tenda atacado', 'st marche', 'oba hortifruti', 'dia supermercado',
-      'groceries', 'supermarket',
-    ],
+    terms: ['supermercado', 'supermercados', 'hipermercado', 'mercearia', 'hortifruti', 'sacolao', 'atacarejo', 'atacadao', 'assai', 'carrefour', 'pao de acucar', 'gpa', 'sams club', 'makro', 'zaffari', 'angeloni', 'condor', 'savegnago', 'guanabara', 'prezunic', 'verdemar', 'super nosso', 'supernosso', 'mart minas', 'villefort', 'apoio mineiro', 'bh supermercados', 'epa supermercados', 'bretas', 'comper', 'fort atacadista', 'tenda atacado', 'st marche', 'oba hortifruti', 'dia supermercado'],
     parent: 'alimentacao',
   },
   {
     id: 'alimentacao',
     kind: 'expense',
     names: ['alimentacao', 'comida', 'food', 'refeicao', 'refeicoes', 'comer', 'alimentos', 'food and drinks', 'comida e bebida'],
-    terms: ['food', 'food and drinks', 'refeicao', 'comida', 'alimentacao'],
+    terms: ['refeicao', 'comida', 'alimentacao'],
   },
   {
     id: 'combustivel',
     kind: 'expense',
     names: ['combustivel', 'gasolina', 'posto', 'postos', 'fuel', 'abastecimento'],
-    terms: [
-      'posto', 'auto posto', 'gasolina', 'etanol', 'diesel', 'combustivel', 'abastecimento', 'shell', 'ipiranga', 'petrobras',
-      'br mania', 'raizen', 'gas station', 'gas stations', 'fuel',
-    ],
+    terms: ['posto', 'auto posto', 'gasolina', 'etanol', 'diesel', 'combustivel', 'abastecimento', 'shell', 'ipiranga', 'petrobras', 'br mania', 'raizen'],
     parent: 'transporte',
   },
   {
     id: 'transporte',
     kind: 'expense',
     names: ['transporte', 'transportes', 'mobilidade', 'locomocao', 'transport', 'transportation', 'carro', 'uber', 'corridas'],
-    terms: [
-      'uber', 'uber trip', '99app', '99 app', '99 pop', '99pop', '99 taxi', 'cabify', 'indrive', 'taxi', 'metro', 'onibus',
-      'bilhete unico', 'sptrans', 'bhtrans', 'move metropolitano', 'cartao otimo', 'cartao bom', 'riocard', 'estacionamento', 'estapar',
-      'zona azul', 'pedagio', 'sem parar', 'conectcar', 'veloe', 'move mais', 'taggy', 'transportation', 'taxi and ride hailing',
-      'ride hailing', 'parking', 'tolls', 'public transportation',
-    ],
+    terms: ['uber', 'uber trip', '99app', '99 app', '99 pop', '99pop', '99 taxi', 'cabify', 'indrive', 'taxi', 'metro', 'onibus', 'bilhete unico', 'sptrans', 'bhtrans', 'move metropolitano', 'cartao otimo', 'cartao bom', 'riocard', 'estacionamento', 'estapar', 'zona azul', 'pedagio', 'sem parar', 'conectcar', 'veloe', 'move mais', 'taggy'],
   },
   {
     id: 'farmacia',
     kind: 'expense',
     names: ['farmacia', 'remedios', 'medicamentos', 'drogaria', 'pharmacy'],
-    terms: [
-      'farmacia', 'drogaria', 'drogasil', 'droga raia', 'drogaraia', 'raia', 'pague menos', 'panvel', 'drogaria araujo', 'ultrafarma',
-      'drogarias pacheco', 'drogaria sao paulo', 'venancio', 'remedio', 'remedios', 'pharmacy', 'drugstore',
-    ],
+    terms: ['farmacia', 'drogaria', 'drogasil', 'droga raia', 'drogaraia', 'raia', 'pague menos', 'panvel', 'drogaria araujo', 'ultrafarma', 'drogarias pacheco', 'drogaria sao paulo', 'venancio', 'remedio', 'remedios'],
     parent: 'saude',
   },
   {
     id: 'academia',
     kind: 'expense',
     names: ['academia', 'esportes', 'esporte', 'fitness', 'treino', 'gym'],
-    terms: ['academia', 'smart fit', 'smartfit', 'bluefit', 'bio ritmo', 'selfit', 'gympass', 'wellhub', 'totalpass', 'crossfit', 'gym', 'sports'],
+    terms: ['academia', 'smart fit', 'smartfit', 'bluefit', 'bio ritmo', 'selfit', 'gympass', 'wellhub', 'totalpass', 'crossfit', 'gym'],
     parent: 'saude',
   },
   {
     id: 'saude',
     kind: 'expense',
     names: ['saude', 'health', 'medico', 'medicos', 'plano de saude', 'bem estar', 'bem-estar'],
-    terms: [
-      'unimed', 'amil', 'hapvida', 'notredame', 'sulamerica saude', 'bradesco saude', 'laboratorio', 'hermes pardini', 'fleury', 'dasa',
-      'clinica', 'consulta', 'dentista', 'odonto', 'odontologia', 'hospital', 'exame', 'exames', 'health', 'healthcare', 'medical',
-    ],
+    terms: ['unimed', 'amil', 'hapvida', 'notredame', 'sulamerica saude', 'bradesco saude', 'laboratorio', 'hermes pardini', 'fleury', 'dasa', 'clinica', 'consulta', 'dentista', 'odonto', 'odontologia', 'hospital', 'exame', 'exames'],
   },
   {
     id: 'contas',
     kind: 'expense',
     names: ['contas', 'contas de casa', 'contas fixas', 'contas da casa', 'utilidades', 'utilities', 'servicos', 'luz', 'energia', 'agua', 'internet', 'telefone', 'celular'],
-    terms: [
-      'cemig', 'enel', 'copel', 'celesc', 'coelba', 'cpfl', 'energisa', 'equatorial', 'neoenergia', 'conta de luz', 'energia eletrica',
-      'sabesp', 'copasa', 'cedae', 'sanepar', 'embasa', 'compesa', 'conta de agua', 'comgas', 'vivo', 'claro', 'tim', 'algar',
-      'brisanet', 'sky', 'conta de internet', 'internet', 'telefone', 'electricity', 'water', 'telecommunications', 'telecom', 'utilities',
-    ],
+    terms: ['cemig', 'enel', 'copel', 'celesc', 'coelba', 'cpfl', 'energisa', 'equatorial', 'neoenergia', 'conta de luz', 'energia eletrica', 'sabesp', 'copasa', 'cedae', 'sanepar', 'embasa', 'compesa', 'conta de agua', 'comgas', 'vivo', 'claro', 'tim', 'algar', 'brisanet', 'sky', 'conta de internet', 'internet', 'telefone'],
     parent: 'moradia',
   },
   {
     id: 'moradia',
     kind: 'expense',
     names: ['moradia', 'casa', 'lar', 'aluguel', 'housing', 'home', 'condominio', 'apartamento'],
-    terms: ['aluguel', 'condominio', 'iptu', 'quinto andar', 'quintoandar', 'imobiliaria', 'leroy merlin', 'telhanorte', 'housing', 'rent', 'home improvement'],
+    terms: ['aluguel', 'condominio', 'iptu', 'quinto andar', 'quintoandar', 'imobiliaria', 'leroy merlin', 'telhanorte'],
   },
   {
     id: 'assinaturas',
     kind: 'expense',
     names: ['assinaturas', 'assinatura', 'streaming', 'subscriptions', 'servicos digitais', 'apps'],
-    terms: [
-      'netflix', 'spotify', 'amazon prime', 'prime video', 'primevideo', 'disney plus', 'disneyplus', 'disney', 'hbo', 'hbo max',
-      'globoplay', 'youtube premium', 'youtubepremium', 'deezer', 'apple com bill', 'icloud', 'google one', 'google storage',
-      'xbox game pass', 'game pass', 'playstation plus', 'ps plus', 'chatgpt', 'openai', 'anthropic', 'claude ai', 'adobe', 'canva',
-      'notion', 'github', 'crunchyroll', 'paramount', 'star plus', 'twitch', 'patreon', 'duolingo', 'microsoft 365', 'office 365',
-      'dropbox', 'video streaming', 'music streaming', 'subscription',
-    ],
+    terms: ['netflix', 'spotify', 'amazon prime', 'prime video', 'primevideo', 'disney plus', 'disneyplus', 'disney', 'hbo', 'hbo max', 'globoplay', 'youtube premium', 'youtubepremium', 'deezer', 'apple com bill', 'icloud', 'google one', 'google storage', 'xbox game pass', 'game pass', 'playstation plus', 'ps plus', 'chatgpt', 'openai', 'anthropic', 'claude ai', 'adobe', 'canva', 'notion', 'github', 'crunchyroll', 'paramount', 'star plus', 'twitch', 'patreon', 'duolingo', 'microsoft 365', 'office 365', 'dropbox'],
     parent: 'lazer',
   },
   {
     id: 'viagem',
     kind: 'expense',
     names: ['viagem', 'viagens', 'travel', 'turismo', 'ferias', 'hospedagem'],
-    terms: [
-      'latam', 'gol linhas', 'voegol', 'azul linhas', 'voeazul', 'decolar', 'booking', 'airbnb', 'hotel', 'hoteis', 'pousada',
-      '123milhas', 'maxmilhas', 'smiles', 'cvc', 'hurb', 'clickbus', 'buser', 'rodoviaria', 'passagem aerea', 'passagens aereas', 'travel',
-      'airport and airlines', 'airlines', 'accommodation', 'lodging',
-    ],
+    terms: ['latam', 'gol linhas', 'voegol', 'azul linhas', 'voeazul', 'decolar', 'booking', 'airbnb', 'hotel', 'hoteis', 'pousada', '123milhas', 'maxmilhas', 'smiles', 'cvc', 'hurb', 'clickbus', 'buser', 'rodoviaria', 'passagem aerea', 'passagens aereas'],
     parent: 'lazer',
   },
   {
     id: 'lazer',
     kind: 'expense',
     names: ['lazer', 'entretenimento', 'diversao', 'entertainment', 'cultura', 'hobbies', 'hobby', 'jogos', 'games', 'cinema', 'role', 'rolê'],
-    terms: [
-      'cinema', 'cinemark', 'kinoplex', 'cinepolis', 'ingresso', 'ingressos', 'ingresso com', 'sympla', 'eventim', 'ticketmaster',
-      'teatro', 'show', 'parque', 'steam', 'steampowered', 'nuuvem', 'playstation', 'nintendo', 'epic games', 'riot games', 'blizzard',
-      'entertainment', 'leisure', 'games',
-    ],
+    terms: ['cinema', 'cinemark', 'kinoplex', 'cinepolis', 'ingresso', 'ingressos', 'ingresso com', 'sympla', 'eventim', 'ticketmaster', 'teatro', 'show', 'parque', 'steam', 'steampowered', 'nuuvem', 'playstation', 'nintendo', 'epic games', 'riot games', 'blizzard', 'games'],
   },
   {
     id: 'compras',
     kind: 'expense',
     names: ['compras', 'shopping', 'compras online', 'roupas', 'vestuario', 'eletronicos', 'compras gerais'],
-    terms: [
-      'mercado livre', 'mercadolivre', 'mercadolibre', 'amazon', 'amazon br', 'amazon marketplace', 'shopee', 'aliexpress', 'shein',
-      'temu', 'magalu', 'magazine luiza', 'americanas', 'casas bahia', 'submarino', 'kabum', 'renner', 'riachuelo', 'c a modas', 'zara',
-      'centauro', 'netshoes', 'decathlon', 'dafiti', 'nike', 'adidas', 'fast shop', 'ponto frio', 'shopping', 'online shopping',
-      'clothing', 'electronics',
-    ],
+    terms: ['mercado livre', 'mercadolivre', 'mercadolibre', 'amazon', 'amazon br', 'amazon marketplace', 'shopee', 'aliexpress', 'shein', 'temu', 'magalu', 'magazine luiza', 'americanas', 'casas bahia', 'submarino', 'kabum', 'renner', 'riachuelo', 'c a modas', 'zara', 'centauro', 'netshoes', 'decathlon', 'dafiti', 'nike', 'adidas', 'fast shop', 'ponto frio', 'shopping'],
   },
   {
     id: 'educacao',
     kind: 'expense',
     names: ['educacao', 'estudos', 'estudo', 'cursos', 'curso', 'education', 'faculdade', 'escola', 'livros'],
-    terms: [
-      'udemy', 'alura', 'coursera', 'rocketseat', 'domestika', 'faculdade', 'universidade', 'escola', 'colegio', 'mensalidade escolar',
-      'curso', 'cursos', 'livraria', 'livraria cultura', 'saraiva', 'kindle', 'education', 'books', 'bookstore',
-    ],
+    terms: ['udemy', 'alura', 'coursera', 'rocketseat', 'domestika', 'faculdade', 'universidade', 'escola', 'colegio', 'mensalidade escolar', 'curso', 'cursos', 'livraria', 'livraria cultura', 'saraiva', 'kindle'],
   },
   {
     id: 'pets',
     kind: 'expense',
     names: ['pets', 'pet', 'animais', 'cachorro', 'gato', 'cachorros', 'gatos'],
-    terms: ['petz', 'cobasi', 'petlove', 'pet shop', 'petshop', 'veterinario', 'veterinaria', 'clinica veterinaria', 'racao', 'pet supplies', 'vet'],
+    terms: ['petz', 'cobasi', 'petlove', 'pet shop', 'petshop', 'veterinario', 'veterinaria', 'clinica veterinaria', 'racao'],
   },
   {
     id: 'beleza',
     kind: 'expense',
     names: ['beleza', 'cuidados pessoais', 'estetica', 'salao', 'higiene', 'autocuidado'],
-    terms: ['salao', 'salao de beleza', 'barbearia', 'barber', 'barbershop', 'boticario', 'o boticario', 'natura', 'sephora', 'avon', 'eudora', 'manicure', 'personal care'],
+    terms: ['salao', 'salao de beleza', 'barbearia', 'barber', 'barbershop', 'boticario', 'o boticario', 'natura', 'sephora', 'avon', 'eudora', 'manicure'],
   },
   {
     id: 'taxas',
     kind: 'expense',
     names: ['taxas', 'tarifas', 'impostos', 'tributos', 'encargos', 'bancos', 'banco', 'juros', 'fees', 'taxes'],
-    terms: ['iof', 'tarifa', 'tarifas', 'anuidade', 'juros', 'multa', 'darf', 'ipva', 'licenciamento', 'detran', 'imposto', 'bank fees', 'taxes', 'tax', 'interests charged'],
+    terms: ['iof', 'tarifa', 'tarifas', 'anuidade', 'juros', 'multa', 'darf', 'ipva', 'licenciamento', 'detran', 'imposto'],
   },
   {
     id: 'presentes',
     kind: 'expense',
     names: ['presentes', 'presente', 'doacoes', 'doacao', 'gifts', 'donations'],
-    terms: ['presente', 'presentes', 'vakinha', 'doacao', 'gifts', 'donations'],
+    terms: ['presente', 'presentes', 'vakinha', 'doacao'],
   },
   {
     id: 'salario',
     kind: 'income',
     names: ['salario', 'renda', 'receita', 'receitas', 'entradas', 'trabalho', 'income', 'salary'],
-    terms: ['salario', 'folha', 'folha de pagamento', 'proventos', 'pro labore', 'prolabore', 'holerite', 'adiantamento salarial', 'salary', 'wages', 'payroll'],
+    terms: ['salario', 'folha', 'folha de pagamento', 'proventos', 'pro labore', 'prolabore', 'holerite', 'adiantamento salarial', 'salary'],
   },
   {
     id: 'investimentos',
     kind: 'both',
     names: ['investimentos', 'investimento', 'poupanca', 'reserva', 'reserva de emergencia', 'investments'],
-    terms: ['aplicacao', 'resgate', 'cdb', 'lci', 'lca', 'tesouro direto', 'tesouro', 'xp investimentos', 'nuinvest', 'btg pactual', 'corretora', 'poupanca', 'investments', 'investment'],
+    terms: ['aplicacao', 'resgate', 'cdb', 'lci', 'lca', 'tesouro direto', 'tesouro', 'xp investimentos', 'nuinvest', 'btg pactual', 'corretora', 'poupanca'],
   },
 ]
 
@@ -370,7 +316,7 @@ export function createCategorizer(
   const fallback = options.defaultCategory && known.has(options.defaultCategory) ? options.defaultCategory : null
 
   return (input) => {
-    const text = [input.description, ...(input.hints ?? [])].filter(Boolean).join(' ')
+    const text = input.description
     const key = descriptionKey(input.description)
     const exact = key ? winner(byDescription.get(`${input.kind}|${key}`)) : null
     if (exact) return { id: exact, source: 'history' }

@@ -31,7 +31,7 @@ import { nameKey } from '../files/filename'
 import { categoryNameProblem } from '../notes/categories'
 
 /** Os módulos com categorias, na ordem de prioridade da passagem da 1.6 (cor, ícone e foto vêm do primeiro). */
-export const CATEGORY_MODULES = ['notes', 'links', 'tasks', 'timer', 'finance'] as const
+export const CATEGORY_MODULES = ['notes', 'links', 'tasks', 'timer', 'finance', 'documents'] as const
 export type CategoryModuleId = (typeof CATEGORY_MODULES)[number]
 
 export const CATEGORY_MODULE_LABELS: Record<CategoryModuleId, string> = {
@@ -40,6 +40,7 @@ export const CATEGORY_MODULE_LABELS: Record<CategoryModuleId, string> = {
   tasks: 'Tarefas',
   timer: 'Timer',
   finance: 'Finanças',
+  documents: 'Documentos',
 }
 
 export interface SharedCategory {

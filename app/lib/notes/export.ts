@@ -17,6 +17,8 @@ import { EditorState, type Line } from '@codemirror/state'
 import { highlightCode, tagHighlighter, tags as t } from '@lezer/highlight'
 import { workspaceFileUrl } from '#shared/ipc'
 import { codeBlocks, type CodeBlock } from '../editor/code-blocks'
+import { sumColumn, tableToPlainText, totalRow } from '../editor/table-model'
+import { noteTables, type TableBlock } from '../editor/tables'
 import { cssColor, findElements, hasHiddenMarkup, highlightPrintColor, type FormatElement } from '../editor/elements'
 import { findLanguage, isTextBlockInfo, languageLabel } from '../editor/languages'
 import { lineMarkerAt } from '../editor/line-markers'
@@ -39,6 +41,8 @@ interface NoteLayout {
   state: EditorState
   /** Blocos de código fechados (as linhas deles saem juntas). */
   blocks: CodeBlock[]
+  /** Tabelas (1.7.3): saem como tabela, com a linha Total. */
+  tables: TableBlock[]
   quoteLines: Set<number>
   ruleLines: Set<number>
 }
@@ -57,7 +61,7 @@ function layoutOf(content: string): NoteLayout {
       return node.name === 'Blockquote' ? undefined : false
     },
   })
-  return { state, blocks: codeBlocks(state), quoteLines, ruleLines }
+  return { state, blocks: codeBlocks(state), tables: noteTables(state), quoteLines, ruleLines }
 }
 
 // ── Trechos de uma linha ─────────────────────────────────────────────────────
@@ -244,11 +248,17 @@ function aloneImage(state: EditorState, line: Line): { src: string; alt: string 
 
 /** A nota em texto puro: sem formatação e sem a sintaxe do Markdown. */
 export function noteToPlainText(content: string, noteDir: string): string {
-  const { state, blocks, ruleLines } = layoutOf(content)
+  const { state, blocks, tables, ruleLines } = layoutOf(content)
   const { doc } = state
   const out: string[] = []
   for (let n = 1; n <= doc.lines; n++) {
     const line = doc.line(n)
+    const table = tables.find((item) => item.from === line.from)
+    if (table) {
+      out.push(...tableToPlainText(table.table))
+      n = doc.lineAt(table.to).number
+      continue
+    }
     const block = blocks.find((item) => item.from === line.from)
     if (block) {
       if (!block.empty) out.push(state.sliceDoc(block.codeFrom, block.codeTo))
@@ -312,11 +322,17 @@ async function highlightedCode(code: string, info: string): Promise<string> {
 
 /** O corpo do HTML da nota: uma linha da nota por linha do documento, como no editor. */
 export async function noteToHtml(content: string, noteDir: string): Promise<string> {
-  const { state, blocks, quoteLines, ruleLines } = layoutOf(content)
+  const { state, blocks, tables, quoteLines, ruleLines } = layoutOf(content)
   const { doc } = state
   const out: string[] = []
   for (let n = 1; n <= doc.lines; n++) {
     const line = doc.line(n)
+    const table = tables.find((item) => item.from === line.from)
+    if (table) {
+      out.push(tableHtml(table))
+      n = doc.lineAt(table.to).number
+      continue
+    }
     const block = blocks.find((item) => item.from === line.from)
     if (block) {
       const code = block.empty ? '' : state.sliceDoc(block.codeFrom, block.codeTo)
@@ -353,6 +369,19 @@ export async function noteToHtml(content: string, noteDir: string): Promise<stri
     }
   }
   return out.join('\n')
+}
+
+/** Uma tabela das notas (1.7.3) no PDF: cabeçalho, linhas e a linha Total. */
+function tableHtml({ table }: TableBlock): string {
+  const cls = (i: number) => (table.columns[i]!.type === 'number' ? ' class="num"' : '')
+  const head = table.columns.map((column, i) => `<th${cls(i)}>${escapeHtml(column.name)}</th>`).join('')
+  const rows = table.rows.map((cells) => `<tr>${cells.map((cell, i) => `<td${cls(i)}>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')
+  const totals = table.columns.some((column) => column.total)
+    ? `<tfoot><tr>${totalRow(table)
+        .map((cell, i) => `<td${cls(i)}>${escapeHtml(table.columns[i]!.total ? sumColumn(table.rows, i).text : cell)}</td>`)
+        .join('')}</tr></tfoot>`
+    : ''
+  return `<table class="table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody>${totals}</table>`
 }
 
 /** Cores do tema claro (assets/css/tokens.css): o PDF é para o papel. */
@@ -407,6 +436,11 @@ img[data-missing] { display: none; }
 .code-head { padding: 3px 14px; border-bottom: 1px solid var(--border); color: var(--text-3); font-size: 8.5pt; font-weight: 600; letter-spacing: 0.01em; }
 .code pre { margin: 0; padding: 6px 14px 8px; font-family: var(--font-mono); font-size: 0.86em; line-height: 1.62; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
 .code.text pre { font-family: inherit; font-size: 1em; }
+.table { width: 100%; margin: 6px 0; border-collapse: collapse; font-size: 0.95em; line-height: 1.45; break-inside: avoid; }
+.table th, .table td { padding: 4px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.table th { background: var(--surface-3); font-weight: 650; }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.table tfoot td { background: var(--accent-soft); border-top: 2px solid var(--accent); font-weight: 700; }
 .tk { color: #7c3aed; } .ts { color: #15803d; } .tn { color: #c2410c; } .tc { color: #8d869b; font-style: italic; }
 .tf { color: #2563eb; } .tt { color: #b45309; } .tp { color: #0f766e; } .tg { color: #be185d; } .tm { color: #9333ea; }
 .tx { color: #db2777; } .td { color: #1f1a2b; } .to { color: #5b5468; } .ti { color: #e5484d; }

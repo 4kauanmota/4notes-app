@@ -70,6 +70,15 @@ export function readLocalValue(name: string): string | null {
   }
 }
 
+export function removeLocalValue(name: string): void {
+  memory.delete(`${PREFIX}${name}`)
+  try {
+    storage()?.removeItem(`${PREFIX}${name}`)
+  } catch {
+    // nada guardado
+  }
+}
+
 export function writeLocalValue(name: string, value: string): void {
   memory.set(`${PREFIX}${name}`, value)
   try {
