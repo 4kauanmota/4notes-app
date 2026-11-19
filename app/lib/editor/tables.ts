@@ -12,6 +12,11 @@
  *   última linha, cria outra), ↑ ↓ trocam de linha, Esc volta para o texto depois da tabela.
  * - Tipo e total de cada coluna, inserir, mover e remover linhas e colunas: o botão da
  *   coluna (▾), o botão ⋯ da tabela (para a célula em que você está) ou o clique direito.
+ * - A célula em que você digita mostra o texto como você digitou (inclusive o espaço no
+ *   fim, que o Markdown não guarda); ao sair dela, fica como foi gravado (1.7.4).
+ * - Arrastar a divisão entre duas colunas (com o mouse) muda a largura da coluna da
+ *   esquerda. A primeira vez fixa a largura de todas, como estavam; "Largura automática
+ *   das colunas" (⋯ ou clique direito) volta ao ajuste sozinho (1.7.4).
  */
 import { syntaxTree } from '@codemirror/language'
 import { isolateHistory, redo, undo } from '@codemirror/commands'
@@ -20,6 +25,9 @@ import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemir
 import { iconSvg } from '../icons'
 import { editorHost, type HostMenuItem } from './host'
 import {
+  DEFAULT_COLUMN_WIDTH,
+  clampColumnWidth,
+  hasColumnWidths,
   insertColumn,
   insertRow,
   moveColumn,
@@ -34,6 +42,8 @@ import {
   setCell,
   setColumnTotal,
   setColumnType,
+  setColumnWidths,
+  storedCellText,
   sumColumn,
   type NoteTable,
 } from './table-model'
@@ -156,7 +166,7 @@ class TableWidget extends WidgetType {
     if (!card) return false
     const before = card.table
     card.table = this.table
-    const sameShape = before.columns.length === this.table.columns.length && before.rows.length === this.table.rows.length && before.columns.every((column, i) => column.type === this.table.columns[i]!.type && column.total === this.table.columns[i]!.total)
+    const sameShape = before.columns.length === this.table.columns.length && before.rows.length === this.table.rows.length && before.columns.every((column, i) => column.type === this.table.columns[i]!.type && column.total === this.table.columns[i]!.total && column.width === this.table.columns[i]!.width)
     if (sameShape) syncValues(dom, card)
     else render(view, dom)
     return true
@@ -179,6 +189,7 @@ function render(view: EditorView, wrap: HTMLElement): void {
   wrap.replaceChildren()
   const scroller = el('div', 'cm-table-scroll')
   const grid = el('table', 'cm-table-grid')
+  if (hasColumnWidths(table)) applyWidths(grid, table.columns.map((column) => column.width ?? DEFAULT_COLUMN_WIDTH))
   const head = el('thead')
   const headRow = el('tr')
   table.columns.forEach((column, c) => {
@@ -271,8 +282,10 @@ function syncValues(wrap: HTMLElement, card: CardState): void {
     const row = Number(input.dataset.row)
     const column = Number(input.dataset.col)
     const value = row < 0 ? table.columns[column]?.name : table.rows[row]?.[column]
-    // A célula em que você digita já tem o valor (nada muda nela); desfazer muda
-    if (value !== undefined && input.value !== value) input.value = value
+    // A célula em que você digita já tem o valor (nada muda nela; o espaço no fim, que o
+    // Markdown não guarda, continua ali enquanto você digita); desfazer muda
+    const typing = input === document.activeElement && storedCellText(input.value) === value
+    if (value !== undefined && input.value !== value && !typing) input.value = value
     if (row >= 0) {
       const parsed = table.columns[column]?.type === 'number' ? parseCellNumber(input.value) : null
       input.classList.toggle('invalid', !!parsed && Number.isNaN(parsed.value))
@@ -309,6 +322,13 @@ function commit(view: EditorView, wrap: HTMLElement, table: NoteTable, focus?: {
   const card = cards.get(wrap)
   const text = serializeTable(table)
   if (focus) pendingFocus = { at: block.from, row: focus.row, column: focus.column }
+  // Nada muda no arquivo (um espaço no fim da célula): nenhum passo no desfazer (e a
+  // célula ainda não conta como digitada, para a primeira mudança dela ser um passo novo)
+  if (view.state.sliceDoc(block.from, block.to) === text) {
+    if (card) syncValues(wrap, card)
+    if (focus) requestAnimationFrame(() => focusPending(view))
+    return
+  }
   const newStep = !cell || lastTyped?.wrap !== wrap || lastTyped.cell !== cell
   lastTyped = cell ? { wrap, cell } : null
   view.dispatch({ changes: { from: block.from, to: block.to, insert: text }, userEvent, annotations: newStep ? isolateHistory.of('before') : undefined })
@@ -349,6 +369,19 @@ function bind(view: EditorView, wrap: HTMLElement): void {
     const target = event.target as HTMLElement
     if (target.dataset.row !== undefined) card().focus = { row: Number(target.dataset.row), column: Number(target.dataset.col) }
   })
+
+  // Ao sair da célula, ela mostra o texto como foi gravado (sem o espaço do fim)
+  wrap.addEventListener('focusout', (event) => {
+    const input = event.target as HTMLInputElement
+    if (!input.classList?.contains('cm-table-cell')) return
+    const { table } = card()
+    const row = Number(input.dataset.row)
+    const column = Number(input.dataset.col)
+    const value = row < 0 ? table.columns[column]?.name : table.rows[row]?.[column]
+    if (value !== undefined && input.value !== value && storedCellText(input.value) === value) input.value = value
+  })
+
+  bindResize(view, wrap)
 
   wrap.addEventListener('input', (event) => {
     const input = event.target as HTMLInputElement
@@ -438,6 +471,111 @@ function bind(view: EditorView, wrap: HTMLElement): void {
   })
 }
 
+// ── Largura das colunas (1.7.4) ───────────────────────────────────────────
+
+/** Distância (px) da divisão em que o mouse já pega a divisão. */
+const RESIZE_SLOP = 5
+
+/** Larguras fixas na tabela (as colunas do <colgroup> e a largura total). */
+function applyWidths(grid: HTMLTableElement, widths: number[]): void {
+  let group = grid.querySelector(':scope > colgroup')
+  if (!group) {
+    group = el('colgroup')
+    grid.prepend(group)
+  }
+  while (group.children.length > widths.length) group.lastElementChild!.remove()
+  while (group.children.length < widths.length) group.append(el('col'))
+  widths.forEach((width, i) => ((group!.children[i] as HTMLElement).style.width = `${width}px`))
+  grid.classList.add('sized')
+  grid.style.width = `${widths.reduce((sum, width) => sum + width, 0)}px`
+}
+
+/** A coluna cuja divisão da direita está sob o mouse (-1 = nenhuma). */
+function dividerAt(grid: HTMLTableElement, x: number, y: number): number {
+  const box = grid.getBoundingClientRect()
+  if (y < box.top || y > box.bottom) return -1
+  const heads = grid.querySelectorAll<HTMLElement>(':scope > thead th')
+  for (let i = 0; i < heads.length; i++) {
+    if (Math.abs(heads[i]!.getBoundingClientRect().right - x) <= RESIZE_SLOP) return i
+  }
+  return -1
+}
+
+/**
+ * Arrastar a divisão entre colunas (mouse ou caneta; no toque o dedo rola a tabela). A
+ * largura muda ao vivo e é gravada ao soltar, num passo só do desfazer.
+ */
+function bindResize(view: EditorView, wrap: HTMLElement): void {
+  let drag: { pointer: number; column: number; startX: number; widths: number[]; moved: boolean } | null = null
+  const grid = () => wrap.querySelector<HTMLTableElement>('.cm-table-grid')
+  const usable = (event: PointerEvent) => event.pointerType !== 'touch'
+
+  wrap.addEventListener('pointermove', (event) => {
+    const table = grid()
+    if (!table) return
+    if (drag && event.pointerId === drag.pointer) {
+      const dx = event.clientX - drag.startX
+      if (!drag.moved && Math.abs(dx) < 2) return
+      drag.moved = true
+      const widths = [...drag.widths]
+      widths[drag.column] = clampColumnWidth(drag.widths[drag.column]! + dx)!
+      applyWidths(table, widths)
+      return
+    }
+    if (!usable(event) || event.buttons) return
+    wrap.classList.toggle('col-resize', dividerAt(table, event.clientX, event.clientY) >= 0)
+  })
+  wrap.addEventListener('pointerleave', () => {
+    if (!drag) wrap.classList.remove('col-resize')
+  })
+
+  wrap.addEventListener('pointerdown', (event) => {
+    const table = grid()
+    if (!table || event.button !== 0 || !usable(event)) return
+    const column = dividerAt(table, event.clientX, event.clientY)
+    if (column < 0) return
+    // A divisão, não a célula: sem foco, sem seleção de texto
+    event.preventDefault()
+    event.stopPropagation()
+    const widths = [...table.querySelectorAll<HTMLElement>(':scope > thead th')].map((th) => Math.round(th.getBoundingClientRect().width))
+    drag = { pointer: event.pointerId, column, startX: event.clientX, widths, moved: false }
+    wrap.classList.add('col-resize', 'resizing')
+    try {
+      wrap.setPointerCapture(event.pointerId)
+    } catch {
+      // (ponteiro sintético)
+    }
+  })
+  // O mousedown da divisão também não foca a célula
+  wrap.addEventListener('mousedown', (event) => {
+    if (drag) event.preventDefault()
+  }, true)
+
+  const finish = (event: PointerEvent, cancel = false) => {
+    if (!drag || event.pointerId !== drag.pointer) return
+    const current = drag
+    drag = null
+    wrap.classList.remove('resizing')
+    const table = grid()
+    if (!table) return
+    const state = cards.get(wrap)!
+    // Um clique na divisão não fixa nada; cancelado, volta como estava
+    if (!current.moved) return
+    if (cancel) {
+      render(view, wrap)
+      return
+    }
+    const widths = [...current.widths]
+    widths[current.column] = clampColumnWidth(current.widths[current.column]! + event.clientX - current.startX)!
+    commit(view, wrap, setColumnWidths(state.table, widths))
+  }
+  wrap.addEventListener('pointerup', (event) => finish(event))
+  wrap.addEventListener('pointercancel', (event) => finish(event, true))
+  wrap.addEventListener('lostpointercapture', (event) => {
+    if (drag && event.pointerId === drag.pointer) finish(event, !drag.moved)
+  })
+}
+
 function columnItems(table: NoteTable, column: number): HostMenuItem[] {
   const current = table.columns[column]!
   return [
@@ -489,6 +627,7 @@ async function cellMenu(view: EditorView, wrap: HTMLElement, at: { row: number; 
     { type: 'separator' },
     { label: `Coluna “${table.columns[column]!.name || column + 1}”`, submenu: columnItems(table, column) },
     { type: 'separator' },
+    { id: 'auto-width', label: 'Largura automática das colunas', enabled: hasColumnWidths(table) },
     { id: 'table-remove', label: 'Remover tabela', danger: true },
   ]
   const choice = await host.menu(items, anchor)
@@ -498,6 +637,7 @@ async function cellMenu(view: EditorView, wrap: HTMLElement, at: { row: number; 
   else if (choice === 'row-up') commit(view, wrap, moveRow(table, row, row - 1), { row: row - 1, column })
   else if (choice === 'row-down') commit(view, wrap, moveRow(table, row, row + 1), { row: row + 1, column })
   else if (choice === 'row-remove') commit(view, wrap, removeRow(table, row), { row: Math.max(0, Math.min(row, table.rows.length - 2)), column })
+  else if (choice === 'auto-width') commit(view, wrap, setColumnWidths(table, null))
   else if (choice === 'table-remove') {
     const block = blockOf(view, wrap)
     if (!block) return

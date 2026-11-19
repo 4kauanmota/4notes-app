@@ -183,6 +183,11 @@ export const editorTheme = EditorView.theme({
   '.cm-table-grid th:last-child, .cm-table-grid td:last-child': { borderRight: 'none' },
   '.cm-table-grid tbody tr:last-child td': { borderBottom: 'none' },
   '.cm-table-grid thead th': { backgroundColor: 'var(--surface-3)' },
+  // Larguras escolhidas arrastando a divisão (1.7.4): as colunas do <colgroup> mandam
+  '.cm-table-grid.sized': { tableLayout: 'fixed', minWidth: '0' },
+  '.cm-table-grid.sized th, .cm-table-grid.sized td': { minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis' },
+  '.cm-table.col-resize .cm-table-grid, .cm-table.col-resize .cm-table-cell': { cursor: 'col-resize' },
+  '.cm-table.resizing': { userSelect: 'none' },
   '.cm-table-th': { display: 'flex', alignItems: 'center' },
   '.cm-table-cell': {
     width: '100%',

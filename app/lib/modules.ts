@@ -85,7 +85,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Categoria: nova nota nela, editar, recolher, excluir.',
         'Pasta: abrir a nota mais recente dela ou criar uma nota já dentro dela.',
         'Texto: inserir imagem, inserir tabela, corretor, abrir/editar/remover link.',
-        'Célula da tabela: inserir, mover e remover linha; tipo, total e posição da coluna.',
+        'Célula da tabela: linhas, colunas (tipo, total, posição) e largura automática.',
       ],
       tips: [
         'A primeira linha é o título — e o nome do arquivo.',
@@ -112,6 +112,7 @@ export const MODULES: readonly ModuleDefinition[] = [
         'Tab anda pelas células (na última, cria uma linha); Esc volta para o texto.',
         'Célula vazia ou com texto numa coluna de número fica fora da soma.',
         'A tabela é Markdown comum: abre igual no Obsidian, com a linha Total.',
+        'Arraste a divisão entre colunas (mouse) para mudar a largura; ⋯ › “Largura automática” desfaz.',
       ],
       shortcuts: [
         { keys: ['Mod', 'N'], label: 'Nova nota' },

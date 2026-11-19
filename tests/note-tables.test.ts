@@ -4,6 +4,7 @@ import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
+  hasColumnWidths,
   insertColumn,
   insertRow,
   moveColumn,
@@ -17,7 +18,9 @@ import {
   setCell,
   setColumnTotal,
   setColumnType,
+  setColumnWidths,
   splitRow,
+  storedCellText,
   sumColumn,
   totalRow,
 } from '~/lib/editor/table-model'
@@ -151,5 +154,64 @@ describe('na nota', () => {
     expect(text).toBe(
       ['Antes', '', 'Descrição   Valor', '---------   -----', 'Mercado       150', 'Internet      100', 'Energia       200', 'Total         450', '', 'Depois', ''].join('\n'),
     )
+  })
+})
+
+describe('1.7.4: espaço no fim e largura das colunas', () => {
+  const parse = (text: string) => {
+    const lines = text.split('\n')
+    const config = parseTableConfig(lines[0]!)
+    return parseTable(config ? lines.slice(1) : lines, config)!
+  }
+
+  it('o texto gravado de uma célula não tem espaço nas pontas nem quebra de linha', () => {
+    expect(storedCellText('abc ')).toBe('abc')
+    expect(storedCellText('  a  b ')).toBe('a  b')
+    expect(storedCellText('a\nb')).toBe('a b')
+    // "abc " e "abc" gravam igual (o arquivo não muda ao digitar o espaço)
+    expect(serializeTable(setCell(newTable(1, 1), 0, 0, 'abc '))).toBe(serializeTable(setCell(newTable(1, 1), 0, 0, 'abc')))
+  })
+
+  it('a largura vai no comentário e volta ao ler', () => {
+    const table = setColumnWidths(parse(EXPENSES), [220, 90])
+    const text = serializeTable(table)
+    expect(text.split('\n')[0]).toBe('<!-- 4notes-table {"columns":[{"type":"text","width":220},{"type":"number","total":true,"width":90}]} -->')
+    const back = parse(text)
+    expect(back.columns.map((column) => column.width)).toEqual([220, 90])
+    expect(back.rows).toEqual(table.rows)
+    expect(serializeTable(back)).toBe(text)
+  })
+
+  it('uma tabela só de texto ganha o comentário quando tem largura, e perde ao voltar ao automático', () => {
+    const plain = newTable(2, 1)
+    expect(serializeTable(plain).startsWith('<!--')).toBe(false)
+    const sized = setColumnWidths(plain, [150, undefined])
+    expect(serializeTable(sized).split('\n')[0]).toBe('<!-- 4notes-table {"columns":[{"type":"text","width":150},{"type":"text"}]} -->')
+    expect(hasColumnWidths(sized)).toBe(true)
+    const auto = setColumnWidths(sized, null)
+    expect(hasColumnWidths(auto)).toBe(false)
+    expect(serializeTable(auto)).toBe(serializeTable(plain))
+  })
+
+  it('larguras fora do limite ou inválidas', () => {
+    const table = setColumnWidths(newTable(3, 1), [5, 99999, Number.NaN])
+    expect(table.columns.map((column) => column.width)).toEqual([48, 1200, undefined])
+    const config = parseTableConfig('<!-- 4notes-table {"columns":[{"type":"text","width":"x"},{"type":"text","width":12.6}]} -->')!
+    expect(config.columns).toEqual([{ type: 'text', total: false }, { type: 'text', total: false, width: 48 }])
+  })
+
+  it('a largura acompanha a coluna ao mover, inserir, remover e trocar o tipo', () => {
+    let table = setColumnWidths(newTable(3, 1), [100, 200, 300])
+    table = moveColumn(table, 0, 2)
+    expect(table.columns.map((column) => column.width)).toEqual([200, 300, 100])
+    table = insertColumn(table, 1)
+    expect(table.columns.map((column) => column.width)).toEqual([200, undefined, 300, 100])
+    table = removeColumn(table, 0)
+    table = setColumnType(table, 1, 'number')
+    expect(table.columns.map((column) => column.width)).toEqual([undefined, 300, 100])
+  })
+
+  it('as tabelas da 1.7.3 continuam iguais no arquivo', () => {
+    expect(serializeTable(parse(EXPENSES))).toBe(EXPENSES)
   })
 })

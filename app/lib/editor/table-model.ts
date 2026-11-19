@@ -15,6 +15,10 @@
  * A linha "Total" é gravada (aparece fora do app também) e refeita pelo app a cada
  * mudança: ela nunca é uma linha que você edita. Uma tabela sem colunas de número nem
  * total não ganha comentário (fica só a tabela).
+ *
+ * Na 1.7.4 o comentário também guarda a largura das colunas que você ajustou com o mouse
+ * (`"width": 180`, em pixels). Sem largura, a coluna se ajusta sozinha. Versões antigas
+ * ignoram a largura.
  */
 
 export type ColumnType = 'text' | 'number'
@@ -24,6 +28,8 @@ export interface TableColumn {
   type: ColumnType
   /** Soma na linha Total (só colunas de número). */
   total: boolean
+  /** Largura em pixels escolhida arrastando a divisão (1.7.4); sem ela, automática. */
+  width?: number
 }
 
 export interface NoteTable {
@@ -35,6 +41,24 @@ export interface NoteTable {
 export const TABLE_COMMENT = /^\s*<!--\s*4notes-table\s+(\{.*\})\s*-->\s*$/
 export const MAX_COLUMNS = 20
 export const MAX_ROWS = 500
+export const MIN_COLUMN_WIDTH = 48
+export const MAX_COLUMN_WIDTH = 1200
+/** Largura de uma coluna sem largura própria numa tabela com larguras (coluna nova). */
+export const DEFAULT_COLUMN_WIDTH = 160
+
+/** Uma largura válida (inteira, entre o mínimo e o máximo) ou undefined. */
+export function clampColumnWidth(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return Math.round(Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, value)))
+}
+
+/**
+ * O texto de uma célula como fica gravado (o Markdown não guarda quebras de linha nem
+ * espaços nas pontas). A célula em que você digita mostra o texto como está; o resto, assim.
+ */
+export function storedCellText(text: string): string {
+  return text.replace(/\r?\n/g, ' ').trim()
+}
 const TOTAL_LABEL = 'Total'
 
 // ── Células ────────────────────────────────────────────────────────────────
@@ -167,19 +191,24 @@ export function sumColumn(rows: string[][], index: number): ColumnSum {
 // ── Ler e escrever ─────────────────────────────────────────────────────────
 
 const hasTotals = (table: NoteTable) => table.columns.some((column) => column.type === 'number' && column.total)
-const needsConfig = (table: NoteTable) => table.columns.some((column) => column.type !== 'text' || column.total)
+const needsConfig = (table: NoteTable) => table.columns.some((column) => column.type !== 'text' || column.total || column.width !== undefined)
+/** Alguma coluna tem largura própria (a tabela passa a ter as larguras fixas). */
+export const hasColumnWidths = (table: NoteTable) => table.columns.some((column) => column.width !== undefined)
+
+type ColumnConfig = { type: ColumnType; total: boolean; width?: number }
 
 /** Lê o comentário de configuração (null = não é um). */
-export function parseTableConfig(line: string): { columns: { type: ColumnType; total: boolean }[] } | null {
+export function parseTableConfig(line: string): { columns: ColumnConfig[] } | null {
   const match = TABLE_COMMENT.exec(line)
   if (!match) return null
   try {
     const raw = JSON.parse(match[1]!) as { columns?: unknown }
     const columns = Array.isArray(raw.columns)
       ? raw.columns.map((item) => {
-          const column = (item && typeof item === 'object' ? item : {}) as { type?: unknown; total?: unknown }
+          const column = (item && typeof item === 'object' ? item : {}) as { type?: unknown; total?: unknown; width?: unknown }
           const type: ColumnType = column.type === 'number' ? 'number' : 'text'
-          return { type, total: type === 'number' && column.total === true }
+          const width = clampColumnWidth(column.width)
+          return { type, total: type === 'number' && column.total === true, ...(width !== undefined ? { width } : {}) }
         })
       : []
     return { columns }
@@ -192,7 +221,7 @@ export function parseTableConfig(line: string): { columns: { type: ColumnType; t
  * Lê a tabela a partir das linhas do arquivo (cabeçalho, separador, dados) e da
  * configuração. A linha Total gravada pelo app (a última, toda em negrito) sai dos dados.
  */
-export function parseTable(lines: string[], config: { columns: { type: ColumnType; total: boolean }[] } | null): NoteTable | null {
+export function parseTable(lines: string[], config: { columns: ColumnConfig[] } | null): NoteTable | null {
   if (lines.length < 2) return null
   const header = splitRow(lines[0]!)
   const delimiter = splitRow(lines[1]!)
@@ -201,7 +230,7 @@ export function parseTable(lines: string[], config: { columns: { type: ColumnTyp
   const columns: TableColumn[] = header.slice(0, width).map((name, i) => {
     const conf = config?.columns[i]
     const type: ColumnType = conf?.type ?? 'text'
-    return { name, type, total: type === 'number' && !!conf?.total }
+    return { name, type, total: type === 'number' && !!conf?.total, ...(conf?.width !== undefined ? { width: conf.width } : {}) }
   })
   let rows = lines
     .slice(2)
@@ -234,7 +263,12 @@ export function serializeTable(table: NoteTable): string {
   const row = (cells: string[]) => `| ${cells.map((cell) => escapeCell(cell)).join(' | ')} |`
   const lines: string[] = []
   if (needsConfig(table)) {
-    const config = { columns: table.columns.map((column) => (column.type === 'number' ? { type: 'number', ...(column.total ? { total: true } : {}) } : { type: 'text' })) }
+    const config = {
+      columns: table.columns.map((column) => {
+        const width = clampColumnWidth(column.width)
+        return { type: column.type, ...(column.type === 'number' && column.total ? { total: true } : {}), ...(width !== undefined ? { width } : {}) }
+      }),
+    }
     lines.push(`<!-- 4notes-table ${JSON.stringify(config)} -->`)
   }
   lines.push(row(table.columns.map((column) => column.name)))
@@ -314,6 +348,17 @@ export function moveColumn(table: NoteTable, from: number, to: number): NoteTabl
     const [cell] = cells.splice(from, 1)
     cells.splice(to, 0, cell!)
   }
+  return next
+}
+
+/** Larguras das colunas (undefined = automática); `null` tira todas (volta ao ajuste automático). */
+export function setColumnWidths(table: NoteTable, widths: (number | undefined)[] | null): NoteTable {
+  const next = clone(table)
+  next.columns.forEach((column, i) => {
+    const width = widths ? clampColumnWidth(widths[i]) : undefined
+    if (width === undefined) delete column.width
+    else column.width = width
+  })
   return next
 }
 
